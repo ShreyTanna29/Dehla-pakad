@@ -22,3 +22,5 @@ MemoryCaptures/
 .idea/
 
 .DS_Store
+
+Assets/Firebase/Plugins/x86_64/*.bundle
