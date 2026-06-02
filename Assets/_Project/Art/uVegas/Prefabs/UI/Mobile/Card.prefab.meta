@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 4aba20674c6d46a44945706d51eb36d6
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 340310
+  packageName: 'uVegas: Playing Card Assets (Modular 2D)'
+  packageVersion: 1.0
+  assetPath: Assets/uVegas/Prefabs/UI/Mobile/Card.prefab
+  uploadId: 824048

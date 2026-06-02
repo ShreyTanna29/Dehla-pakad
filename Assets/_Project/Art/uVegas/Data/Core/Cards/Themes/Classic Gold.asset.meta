@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 362175f0b1347c9408ecfa22a9ae7202
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 340310
+  packageName: 'uVegas: Playing Card Assets (Modular 2D)'
+  packageVersion: 1.0
+  assetPath: Assets/uVegas/Data/Core/Cards/Themes/Classic Gold.asset
+  uploadId: 824048

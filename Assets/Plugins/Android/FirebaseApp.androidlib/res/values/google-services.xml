@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@string/gcm_defaultSenderId,@string/google_storage_bucket,@string/project_id,@string/google_api_key,@string/google_crash_reporting_api_key,@string/google_app_id,@string/default_android_client_id,@string/default_web_client_id">
+  <string name="gcm_defaultSenderId" translatable="false">297172491992</string>
+  <string name="google_storage_bucket" translatable="false">dehla-pakad-a7859.firebasestorage.app</string>
+  <string name="project_id" translatable="false">dehla-pakad-a7859</string>
+  <string name="google_api_key" translatable="false">AIzaSyBeHZwiEPk-22t2m0gQdpE10O501APrXBI</string>
+  <string name="google_crash_reporting_api_key" translatable="false">AIzaSyBeHZwiEPk-22t2m0gQdpE10O501APrXBI</string>
+  <string name="google_app_id" translatable="false">1:297172491992:android:74505b3e736673a4e041ad</string>
+  <string name="default_android_client_id" translatable="false">297172491992-32171q2i0qmt4g7tffdgs3pu6su0h2ft.apps.googleusercontent.com</string>
+  <string name="default_web_client_id" translatable="false">297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com</string>
+</resources>

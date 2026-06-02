@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "297172491992",
+    "project_id": "dehla-pakad-a7859",
+    "storage_bucket": "dehla-pakad-a7859.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:297172491992:android:74505b3e736673a4e041ad",
+        "android_client_info": {
+          "package_name": "com.roman.dehlapakad"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "297172491992-32171q2i0qmt4g7tffdgs3pu6su0h2ft.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.roman.dehlapakad",
+            "certificate_hash": "49056d217c4a33c40bcbf302efa48155caf46d68"
+          }
+        },
+        {
+          "client_id": "297172491992-oprprq9nrsjne6js7m17bqehpl6qgv3h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.roman.dehlapakad",
+            "certificate_hash": "0b688cf85242a31962dd5653c94720a56a7adbdb"
+          }
+        },
+        {
+          "client_id": "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBeHZwiEPk-22t2m0gQdpE10O501APrXBI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 353f8c1af51c19549b30bb59e52b81a7
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 340310
+  packageName: 'uVegas: Playing Card Assets (Modular 2D)'
+  packageVersion: 1.0
+  assetPath: Assets/uVegas/Data/Core/Cards/Themes/Modern Gold.asset
+  uploadId: 824048

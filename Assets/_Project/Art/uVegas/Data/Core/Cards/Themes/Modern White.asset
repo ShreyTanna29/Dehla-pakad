@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 403a76a09a7298a409dff2e56dce34cb, type: 3}
+  m_Name: Modern White
+  m_EditorClassIdentifier: Assembly-CSharp::uVegas.Core.Cards.CardTheme
+  baseImage: {fileID: 21300000, guid: 7166066cc7648ec4cb72cfe6a314f683, type: 3}
+  backImage: {fileID: 21300000, guid: 065a39e6335b8b34babf0e10db48006b, type: 3}
+  frontColor: {r: 1, g: 1, b: 1, a: 1}
+  backColor: {r: 0.06666667, g: 0.09019608, b: 0.15294118, a: 1}
+  jokerImage: {fileID: 21300000, guid: 428beaf577516c04c94eeaa0df4c3716, type: 3}
+  jokerColor: {r: 0, g: 0, b: 0, a: 1}
+  rankColor: {r: 0, g: 0, b: 0, a: 1}
+  ranks:
+  - rank: 2
+    image: {fileID: 21300000, guid: c6fd2b12996401647a609f1c4486324d, type: 3}
+  - rank: 3
+    image: {fileID: 21300000, guid: ae14ea4c47605544cb0c62909c60cbca, type: 3}
+  - rank: 4
+    image: {fileID: 21300000, guid: a7556141aeb03c64e84ff90ab93b6eac, type: 3}
+  - rank: 5
+    image: {fileID: 21300000, guid: 53443dc5952d01644831ffdae266bbb0, type: 3}
+  - rank: 6
+    image: {fileID: 21300000, guid: 7c1bead49d26e83419e9e0fbc881a4e3, type: 3}
+  - rank: 7
+    image: {fileID: 21300000, guid: 1b6a1cc9e80d08442a0897bbcd8f06a0, type: 3}
+  - rank: 8
+    image: {fileID: 21300000, guid: 437622ff2018a80498d0e96af4c4376c, type: 3}
+  - rank: 9
+    image: {fileID: 21300000, guid: a703f526694439040a9e2f1c972fc8fd, type: 3}
+  - rank: 10
+    image: {fileID: 21300000, guid: 8997c0db72091004295b6de68ef15035, type: 3}
+  - rank: 11
+    image: {fileID: 21300000, guid: e029d909cd8d4da4d8806804b32e0ca9, type: 3}
+  - rank: 12
+    image: {fileID: 21300000, guid: 09eb0c81fba6841439cecce13a532ab0, type: 3}
+  - rank: 13
+    image: {fileID: 21300000, guid: f45f31805e2d1ae4b8e4a551f173503c, type: 3}
+  - rank: 14
+    image: {fileID: 21300000, guid: 1a41f68d76c214d47a3d6b5f1637afd9, type: 3}
+  suits:
+  - suit: 3
+    image: {fileID: 21300000, guid: 4750fcf181be40143baec0ea107492ab, type: 3}
+    color: {r: 0, g: 0, b: 0, a: 1}
+  - suit: 2
+    image: {fileID: 21300000, guid: aee6e878259ea3c429e67a4cf0615929, type: 3}
+    color: {r: 0, g: 0, b: 0, a: 1}
+  - suit: 0
+    image: {fileID: 21300000, guid: eb28dc09aafe75244aa430eae5532e86, type: 3}
+    color: {r: 0.7283019, g: 0, b: 0, a: 1}
+  - suit: 1
+    image: {fileID: 21300000, guid: 855dce5bda5e76e47b87b426eb01ca37, type: 3}
+    color: {r: 0.7294118, g: 0, b: 0, a: 1}
+  - suit: 4
+    image: {fileID: 0}
+    color: {r: 0, g: 0, b: 0, a: 1}

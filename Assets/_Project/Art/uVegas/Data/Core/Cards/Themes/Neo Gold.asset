@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 403a76a09a7298a409dff2e56dce34cb, type: 3}
+  m_Name: Neo Gold
+  m_EditorClassIdentifier: Assembly-CSharp::uVegas.Core.Cards.CardTheme
+  baseImage: {fileID: 21300000, guid: 7166066cc7648ec4cb72cfe6a314f683, type: 3}
+  backImage: {fileID: 21300000, guid: 065a39e6335b8b34babf0e10db48006b, type: 3}
+  frontColor: {r: 0.101960786, g: 0.101960786, b: 0.11372549, a: 1}
+  backColor: {r: 0.77254903, g: 0.63529414, b: 0.3254902, a: 1}
+  jokerImage: {fileID: 21300000, guid: 428beaf577516c04c94eeaa0df4c3716, type: 3}
+  jokerColor: {r: 0.77254903, g: 0.63529414, b: 0.3254902, a: 1}
+  rankColor: {r: 0.77254903, g: 0.63529414, b: 0.3254902, a: 1}
+  ranks:
+  - rank: 2
+    image: {fileID: 21300000, guid: 8fafdde3ddbdd1247b47524f421a9fae, type: 3}
+  - rank: 3
+    image: {fileID: 21300000, guid: 0c7fa27500dbcbd4983d30c31bcdbdda, type: 3}
+  - rank: 4
+    image: {fileID: 21300000, guid: 2ede2af4feebe9c449b65e8d57c1232d, type: 3}
+  - rank: 5
+    image: {fileID: 21300000, guid: 9616042aeb74f464f96fb081703ccc97, type: 3}
+  - rank: 6
+    image: {fileID: 21300000, guid: c675ff41080701445b9a45d6cf33fc5d, type: 3}
+  - rank: 7
+    image: {fileID: 21300000, guid: af552d733b97cb748af4d1d989b97640, type: 3}
+  - rank: 8
+    image: {fileID: 21300000, guid: 3b545682c3f29f045a7a2290481cfd6f, type: 3}
+  - rank: 9
+    image: {fileID: 21300000, guid: 91d6b404f1daf2f458bb809b29273846, type: 3}
+  - rank: 10
+    image: {fileID: 21300000, guid: 8602579d63031334d8ba4734819a495c, type: 3}
+  - rank: 11
+    image: {fileID: 21300000, guid: ba6723d132710384faa9e97c21e03657, type: 3}
+  - rank: 12
+    image: {fileID: 21300000, guid: 2d4e596097e842c4dbabc652509d2dfb, type: 3}
+  - rank: 13
+    image: {fileID: 21300000, guid: 03296dac0a3a7fa4f9ec0aea5bc76cd0, type: 3}
+  - rank: 14
+    image: {fileID: 21300000, guid: 1c05d2356efa5b1498ecb154a7488c62, type: 3}
+  suits:
+  - suit: 3
+    image: {fileID: 21300000, guid: 70c62b3a0b2cbe945911f94468a9105b, type: 3}
+    color: {r: 0.77254903, g: 0.63529414, b: 0.3254902, a: 1}
+  - suit: 2
+    image: {fileID: 21300000, guid: 11f52750d3ab3de47818dfab02bf3e03, type: 3}
+    color: {r: 0.77254903, g: 0.63529414, b: 0.3254902, a: 1}
+  - suit: 0
+    image: {fileID: 21300000, guid: fceef5807e37a9c4e88987780033c001, type: 3}
+    color: {r: 0.77254903, g: 0.63529414, b: 0.3254902, a: 1}
+  - suit: 1
+    image: {fileID: 21300000, guid: 39acf8c691dda444497738f54904a1be, type: 3}
+    color: {r: 0.77254903, g: 0.63529414, b: 0.3254902, a: 1}
+  - suit: 4
+    image: {fileID: 0}
+    color: {r: 0, g: 0, b: 0, a: 1}

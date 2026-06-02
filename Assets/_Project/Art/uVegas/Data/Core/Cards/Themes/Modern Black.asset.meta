@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 619bd13052615a94e9c492ed9a236a7e
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 340310
+  packageName: 'uVegas: Playing Card Assets (Modular 2D)'
+  packageVersion: 1.0
+  assetPath: Assets/uVegas/Data/Core/Cards/Themes/Modern Black.asset
+  uploadId: 824048

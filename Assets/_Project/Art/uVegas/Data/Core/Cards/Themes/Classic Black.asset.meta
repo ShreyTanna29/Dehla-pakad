@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: faa9340306a58f049be396d0306950e2
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 340310
+  packageName: 'uVegas: Playing Card Assets (Modular 2D)'
+  packageVersion: 1.0
+  assetPath: Assets/uVegas/Data/Core/Cards/Themes/Classic Black.asset
+  uploadId: 824048

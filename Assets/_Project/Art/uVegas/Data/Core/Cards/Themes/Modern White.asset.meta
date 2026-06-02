@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 51eddfa36ad9ade468f8dd0743cce671
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 340310
+  packageName: 'uVegas: Playing Card Assets (Modular 2D)'
+  packageVersion: 1.0
+  assetPath: Assets/uVegas/Data/Core/Cards/Themes/Modern White.asset
+  uploadId: 824048
