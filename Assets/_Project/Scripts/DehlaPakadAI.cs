@@ -12,129 +12,223 @@ public class DehlaPakadAI : MonoBehaviour
         else Destroy(gameObject);
     }
 
-    // Card ki value nikalne ke liye
-    int GetRealValue(CardData card)
-    {
-        return (int)card.cardRank; 
-    }
+    static int RankValue(CardData card) => (int)card.cardRank;
 
     public CardData ThinkAndSelectCard(List<CardData> botHand, List<PlayerHand.TrickCard> currentTrick, CardSuit trumpSuit, bool isTrumpRevealed, int botActorNumber)
     {
         if (botHand == null || botHand.Count == 0) return new CardData();
 
         List<CardData> validCards = PlayerHand.GetValidCards(botHand, currentTrick);
-
         if (validCards.Count == 0)
         {
             Debug.LogError($"[AI] No valid cards found for bot {botActorNumber}! Using first available.");
             return botHand[0];
         }
 
-        // If leading
         if (currentTrick == null || currentTrick.Count == 0)
-        {
-            // Lead with highest card
-            return validCards.OrderByDescending(c => GetRealValue(c)).First();
-        }
+            return ChooseLeadCard(validCards);
+
+        bool twoTaash = IsActiveTwoTaash(botHand);
+        bool trickHasDehla = TrickContainsDehla(currentTrick);
+        bool isCutMode = GameSettings.Instance != null &&
+            (GameSettings.Instance.currentMode == GameModeType.Cut1Trump ||
+             GameSettings.Instance.currentMode == GameModeType.Cut2Trump);
 
         CardSuit ledSuit = currentTrick[0].suit;
-        bool hasLedSuit = validCards.Any(c => c.cardSuit == ledSuit);
+        bool mustFollowSuit = validCards.All(c => c.cardSuit == ledSuit);
 
-        if (hasLedSuit)
+        if (isCutMode && !mustFollowSuit)
+            return ChooseCutWhenVoid(validCards, trickHasDehla);
+
+        List<CardData> winningPlays = GetWinningPlays(validCards, currentTrick, trumpSuit, botActorNumber, twoTaash);
+
+        if (winningPlays.Count > 0)
+            return PickCheapestWinningCard(winningPlays);
+
+        if (trickHasDehla && !mustFollowSuit)
         {
-            // Try to win the trick with a card higher than the current winner if possible
-            SimpleTrickCard currentWinner = GetCurrentWinner(currentTrick, trumpSuit);
-            var winningCards = validCards.Where(c => c.cardSuit == ledSuit && GetRealValue(c) > currentWinner.rankValue).ToList();
-            if (winningCards.Count > 0)
-            {
-                // Play lowest winning card
-                return winningCards.OrderBy(c => GetRealValue(c)).First();
-            }
-            else
-            {
-                // Cannot win, play lowest card of led suit
-                return validCards.Where(c => c.cardSuit == ledSuit).OrderBy(c => GetRealValue(c)).First();
-            }
+            List<CardData> trumpPlays = validCards.Where(c => c.cardSuit == trumpSuit).ToList();
+            List<CardData> trumpWinners = GetWinningPlays(trumpPlays, currentTrick, trumpSuit, botActorNumber, twoTaash);
+            if (trumpWinners.Count > 0)
+                return PickCheapestWinningCard(trumpWinners);
         }
-        else
-        {
-            // Cannot follow suit. Must decide what to throw or cut.
-            // If Mode 3: Cut To Trump, any card played becomes the new trump.
-            if (GameSettings.Instance != null && GameSettings.Instance.currentMode == GameModeType.CutToTrump)
-            {
-                // Strategy: Cut with a suit we have many of, and preferably high ones.
-                var suitCounts = botHand.GroupBy(c => c.cardSuit).OrderByDescending(g => g.Count());
-                CardSuit bestSuitToCut = suitCounts.First().Key;
-                return botHand.Where(c => c.cardSuit == bestSuitToCut).OrderByDescending(c => GetRealValue(c)).First();
-            }
-            else
-            {
-                // Other modes: Use trump if possible to win, or throw junk.
-                var trumps = validCards.Where(c => c.cardSuit == trumpSuit).ToList();
-                if (trumps.Count > 0)
-                {
-                    SimpleTrickCard currentWinner = GetCurrentWinner(currentTrick, trumpSuit);
-                    if (currentWinner.suit != trumpSuit)
-                    {
-                        // Current winner is not trump, any trump wins. Play lowest trump.
-                        return trumps.OrderBy(c => GetRealValue(c)).First();
-                    }
-                    else
-                    {
-                        // Current winner is trump. Need to play higher trump to win.
-                        var winningTrumps = trumps.Where(c => GetRealValue(c) > currentWinner.rankValue).ToList();
-                        if (winningTrumps.Count > 0)
-                        {
-                            return winningTrumps.OrderBy(c => GetRealValue(c)).First();
-                        }
-                    }
-                }
-                
-                // Cannot win or no trump, play lowest junk card
-                return validCards.OrderBy(c => GetRealValue(c)).First();
-            }
-        }
+
+        return ChooseLowestDump(validCards, currentTrick, trumpSuit, botActorNumber, mustFollowSuit, twoTaash);
     }
 
-    private struct SimpleTrickCard
+    static CardData ChooseLeadCard(List<CardData> validCards)
     {
-        public CardSuit suit;
-        public int rankValue;
+        var suitGroups = validCards
+            .GroupBy(c => c.cardSuit)
+            .Select(g => new
+            {
+                Suit = g.Key,
+                Count = g.Count(),
+                Strength = g.Sum(c => RankValue(c)),
+                Cards = g.OrderByDescending(c => RankValue(c)).ToList()
+            })
+            .OrderByDescending(g => g.Count)
+            .ThenByDescending(g => g.Strength)
+            .ToList();
+
+        var best = suitGroups[0];
+        List<CardData> suitCards = best.Cards;
+
+        if (suitCards.Count >= 2 && suitCards[0].cardRank == CardRank.Ace)
+            return suitCards[1];
+
+        return suitCards[0];
     }
 
-    private SimpleTrickCard GetCurrentWinner(List<PlayerHand.TrickCard> currentTrick, CardSuit trumpSuit)
+    static CardData ChooseCutWhenVoid(List<CardData> validCards, bool trickHasDehla)
     {
-        SimpleTrickCard winner = new SimpleTrickCard { suit = currentTrick[0].suit, rankValue = currentTrick[0].rankValue };
-        CardSuit ledSuit = currentTrick[0].suit;
+        var suitGroups = validCards
+            .GroupBy(c => c.cardSuit)
+            .OrderByDescending(g => g.Count())
+            .ThenByDescending(g => g.Sum(c => RankValue(c)))
+            .ToList();
 
-        for (int i = 1; i < currentTrick.Count; i++)
+        var bestSuit = suitGroups.First().Key;
+        List<CardData> suitCards = validCards.Where(c => c.cardSuit == bestSuit).ToList();
+
+        if (trickHasDehla)
+            return suitCards.OrderByDescending(c => RankValue(c)).First();
+
+        return suitCards.OrderBy(c => RankValue(c)).First();
+    }
+
+    /// <summary>
+    /// All legal plays that win the trick (includes 2 Taash duplicate-over-current-winner).
+    /// </summary>
+    static List<CardData> GetWinningPlays(List<CardData> candidates, List<PlayerHand.TrickCard> trick, CardSuit trumpSuit, int botActorNumber, bool twoTaash)
+    {
+        var winners = new List<CardData>();
+        foreach (CardData card in candidates)
         {
-            PlayerHand.TrickCard challenger = currentTrick[i];
-            bool challengerIsTrump = challenger.suit == trumpSuit;
-            bool winnerIsTrump = winner.suit == trumpSuit;
-
-            if (challengerIsTrump && !winnerIsTrump)
-            {
-                winner.suit = challenger.suit;
-                winner.rankValue = challenger.rankValue;
-            }
-            else if (challengerIsTrump && winnerIsTrump)
-            {
-                if (challenger.rankValue > winner.rankValue)
-                {
-                    winner.suit = challenger.suit;
-                    winner.rankValue = challenger.rankValue;
-                }
-            }
-            else if (!challengerIsTrump && !winnerIsTrump)
-            {
-                if (challenger.suit == ledSuit && challenger.rankValue > winner.rankValue)
-                {
-                    winner.suit = challenger.suit;
-                    winner.rankValue = challenger.rankValue;
-                }
-            }
+            if (WouldBotWinTrick(card, trick, trumpSuit, botActorNumber, twoTaash))
+                winners.Add(card);
         }
-        return winner;
+        return winners;
+    }
+
+    /// <summary>
+    /// Whether this card wins if the bot plays it next. Uses the same rules as gameplay,
+    /// including 2 Taash: a later identical suit+rank beats the current trick winner.
+    /// </summary>
+    static bool WouldBotWinTrick(CardData card, List<PlayerHand.TrickCard> trick, CardSuit trumpSuit, int botActorNumber, bool twoTaash)
+    {
+        if (trick == null || trick.Count == 0) return false;
+
+        if (twoTaash && CanWinByMatchingCurrentWinner(card, trick, trumpSuit))
+            return true;
+
+        var simulated = new List<PlayerHand.TrickCard>(trick);
+        simulated.Add(new PlayerHand.TrickCard
+        {
+            actorNumber = botActorNumber,
+            suit = card.cardSuit,
+            rankValue = RankValue(card)
+        });
+
+        PlayerHand.TrickCard winner = EvaluateTrickWinner(simulated, trumpSuit, twoTaash);
+        return winner.actorNumber == botActorNumber;
+    }
+
+    /// <summary>
+    /// 2 Taash: playing the same suit+rank as the current winner wins (bot plays last).
+    /// </summary>
+    static bool CanWinByMatchingCurrentWinner(CardData card, List<PlayerHand.TrickCard> trick, CardSuit trumpSuit)
+    {
+        PlayerHand.TrickCard currentWinner = EvaluateTrickWinner(trick, trumpSuit, twoTaash: true);
+        return card.cardSuit == currentWinner.suit && RankValue(card) == currentWinner.rankValue;
+    }
+
+    /// <summary>
+    /// Bot-side trick winner (mirrors TaashRules.DetermineTrickWinner with explicit 2 Taash flag).
+    /// </summary>
+    static PlayerHand.TrickCard EvaluateTrickWinner(List<PlayerHand.TrickCard> trick, CardSuit trumpSuit, bool twoTaash)
+    {
+        if (trick == null || trick.Count == 0)
+            return default;
+
+        int winnerIdx = 0;
+        CardSuit led = trick[0].suit;
+
+        for (int i = 1; i < trick.Count; i++)
+        {
+            PlayerHand.TrickCard winner = trick[winnerIdx];
+            PlayerHand.TrickCard challenger = trick[i];
+
+            bool challengerTrump = challenger.suit == trumpSuit;
+            bool winnerTrump = winner.suit == trumpSuit;
+
+            if (challengerTrump && !winnerTrump)
+                winnerIdx = i;
+            else if (challengerTrump && winnerTrump && challenger.rankValue > winner.rankValue)
+                winnerIdx = i;
+            else if (!challengerTrump && !winnerTrump && challenger.suit == led && challenger.rankValue > winner.rankValue)
+                winnerIdx = i;
+            else if (twoTaash &&
+                     challenger.suit == winner.suit &&
+                     challenger.rankValue == winner.rankValue)
+                winnerIdx = i;
+        }
+
+        return trick[winnerIdx];
+    }
+
+    static bool IsActiveTwoTaash(List<CardData> botHand)
+    {
+        if (TaashRules.IsTwoTaashMode) return true;
+        return botHand != null && botHand.Count > 13;
+    }
+
+    static bool TrickContainsDehla(List<PlayerHand.TrickCard> trick)
+    {
+        if (trick == null) return false;
+        foreach (PlayerHand.TrickCard tc in trick)
+        {
+            if (tc.rankValue == (int)CardRank.Ten)
+                return true;
+        }
+        return false;
+    }
+
+    static CardData PickCheapestWinningCard(List<CardData> cards) =>
+        cards
+            .GroupBy(c => (c.cardSuit, c.cardRank))
+            .Select(g => g.First())
+            .OrderBy(c => RankValue(c))
+            .First();
+
+    static CardData ChooseLowestDump(
+        List<CardData> validCards,
+        List<PlayerHand.TrickCard> trick,
+        CardSuit trumpSuit,
+        int botActorNumber,
+        bool mustFollowSuit,
+        bool twoTaash)
+    {
+        IEnumerable<CardData> dumpPool = validCards.Where(c =>
+            !WouldBotWinTrick(c, trick, trumpSuit, botActorNumber, twoTaash));
+
+        if (!dumpPool.Any())
+            dumpPool = validCards;
+
+        if (!mustFollowSuit)
+        {
+            List<CardData> nonTrump = dumpPool.Where(c => c.cardSuit != trumpSuit).ToList();
+            if (nonTrump.Count > 0)
+                dumpPool = nonTrump;
+        }
+
+        List<CardData> pool = dumpPool.ToList();
+        List<CardData> withoutPremium = pool
+            .Where(c => c.cardRank != CardRank.Ace && c.cardRank != CardRank.King)
+            .ToList();
+        if (withoutPremium.Count > 0)
+            pool = withoutPremium;
+
+        return pool.OrderBy(c => RankValue(c)).First();
     }
 }

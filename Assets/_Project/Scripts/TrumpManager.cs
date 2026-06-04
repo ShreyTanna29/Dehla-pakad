@@ -21,44 +21,150 @@ public class TrumpManager : MonoBehaviourPunCallbacks
     public Sprite clubSprite;
     public Sprite hiddenTrumpSprite;
 
+    const float TrumpPopupVisibleSeconds = 2f;
+
     private CardSuit currentTrumpSuit = CardSuit.Spades;
     private bool isTrumpRevealed = true;
+    private Tween _popupTween;
 
     void Awake()
     {
         if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        else { Destroy(gameObject); return; }
     }
 
     void Start()
     {
         if (trumpChangePopup != null) trumpChangePopup.SetActive(false);
-        
-        // Initial Trump is usually Spades unless Mode 2 sets it later
-        SetTrumpSuit(CardSuit.Spades, false, true);
+        ApplyTrumpForCurrentGameMode(false);
+    }
+
+    public static void ApplyTrumpForCurrentGameMode(bool showPopup)
+    {
+        if (Instance == null)
+        {
+            Debug.LogWarning("[Trump] ApplyTrumpForCurrentGameMode — TrumpManager.Instance is null.");
+            return;
+        }
+
+        GameModeType mode = GameSettings.Instance != null
+            ? GameSettings.Instance.currentMode
+            : GameModeType.TrumpSpades;
+
+        switch (mode)
+        {
+            case GameModeType.TrumpSpades:
+                Instance.ApplyTrumpState(CardSuit.Spades, true, showPopup);
+                break;
+            case GameModeType.ThirteenthCardTrump:
+                Instance.ApplyTrumpState(CardSuit.Spades, false, false);
+                break;
+            case GameModeType.Cut1Trump:
+            case GameModeType.Cut2Trump:
+                Instance.ApplyTrumpState(CardSuit.Spades, false, false);
+                break;
+            default:
+                Instance.ApplyTrumpState(CardSuit.Spades, true, showPopup);
+                break;
+        }
+    }
+
+    public void RefreshFromRoomProperties(bool showPopupIfChanged)
+    {
+        CardSuit oldSuit = currentTrumpSuit;
+        bool oldRevealed = isTrumpRevealed;
+
+        CardSuit suit = GetCurrentTrumpSuit();
+        bool revealed = IsTrumpRevealed();
+
+        currentTrumpSuit = suit;
+        isTrumpRevealed = revealed;
+        PlayerHand.currentTrumpSuit = suit;
+        PlayerHand.isTrumpRevealed = revealed;
+
+        bool changed = suit != oldSuit || revealed != oldRevealed;
+        LogTrumpState("RefreshFromRoomProperties", oldSuit, oldRevealed, suit, revealed);
+
+        EnsureTrumpDisplayVisible();
+        UpdateTrumpUI(suit);
+
+        if (showPopupIfChanged && changed && revealed)
+            ShowTrumpChangePopup(suit);
+    }
+
+    void ApplyTrumpState(CardSuit suit, bool revealed, bool showPopup)
+    {
+        SetTrumpSuit(suit, showPopup && revealed, revealed);
     }
 
     public CardSuit GetCurrentTrumpSuit()
     {
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("TS", out object suit))
+            return (CardSuit)(int)suit;
         return currentTrumpSuit;
+    }
+
+    public bool IsTrumpRevealed()
+    {
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("TR", out object revealed))
+            return (bool)revealed;
+        return isTrumpRevealed;
     }
 
     public void SetTrumpSuit(CardSuit newSuit, bool showPopup, bool isRevealed = true)
     {
-        Debug.Log($"[TrumpManager] Trump Set To: {newSuit} (Revealed: {isRevealed})");
+        CardSuit oldSuit = currentTrumpSuit;
+        bool oldRevealed = isTrumpRevealed;
+
+        if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
+        {
+            ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
+            {
+                { "TS", (int)newSuit },
+                { "TR", isRevealed }
+            };
+            PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        }
+
         currentTrumpSuit = newSuit;
         isTrumpRevealed = isRevealed;
-        
-        PlayerHand.currentTrumpSuit = newSuit; // Sync with PlayerHand static variable
+        PlayerHand.currentTrumpSuit = newSuit;
         PlayerHand.isTrumpRevealed = isRevealed;
 
+        LogTrumpState("SetTrumpSuit", oldSuit, oldRevealed, newSuit, isRevealed);
+
+        EnsureTrumpDisplayVisible();
         UpdateTrumpUI(newSuit);
 
-        if (showPopup)
-        {
-            Debug.Log($"[TrumpManager] Trump Changed To: {newSuit}");
+        bool changed = newSuit != oldSuit || isRevealed != oldRevealed;
+        if (showPopup && changed && isRevealed)
             ShowTrumpChangePopup(newSuit);
-        }
+    }
+
+    public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
+    {
+        if (!propertiesThatChanged.ContainsKey("TS") && !propertiesThatChanged.ContainsKey("TR"))
+            return;
+
+        CardSuit oldSuit = currentTrumpSuit;
+        bool oldRevealed = isTrumpRevealed;
+
+        CardSuit suit = GetCurrentTrumpSuit();
+        bool revealed = IsTrumpRevealed();
+
+        currentTrumpSuit = suit;
+        isTrumpRevealed = revealed;
+        PlayerHand.currentTrumpSuit = suit;
+        PlayerHand.isTrumpRevealed = revealed;
+
+        bool changed = suit != oldSuit || revealed != oldRevealed;
+        LogTrumpState("OnRoomPropertiesUpdate", oldSuit, oldRevealed, suit, revealed);
+
+        EnsureTrumpDisplayVisible();
+        UpdateTrumpUI(suit);
+
+        if (changed && revealed)
+            ShowTrumpChangePopup(suit);
     }
 
     [PunRPC]
@@ -72,12 +178,10 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom && !PhotonNetwork.OfflineMode)
         {
             if (photonView != null)
-            {
                 photonView.RPC("RPC_SetTrumpSuit", RpcTarget.All, (int)newSuit, showPopup, isRevealed);
-            }
             else
             {
-                Debug.LogWarning("[TrumpManager] photonView is null! Falling back to local set.");
+                Debug.LogWarning("[Trump] photonView is null — applying trump locally only.");
                 SetTrumpSuit(newSuit, showPopup, isRevealed);
             }
         }
@@ -89,46 +193,110 @@ public class TrumpManager : MonoBehaviourPunCallbacks
 
     public void UpdateTrumpUI(CardSuit newTrump)
     {
+        EnsureTrumpDisplayVisible();
+
         if (trumpIcon != null)
         {
-            if (!isTrumpRevealed)
+            Sprite sprite = GetSpriteForTrump(newTrump, isTrumpRevealed);
+            if (sprite != null)
             {
-                trumpIcon.sprite = hiddenTrumpSprite;
+                trumpIcon.sprite = sprite;
+                trumpIcon.color = isTrumpRevealed ? Color.white : new Color(0.85f, 0.85f, 0.85f, 1f);
+                trumpIcon.enabled = true;
             }
             else
-            {
-                switch (newTrump)
-                {
-                    case CardSuit.Spades: trumpIcon.sprite = spadeSprite; break;
-                    case CardSuit.Hearts: trumpIcon.sprite = heartSprite; break;
-                    case CardSuit.Diamonds: trumpIcon.sprite = diamondSprite; break;
-                    case CardSuit.Clubs: trumpIcon.sprite = clubSprite; break;
-                }
-            }
+                Debug.LogWarning($"[Trump] No sprite for {newTrump} (revealed={isTrumpRevealed}). Assign suit sprites on TrumpManager.");
+        }
+        else
+        {
+            Debug.LogWarning("[Trump] trumpIcon is not assigned on TrumpManager.");
         }
 
         if (trumpSuitText != null)
         {
-            trumpSuitText.text = !isTrumpRevealed ? "Trump: ?" : "Trump: " + newTrump.ToString();
+            trumpSuitText.gameObject.SetActive(true);
+            trumpSuitText.text = isTrumpRevealed
+                ? "Trump: " + newTrump
+                : "Trump: Hidden";
+        }
+    }
+
+    void EnsureTrumpDisplayVisible()
+    {
+        if (trumpIcon != null)
+        {
+            trumpIcon.gameObject.SetActive(true);
+            trumpIcon.enabled = true;
+        }
+
+        if (trumpSuitText != null)
+            trumpSuitText.gameObject.SetActive(true);
+
+        if (trumpIcon == null) return;
+
+        Transform node = trumpIcon.transform;
+        while (node != null)
+        {
+            if (node.name == "TrumpDisplay")
+            {
+                node.gameObject.SetActive(true);
+                break;
+            }
+            node = node.parent;
+        }
+    }
+
+    Sprite GetSpriteForTrump(CardSuit suit, bool revealed)
+    {
+        if (!revealed)
+            return hiddenTrumpSprite;
+
+        switch (suit)
+        {
+            case CardSuit.Spades: return spadeSprite;
+            case CardSuit.Hearts: return heartSprite;
+            case CardSuit.Diamonds: return diamondSprite;
+            case CardSuit.Clubs: return clubSprite;
+            default: return spadeSprite;
         }
     }
 
     void ShowTrumpChangePopup(CardSuit newSuit)
     {
-        if (trumpChangePopup == null) return;
-
-        trumpChangePopup.SetActive(true);
-        if (trumpChangeText != null)
+        if (trumpChangePopup == null)
         {
-            trumpChangeText.text = "Trump Changed to " + newSuit.ToString() + "!";
+            Debug.LogWarning("[Trump] trumpChangePopup is not assigned.");
+            return;
         }
+
+        _popupTween?.Kill();
+        trumpChangePopup.SetActive(true);
+        trumpChangePopup.transform.DOKill();
+
+        if (trumpChangeText != null)
+            trumpChangeText.text = "Trump Changed to " + newSuit + "!";
 
         trumpChangePopup.transform.localScale = Vector3.zero;
         trumpChangePopup.transform.DOScale(1f, 0.5f).SetEase(Ease.OutBack);
 
-        Sequence seq = DOTween.Sequence();
-        seq.AppendInterval(2f);
-        seq.Append(trumpChangePopup.transform.DOScale(0f, 0.5f).SetEase(Ease.InBack));
-        seq.OnComplete(() => trumpChangePopup.SetActive(false));
+        _popupTween = DOVirtual.DelayedCall(TrumpPopupVisibleSeconds, () =>
+        {
+            if (trumpChangePopup == null) return;
+            trumpChangePopup.transform.DOScale(0f, 0.5f).SetEase(Ease.InBack)
+                .OnComplete(() =>
+                {
+                    if (trumpChangePopup != null)
+                        trumpChangePopup.SetActive(false);
+                });
+        });
+    }
+
+    static void LogTrumpState(string source, CardSuit oldSuit, bool oldRevealed, CardSuit newSuit, bool newRevealed)
+    {
+        Debug.Log(
+            $"[Trump] {source}\n" +
+            $"[Trump] Old Trump: {oldSuit} (revealed={oldRevealed})\n" +
+            $"[Trump] New Trump: {newSuit} (revealed={newRevealed})\n" +
+            $"[Trump] Current Trump: {newSuit}");
     }
 }

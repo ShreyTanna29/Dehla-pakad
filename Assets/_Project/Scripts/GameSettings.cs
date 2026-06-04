@@ -4,13 +4,15 @@ public enum GameModeType
 {
     TrumpSpades,
     ThirteenthCardTrump,
-    CutToTrump
+    Cut1Trump,
+    Cut2Trump
 }
 
 public enum MatchType
 {
     OfflineBots,
-    OnlinePhoton
+    OnlinePhoton,
+    PlayWithFriends
 }
 
 public class GameSettings : MonoBehaviour

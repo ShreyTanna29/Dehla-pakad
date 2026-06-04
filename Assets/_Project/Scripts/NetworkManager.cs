@@ -33,6 +33,20 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public static string LastStatus => Instance != null ? Instance.lastStatusMessage : "?";
     public static string LastError => Instance != null ? Instance.lastErrorMessage : "?";
 
+    [Header("Reconnection UI")]
+    public GameObject connectionLostPanel;
+    const float DisconnectAbandonHomeSeconds = 2.5f;
+
+    private bool isAttemptingRejoin = false;
+    private bool _localMatchAbandoned;
+    private Coroutine _disconnectAbandonCoroutine;
+    private string storedRoomName;
+    private TMP_Text reconnectingStatusText;
+    private TMP_Text reconnectionLostStatusText;
+    private GameObject reconnectingSpinner;
+    private GameObject reconnectionLostRoot;
+    private bool _reconnectPanelFindAttempted;
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -40,11 +54,22 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         PhotonNetwork.KeepAliveInBackground = 300f;
         Application.runInBackground = true;
+        Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
+        // Ensure we have a unique UserId for consistent rejoining
+        if (string.IsNullOrEmpty(PhotonNetwork.AuthValues?.UserId))
+        {
+            string uid = PlayerPrefs.GetString("PhotonUserId", System.Guid.NewGuid().ToString());
+            PlayerPrefs.SetString("PhotonUserId", uid);
+            PhotonNetwork.AuthValues = new AuthenticationValues(uid);
+            Debug.Log("[Photon] Assigned consistent UserId: " + uid);
+        }
     }
 
     void Start()
     {
-        UpdateUIState(true); // 🚀 Start at Home
+        // 🚀 Start with Home UI (after login is handled by GoogleLogin)
+        UpdateUIState(true); 
 
         EnsureLoadingDoesNotBlockUI();
 
@@ -52,9 +77,243 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (playBotsButton != null) playBotsButton.interactable = true;
 
         SetupButtonAnimations();
+        ResolveReconnectPanels();
+    }
 
-        ShowLoading("Connecting to Server...");
-        Debug.Log("[Photon] ConnectUsingSettings");
+    static bool IsUiObjectAlive(GameObject go)
+    {
+        if (go == null) return false;
+        if (!go.scene.IsValid() || !go.scene.isLoaded) return false;
+        return true;
+    }
+
+    static bool SafeSetActive(GameObject go, bool active, string label)
+    {
+        if (!IsUiObjectAlive(go))
+        {
+            if (active)
+                Debug.LogWarning($"[Reconnect UI] Skipped SetActive(true) — '{label}' is missing, destroyed, or unloaded.");
+            return false;
+        }
+
+        if (go.activeSelf == active) return true;
+
+        go.SetActive(active);
+        return true;
+    }
+
+    static bool SafeSetTextActive(TMP_Text text, bool active, string label)
+    {
+        if (text == null)
+        {
+            if (active)
+                Debug.LogWarning($"[Reconnect UI] Skipped — TMP_Text '{label}' not found.");
+            return false;
+        }
+
+        return SafeSetActive(text.gameObject, active, label);
+    }
+
+    void ClearReconnectPanelCache()
+    {
+        reconnectingStatusText = null;
+        reconnectionLostStatusText = null;
+        reconnectingSpinner = null;
+        reconnectionLostRoot = null;
+    }
+
+    void InvalidateStaleReconnectReferences()
+    {
+        if (!IsUiObjectAlive(connectionLostPanel))
+        {
+            if (connectionLostPanel != null)
+                Debug.LogWarning("[Reconnect UI] connectionLostPanel reference is stale — clearing cache.");
+            connectionLostPanel = null;
+            ClearReconnectPanelCache();
+            _reconnectPanelFindAttempted = false;
+        }
+    }
+
+    void ResolveReconnectPanels()
+    {
+        InvalidateStaleReconnectReferences();
+
+        if (!IsUiObjectAlive(connectionLostPanel))
+        {
+            if (!_reconnectPanelFindAttempted)
+            {
+                _reconnectPanelFindAttempted = true;
+                GameObject panel = GameObject.Find("Panel_ConnectionLost");
+                if (IsUiObjectAlive(panel))
+                {
+                    connectionLostPanel = panel;
+                    Debug.Log("[Reconnect UI] Resolved Panel_ConnectionLost via one-time Find.");
+                }
+                else
+                    Debug.LogWarning("[Reconnect UI] Panel_ConnectionLost not found (inactive, destroyed, or wrong scene). Assign connectionLostPanel in Inspector.");
+            }
+        }
+
+        if (!IsUiObjectAlive(connectionLostPanel))
+            return;
+
+        Transform root = connectionLostPanel.transform;
+
+        if (!IsUiObjectAlive(reconnectingStatusText?.gameObject))
+        {
+            reconnectingStatusText = root.Find("Text_Reconnecting")?.GetComponent<TMP_Text>();
+            if (reconnectingStatusText == null)
+                Debug.LogWarning("[Reconnect UI] Text_Reconnecting not found under connectionLostPanel.");
+        }
+
+        if (!IsUiObjectAlive(reconnectionLostStatusText?.gameObject))
+        {
+            reconnectionLostStatusText = root.Find("Text_ConnectionLost")?.GetComponent<TMP_Text>();
+            if (reconnectionLostStatusText == null)
+                Debug.LogWarning("[Reconnect UI] Text_ConnectionLost not found under connectionLostPanel.");
+        }
+
+        if (!IsUiObjectAlive(reconnectingSpinner))
+        {
+            Transform spinner = root.Find("SpinnerContainer");
+            reconnectingSpinner = spinner != null ? spinner.gameObject : null;
+            if (reconnectingSpinner == null)
+                Debug.LogWarning("[Reconnect UI] SpinnerContainer not found under connectionLostPanel.");
+        }
+
+        if (!IsUiObjectAlive(reconnectionLostRoot))
+        {
+            Transform lostChild = root.Find("Reconnection_Lost");
+            reconnectionLostRoot = lostChild != null
+                ? lostChild.gameObject
+                : (IsUiObjectAlive(reconnectionLostStatusText?.gameObject) ? reconnectionLostStatusText.gameObject : null);
+            if (reconnectionLostRoot == null)
+                Debug.LogWarning("[Reconnect UI] Reconnection_Lost root not found under connectionLostPanel.");
+        }
+    }
+
+    bool TryShowConnectionLostShell()
+    {
+        ResolveReconnectPanels();
+        if (!IsUiObjectAlive(connectionLostPanel))
+        {
+            Debug.LogWarning("[Reconnect UI] No connection lost panel — continuing reconnect without UI.");
+            return false;
+        }
+
+        if (!SafeSetActive(connectionLostPanel, true, "connectionLostPanel"))
+            return false;
+
+        if (connectionLostPanel.transform.parent != null)
+            connectionLostPanel.transform.SetAsLastSibling();
+
+        return true;
+    }
+
+    void ShowReconnectingPanel(string message)
+    {
+        bool hasShell = TryShowConnectionLostShell();
+
+        SafeSetActive(reconnectingSpinner, true, "SpinnerContainer");
+        if (reconnectingStatusText != null)
+        {
+            SafeSetTextActive(reconnectingStatusText, true, "Text_Reconnecting");
+            reconnectingStatusText.text = message;
+        }
+        else if (hasShell)
+            Debug.LogWarning("[Reconnect UI] Reconnecting message not shown — Text_Reconnecting missing.");
+
+        SafeSetTextActive(reconnectionLostStatusText, false, "Text_ConnectionLost");
+        if (IsUiObjectAlive(reconnectionLostRoot) &&
+            reconnectionLostRoot != reconnectionLostStatusText?.gameObject)
+            SafeSetActive(reconnectionLostRoot, false, "Reconnection_Lost");
+    }
+
+    void ShowReconnectionLostPanel(string message)
+    {
+        bool hasShell = TryShowConnectionLostShell();
+
+        SafeSetActive(reconnectingSpinner, false, "SpinnerContainer");
+        SafeSetTextActive(reconnectingStatusText, false, "Text_Reconnecting");
+
+        if (reconnectionLostStatusText != null)
+        {
+            SafeSetTextActive(reconnectionLostStatusText, true, "Text_ConnectionLost");
+            reconnectionLostStatusText.text = message;
+        }
+        else if (hasShell)
+            Debug.LogWarning($"[Reconnect UI] Lost message not shown — Text_ConnectionLost missing. Message: {message}");
+
+        if (IsUiObjectAlive(reconnectionLostRoot))
+            SafeSetActive(reconnectionLostRoot, true, "Reconnection_Lost");
+    }
+
+    void HideReconnectPanels()
+    {
+        SafeSetActive(reconnectingSpinner, false, "SpinnerContainer");
+        SafeSetTextActive(reconnectingStatusText, false, "Text_Reconnecting");
+        SafeSetTextActive(reconnectionLostStatusText, false, "Text_ConnectionLost");
+        SafeSetActive(reconnectionLostRoot, false, "Reconnection_Lost");
+        SafeSetActive(connectionLostPanel, false, "connectionLostPanel");
+    }
+
+    void StopDisconnectAbandonCoroutine()
+    {
+        if (_disconnectAbandonCoroutine != null)
+        {
+            StopCoroutine(_disconnectAbandonCoroutine);
+            _disconnectAbandonCoroutine = null;
+        }
+    }
+
+    void LeaveMatchAndReturnHome()
+    {
+        HideReconnectPanels();
+        HideLoading();
+        isAttemptingRejoin = false;
+        GameFlowState.SetPhase(GameFlowPhase.Home);
+
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.LeaveRoom();
+        else if (PhotonNetwork.IsConnected)
+            PhotonNetwork.Disconnect();
+        else
+            ReturnToHomeScreen();
+    }
+
+    System.Collections.IEnumerator AbandonMatchAfterDisconnectRoutine()
+    {
+        _localMatchAbandoned = true;
+        isAttemptingRejoin = false;
+
+        ShowReconnectionLostPanel("Connection lost.\nReturning to Home...");
+
+        yield return new WaitForSeconds(DisconnectAbandonHomeSeconds);
+
+        Debug.Log("[Photon] Match abandoned by local player — leaving room and returning home.");
+        LeaveMatchAndReturnHome();
+        _disconnectAbandonCoroutine = null;
+    }
+
+    void BeginInMatchDisconnectFlow()
+    {
+        StopDisconnectAbandonCoroutine();
+        ShowReconnectionLostPanel("Connection lost.\nReturning to Home...");
+        _disconnectAbandonCoroutine = StartCoroutine(AbandonMatchAfterDisconnectRoutine());
+    }
+
+    public void ConnectToPhoton()
+    {
+        if (PhotonNetwork.IsConnected || PhotonNetwork.NetworkClientState == ClientState.ConnectingToNameServer || PhotonNetwork.NetworkClientState == ClientState.ConnectingToMasterServer)
+        {
+            Debug.Log($"[Photon] Already connected or connecting ({PhotonNetwork.NetworkClientState}).");
+            return;
+        }
+
+        // ShowLoading removed per user request - transition to Modes should be direct
+        Debug.Log("[Photon] ConnectUsingSettings triggered by User Flow (Background)");
+        
+        if (playOnlineButton != null) playOnlineButton.interactable = false;
         PhotonNetwork.ConnectUsingSettings();
     }
 
@@ -62,6 +321,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         if (homeCanvasGroup != null)
         {
+            homeCanvasGroup.DOKill();
             homeCanvasGroup.DOFade(isHome ? 1 : 0, transitionTime).SetUpdate(true);
             homeCanvasGroup.interactable = isHome;
             homeCanvasGroup.blocksRaycasts = isHome;
@@ -69,9 +329,29 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (gameCanvasGroup != null)
         {
+            gameCanvasGroup.DOKill();
             gameCanvasGroup.DOFade(isHome ? 0 : 1, transitionTime).SetUpdate(true);
             gameCanvasGroup.interactable = !isHome;
             gameCanvasGroup.blocksRaycasts = !isHome;
+        }
+    }
+
+    public void ReturnToHomeScreen()
+    {
+        Debug.Log("[GameFlow] ReturnToHomeScreen");
+        _localMatchAbandoned = false;
+        StopDisconnectAbandonCoroutine();
+        GameFlowState.SetPhase(GameFlowPhase.Home);
+        HideLoading();
+        HideReconnectPanels();
+        isAttemptingRejoin = false;
+        isPlayBotsMode = false;
+        UpdateUIState(true);
+        if (ModeManager.Instance != null)
+        {
+            if (ModeManager.Instance.panelModes != null) ModeManager.Instance.panelModes.SetActive(false);
+            if (ModeManager.Instance.panelHomeScreen != null) ModeManager.Instance.panelHomeScreen.SetActive(true);
+            ModeManager.Instance.ApplyHomeScreenButtonColors();
         }
     }
 
@@ -150,6 +430,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         loadingCanvasGroup.alpha = 0;
         loadingCanvasGroup.interactable = false;
         loadingCanvasGroup.blocksRaycasts = false;
+
+        // If we just finished initial loading and are in lobby, show home screen
+        if (PhotonNetwork.InLobby && homeCanvasGroup != null && homeCanvasGroup.alpha < 0.1f)
+        {
+            UpdateUIState(true);
+        }
     }
 
     public void LogError(string msg)
@@ -160,7 +446,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnConnectedToMaster() 
     { 
-        Debug.Log("[Photon] ConnectedToMaster");
+        Debug.Log("[Photon] ConnectedToMaster. Reconnect Success part 1.");
         lastStatusMessage = "Connected to Master";
 
         if (PhotonNetwork.OfflineMode)
@@ -169,54 +455,223 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
         }
 
+        if (_localMatchAbandoned)
+        {
+            Debug.Log("[Photon] Connected after abandoning match — staying off table.");
+            HideLoading();
+            HideReconnectPanels();
+            if (PhotonNetwork.InRoom)
+                PhotonNetwork.LeaveRoom();
+            else if (!PhotonNetwork.InLobby)
+                PhotonNetwork.JoinLobby();
+            return;
+        }
+
+        if (GameFlowState.Current == GameFlowPhase.Matchmaking)
+        {
+            Debug.Log("[Photon] Connected during matchmaking — resuming lobby/match");
+            HideLoading();
+            if (!PhotonNetwork.InLobby)
+                PhotonNetwork.JoinLobby();
+            else if (ModeManager.Instance != null)
+                ModeManager.Instance.StartSmartMatchmakingFromNetwork();
+            return;
+        }
+
         Debug.Log("[Photon] JoinLobby");
         PhotonNetwork.JoinLobby();
     }
 
+    void OnApplicationPause(bool paused)
+    {
+        if (!paused) OnAppResumed();
+    }
+
+    void OnApplicationFocus(bool hasFocus)
+    {
+        if (hasFocus) OnAppResumed();
+    }
+
+    void OnAppResumed()
+    {
+        if (MatchmakingManager.Instance != null)
+            MatchmakingManager.Instance.RefreshUIAfterResume();
+
+        if (GameFlowState.Current == GameFlowPhase.Matchmaking)
+        {
+            if (PhotonNetwork.IsConnectedAndReady && PhotonNetwork.InLobby)
+            {
+                 Debug.Log("[Photon] Still connected during resume — re-triggering matchmaking check");
+                 if (ModeManager.Instance != null)
+                    ModeManager.Instance.StartSmartMatchmakingFromNetwork();
+            }
+            else if (!PhotonNetwork.IsConnectedAndReady &&
+                     PhotonNetwork.NetworkClientState != ClientState.ConnectingToNameServer &&
+                     PhotonNetwork.NetworkClientState != ClientState.ConnectingToMasterServer &&
+                     PhotonNetwork.NetworkClientState != ClientState.Authenticating)
+            {
+                Debug.Log("[Photon] Disconnected during resume — initiating automatic recovery");
+                if (ModeManager.Instance != null)
+                    ModeManager.Instance.ScheduleMatchmakingAfterLobby();
+                StartCoroutine(ReconnectForMatchmakingRoutine());
+            }
+        }
+    }
+
     public override void OnDisconnected(DisconnectCause cause)
     {
-        Debug.Log($"[Photon] Disconnected | Cause: {cause}");
+        Debug.Log($"[Photon] Disconnected! Cause: {cause}");
         lastErrorMessage = cause.ToString();
         HideLoading();
+
+        // 🚀 UI FIX: Re-enable buttons if connection failed
+        if (playOnlineButton != null) playOnlineButton.interactable = true;
 
         if (pendingOfflineMatch)
         {
             EnterOfflineModeAndStart();
         }
+        else if (cause != DisconnectCause.DisconnectByClientLogic && cause != DisconnectCause.None)
+        {
+            bool wasInMatch = GameFlowState.Current == GameFlowPhase.InGame || 
+                              GameFlowState.Current == GameFlowPhase.InRoom ||
+                              (gameCanvasGroup != null && gameCanvasGroup.alpha > 0.1f);
+
+            if (GameFlowState.Current == GameFlowPhase.Matchmaking)
+            {
+                Debug.Log("[Photon] Disconnected during matchmaking — reconnecting");
+                if (ModeManager.Instance != null) ModeManager.Instance.ScheduleMatchmakingAfterLobby();
+                HideLoading();
+                StartCoroutine(ReconnectForMatchmakingRoutine());
+            }
+            else if (wasInMatch)
+            {
+                Debug.Log("[Photon] Disconnected during match — abandoning and returning home.");
+                BeginInMatchDisconnectFlow();
+            }
+        }
     }
 
-    public override void OnLeftLobby()
+    System.Collections.IEnumerator ReconnectForMatchmakingRoutine()
     {
-        Debug.Log("[Photon] LeftLobby");
+        yield return new WaitForSeconds(1f);
+        if (!PhotonNetwork.IsConnected)
+            PhotonNetwork.ConnectUsingSettings();
+
+        float wait = 0f;
+        while (wait < 25f && GameFlowState.Current == GameFlowPhase.Matchmaking)
+        {
+            if (PhotonNetwork.IsConnectedAndReady)
+            {
+                HideLoading();
+                if (!PhotonNetwork.InLobby)
+                    PhotonNetwork.JoinLobby();
+                else if (ModeManager.Instance != null)
+                    ModeManager.Instance.StartSmartMatchmakingFromNetwork();
+                yield break;
+            }
+            yield return new WaitForSeconds(1f);
+            wait += 1f;
+        }
     }
 
     public override void OnJoinedLobby() 
     { 
         Debug.Log("[Photon] JoinedLobby");
         lastStatusMessage = "Joined lobby";
+        GameFlowState.SetPhase(GameFlowPhase.Home);
+        
+        if (playOnlineButton != null) playOnlineButton.interactable = true;
         HideLoading();
+    }
+
+    public override void OnLeftLobby()
+    {
+        Debug.Log("[Photon] LeftLobby triggered.");
     }
 
     public override void OnCreatedRoom()
     {
         Debug.Log($"[Photon] CreatedRoom | {PhotonNetwork.CurrentRoom?.Name}");
-        LogRoomInfo("CreatedRoom");
     }
 
     public override void OnJoinedRoom()
     {
-        Debug.Log("[Photon] Joined Room");
+        Debug.Log($"[Photon] Joined Room | Name: {PhotonNetwork.CurrentRoom?.Name} | Count: {PhotonNetwork.CurrentRoom?.PlayerCount}");
         LogRoomInfo("JoinedRoom");
-        HideLoading();
 
-        // 🚀 SPANNING: Create player object. Critical for both Online and Offline modes.
-        if (PlayerHand.LocalInstance == null)
+        if (_localMatchAbandoned)
         {
-            PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
+            Debug.Log("[Photon] Rejoined room after local abandon — leaving immediately.");
+            PhotonNetwork.LeaveRoom();
+            return;
+        }
+
+        if (PhotonNetwork.CurrentRoom != null)
+            storedRoomName = PhotonNetwork.CurrentRoom.Name;
+
+        bool rejoiningActiveGame = DeckManager.Instance != null && 
+            PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs) && (bool)gs;
+
+        if (rejoiningActiveGame)
+        {
+            Debug.Log("[Photon] Rejoin — active game detected, preserving state");
+            GameFlowState.SetPhase(GameFlowPhase.InGame);
+        }
+        else if (PhotonNetwork.OfflineMode)
+        {
+            GameFlowState.SetPhase(GameFlowPhase.InRoom);
+        }
+        else
+        {
+            GameFlowState.SetPhase(GameFlowPhase.InRoom);
+        }
+
+        UpdateUIState(false);
+        HideReconnectPanels();
+        HideLoading();
+        isAttemptingRejoin = false;
+
+        // 🚀 REJOIN PROTECTION: Always check for existing local player object to prevent duplicate PhotonView IDs.
+        // ReconnectAndRejoin() will automatically restore the existing PhotonView from the room buffer.
+        bool hasExistingPlayer = false;
+        PlayerHand[] allHands = Object.FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
+        foreach (var hand in allHands)
+        {
+            if (hand.photonView != null && hand.photonView.IsMine)
+            {
+                PlayerHand.LocalInstance = hand; 
+                hasExistingPlayer = true;
+                Debug.Log("[Photon] Rejoin Mode Active");
+                Debug.Log("[Photon] Reusing Existing Player Object");
+                break;
+            }
+        }
+
+        if (hasExistingPlayer)
+        {
+            Debug.Log("[Photon] Skipping NetworkPlayer Spawn to prevent duplicate PhotonView IDs.");
+        }
+        else
+        {
+            // Fresh join or rejoin where object was cleaned up
+            if (PlayerHand.LocalInstance == null)
+            {
+                Debug.Log("[Photon] Fresh Join: Instantiating new NetworkPlayer.");
+                PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
+            }
+            else
+            {
+                Debug.Log("[Photon] NetworkPlayer already exists, skipping instantiation.");
+            }
         }
 
         if (DeckManager.Instance != null)
+        {
             DeckManager.Instance.OnRoomJoinedCheckStart();
+        }
+
     }
 
     public override void OnLeftRoom()
@@ -224,8 +679,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         Debug.Log("[Photon] LeftRoom");
         isPlayBotsMode = false;
         PhotonNetwork.OfflineMode = false;
+        ReturnToHomeScreen();
+    }
 
-        UpdateUIState(true);
+    public override void OnMasterClientSwitched(Player newMaster)
+    {
+        Debug.Log($"[Photon] OnMasterClientSwitched | {newMaster.NickName}");
     }
 
     public override void OnJoinRandomFailed(short returnCode, string message)
@@ -263,25 +722,19 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         if (btn == null) return;
 
-        Vector3 originalScale = btn.transform.localScale;
         btn.interactable = true;
-
-        var helper = btn.gameObject.GetComponent<ButtonEventHelper>();
-        if (helper == null) helper = btn.gameObject.AddComponent<ButtonEventHelper>();
-
-        helper.OnPointerEnterAction = () => {
-            if (btn.interactable) btn.transform.DOScale(originalScale * 1.1f, 0.15f).SetUpdate(true); 
-        };
-        
-        helper.OnPointerExitAction = () => {
-            btn.transform.DOScale(originalScale, 0.15f).SetUpdate(true); 
-        };
+        UIButtonHoverUtility.SetupHoverScale(btn);
 
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(() => {
             Debug.Log($"[UI] Button Clicked: {(isBots ? "Play Bots" : "Play Online")}");
             btn.transform.DOPunchScale(new Vector3(-0.1f, -0.1f, 0f), 0.15f, 1, 0.5f).SetUpdate(true);
             isPlayBotsMode = isBots;
+
+            if (!isBots)
+            {
+                ConnectToPhoton();
+            }
 
             if (ModeManager.Instance != null)
                 ModeManager.Instance.OpenModePanelFromHome();

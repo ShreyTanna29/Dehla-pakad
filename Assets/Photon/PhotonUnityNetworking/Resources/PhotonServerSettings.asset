@@ -64,6 +64,12 @@ MonoBehaviour:
   - RPC_SyncScores
   - RPC_UpdateMatchmakingUI
   - RPC_SetTrumpSuit
+  - RPC_MarkPlayerAsBot
+  - RPC_SetGamePaused
+  - RPC_SyncGameState
+  - RPC_SyncTimerState
+  - RPC_SyncBotsOnly
+  - RPC_ShowGameResult
   DisableAutoOpenWizard: 1
   ShowSettings: 0
   DevRegionSetOnce: 1

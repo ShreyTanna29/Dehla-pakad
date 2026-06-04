@@ -72,27 +72,19 @@ public class GoogleLogin : MonoBehaviour
                 isFirebaseReady = true;
                 GoogleSignIn.Configuration = configuration;
                 
-                Debug.Log("✅ Firebase and Google Sign-In Initialized.");
-                UpdateStatus("Ready to Play");
-
                 if (googleSignInButton != null)
                     googleSignInButton.interactable = true;
 
                 // Check for existing session
                 if (auth.CurrentUser != null)
                 {
-                    Debug.Log("[Firebase] Existing session found: " + auth.CurrentUser.DisplayName);
-                    UpdateStatus("Restoring Session...");
                     OnFirebaseLoginFinished(Task.FromResult(auth.CurrentUser));
                 }
             }
             else
             {
                 string error = "Firebase Error: " + status;
-                Debug.LogError("❌ " + error);
                 UpdateStatus(error);
-                
-                // Retry button or logic could go here
             }
         });
     }
@@ -203,9 +195,27 @@ public class GoogleLogin : MonoBehaviour
         
         PhotonNetwork.NickName = nick;
 
-        // UI Transition
+        // Show Loading (GAME_LOGO) and then transition to home
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.ShowLoading("Loading Player Profile...");
+            
+            // Artificial delay to show logo as per user request
+            Invoke(nameof(TransitionToHome), 1.5f);
+        }
+        else
+        {
+            TransitionToHome();
+        }
+    }
+
+    private void TransitionToHome()
+    {
         if (loginPanel != null) loginPanel.SetActive(false);
         if (homePanel != null) homePanel.SetActive(true);
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.HideLoading();
 
         if (PlayerProfileSync.Instance != null)
             PlayerProfileSync.Instance.UpdateAllNames();
@@ -216,17 +226,33 @@ public class GoogleLogin : MonoBehaviour
     private void SimulateLogin()
     {
         PhotonNetwork.NickName = "Roman Bhati"; 
-        if (loginPanel != null) loginPanel.SetActive(false);
-        if (homePanel != null) homePanel.SetActive(true);
-        if (PlayerProfileSync.Instance != null) PlayerProfileSync.Instance.UpdateAllNames();
+        
+        // Show Loading (GAME_LOGO) and then transition to home
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.ShowLoading("Simulating Login...");
+            Invoke(nameof(TransitionToHome), 1.5f);
+        }
+        else
+        {
+            TransitionToHome();
+        }
         UpdateStatus("Simulated Login Success");
     }
-public void SimulateLoginME()
+
+    public void SimulateLoginME()
     {
         PhotonNetwork.NickName = "Roman Bhati"; 
-        if (loginPanel != null) loginPanel.SetActive(false);
-        if (homePanel != null) homePanel.SetActive(true);
-        if (PlayerProfileSync.Instance != null) PlayerProfileSync.Instance.UpdateAllNames();
+        
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.ShowLoading("Simulating Login...");
+            Invoke(nameof(TransitionToHome), 1.5f);
+        }
+        else
+        {
+            TransitionToHome();
+        }
         UpdateStatus("Simulated Login Success");
     }
 

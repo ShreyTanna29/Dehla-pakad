@@ -39,6 +39,7 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
     };
 
     private bool isSearching = false;
+    private bool isMatchFoundRoutineRunning = false;
     private List<GameObject> profilePool = new List<GameObject>();
     private Coroutine statusCoroutine;
     private Coroutine spawnCoroutine;
@@ -116,14 +117,17 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         // For Bots mode or if we were searching, we want the transition
         if (!isSearching && !isMatchFound) return;
         
-        isSearching = false;
+        // Prevent multiple MatchFoundRoutine calls if already starting
+        if (isMatchFound && isMatchFoundRoutineRunning) return;
 
+        isSearching = false;
         if (statusCoroutine != null) StopCoroutine(statusCoroutine);
         if (spawnCoroutine != null) StopCoroutine(spawnCoroutine);
         if (spinnerTween != null) spinnerTween.Kill();
 
         if (isMatchFound)
         {
+            isMatchFoundRoutineRunning = true;
             StartCoroutine(MatchFoundRoutine());
         }
         else
@@ -131,10 +135,10 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
             HidePanel();
             if (PhotonNetwork.InRoom) PhotonNetwork.LeaveRoom();
             
-            // Return to Mode Selection when cancelled
+            GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
             if (ModeManager.Instance != null)
             {
-                ModeManager.Instance.OpenModePanelFromHome();
+                if (ModeManager.Instance.panelModes != null) ModeManager.Instance.panelModes.SetActive(true);
             }
         }
     }
@@ -252,6 +256,7 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
             {
                 DeckManager.Instance.StartFullDealingSequence();
             }
+            isMatchFoundRoutineRunning = false;
             yield break;
         }
 
@@ -269,7 +274,7 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         if (matchedPlayersContainer != null)
         {
             matchedPlayersContainer.SetActive(true);
-            matchedPlayersContainer.transform.localScale = Vector3.zero;
+            matchedPlayersContainer.transform.localScale = Vector3.one; // Ensure visible
             matchedPlayersContainer.transform.DOScale(1.0f, 0.5f).SetEase(Ease.OutBack).SetUpdate(true);
 
             foreach (Transform child in matchedPlayersContainer.transform) Destroy(child.gameObject);
@@ -294,7 +299,10 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         yield return new WaitForSeconds(2.5f);
 
         // --- STAGE 3: TRANSITION (Fade Out UI, Fade In Scene) ---
-        Debug.Log("🚀 Stage 3: Transitioning to Game Scene...");
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.UpdateUIState(false);
+        }
 
         if (matchmakingPanel != null)
         {
@@ -303,32 +311,71 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
             matchmakingPanel.blocksRaycasts = false;
         }
 
-        if (NetworkManager.Instance != null && NetworkManager.Instance.gameCanvasGroup != null)
-        {
-            CanvasGroup gameCG = NetworkManager.Instance.gameCanvasGroup;
-            gameCG.DOFade(1, 0.8f).SetUpdate(true);
-            gameCG.interactable = true;
-            gameCG.blocksRaycasts = true;
-        }
-
         yield return new WaitForSeconds(0.8f);
 
         if (matchmakingPanel != null) matchmakingPanel.gameObject.SetActive(false);
 
         // --- STAGE 4: GAME SCENE FULLY VISIBLE ---
-        Debug.Log("🚀 Stage 4: Game Scene Fully Visible.");
         yield return new WaitForSeconds(0.5f); 
 
         // --- STAGE 5: START DEAL ANIMATION ---
         if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
         {
-            Debug.Log("🃏 Stage 5: Master Client starting dealing sequence.");
             DeckManager.Instance.StartFullDealingSequence();
         }
+        isMatchFoundRoutineRunning = false;
     }
 
     public void OnClick_Cancel()
     {
         StopSearching(false);
+    }
+
+    void OnApplicationPause(bool paused)
+    {
+        if (!paused) RefreshUIAfterResume();
+    }
+
+    void OnApplicationFocus(bool hasFocus)
+    {
+        if (hasFocus) RefreshUIAfterResume();
+    }
+
+    public void RefreshUIAfterResume()
+    {
+        if (!isSearching || matchmakingPanel == null) return;
+
+        matchmakingPanel.DOKill();
+        if (spinner != null) spinner.DOKill();
+        if (statusText != null) statusText.DOKill();
+
+        matchmakingPanel.gameObject.SetActive(true);
+        matchmakingPanel.alpha = 1f;
+        matchmakingPanel.interactable = true;
+        matchmakingPanel.blocksRaycasts = true;
+        matchmakingPanel.transform.localScale = Vector3.one;
+
+        if (spinner != null)
+        {
+            spinner.localScale = Vector3.one;
+            spinnerTween = spinner.DORotate(new Vector3(0, 0, -360), 1.5f, RotateMode.FastBeyond360)
+                .SetLoops(-1, LoopType.Incremental)
+                .SetEase(Ease.Linear)
+                .SetUpdate(true);
+        }
+
+        if (titleText != null && string.IsNullOrEmpty(titleText.text))
+            titleText.text = "Finding Players...";
+        if (statusText != null)
+        {
+            statusText.alpha = 1f;
+            if (string.IsNullOrEmpty(statusText.text))
+                statusText.text = "Searching for players...";
+        }
+
+        if (isSearching && statusCoroutine == null)
+            statusCoroutine = StartCoroutine(RotateStatusMessages());
+        if (isSearching && spawnCoroutine == null)
+            spawnCoroutine = StartCoroutine(SpawnProfilesRoutine());
     }
 }

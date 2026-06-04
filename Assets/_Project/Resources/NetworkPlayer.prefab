@@ -49,7 +49,6 @@ MonoBehaviour:
   cardUIPrefab: {fileID: 5009013964310142421, guid: 8ce80d3c886cdb246b0c70ba486bde15, type: 3}
   handAreaTransform: {fileID: 0}
   dummyCardPrefab: {fileID: 808558303427848131, guid: 0432f8bcc26792d42a69d22f7662cbd5, type: 3}
-  currentTurnActor: 1
 --- !u!114 &7568525629491968148
 MonoBehaviour:
   m_ObjectHideFlags: 0

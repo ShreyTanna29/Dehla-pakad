@@ -67,19 +67,20 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
     public override void OnPlayerEnteredRoom(Player newPlayer) { UpdateAllNames(); }
     public override void OnPlayerLeftRoom(Player otherPlayer) { UpdateAllNames(); }
 
+    private float lastUpdateStatsTime = 0f;
+
     void Update()
     {
-        if (PlayerHand.LocalInstance != null && txtTopName != null && txtTopName.text == "...")
+        if (Time.time - lastUpdateStatsTime > 1.0f)
         {
+            lastUpdateStatsTime = Time.time;
             UpdateAllNames();
         }
     }
 
     public void UpdateAllNames()
     {
-        if (txtLeftName) txtLeftName.text = "...";
-        if (txtTopName) txtTopName.text = "...";
-        if (txtRightName) txtRightName.text = "...";
+        if (txtLeftName == null || txtTopName == null || txtRightName == null) return;
 
         if (txtMyName && PhotonNetwork.LocalPlayer != null)
         {
@@ -93,7 +94,16 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
         {
             if (p.IsLocal) continue;
             int seatIndex = GetSeatIndex(p.ActorNumber);
-            SetSeatText(seatIndex, p.NickName);
+            
+            string displayName = p.NickName;
+            if (p.IsInactive)
+            {
+                if (DeckManager.Instance != null && DeckManager.Instance.IsActorBotControlled(p.ActorNumber))
+                    continue;
+                displayName += "\n(Disconnected)";
+            }
+            
+            SetSeatText(seatIndex, displayName);
             AssignAvatarBySeat(seatIndex, p.ActorNumber);
         }
 

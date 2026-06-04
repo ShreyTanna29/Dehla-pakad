@@ -15,6 +15,7 @@ public class TurnManager : MonoBehaviourPunCallbacks
     public int maxTurnTime = 15; 
     private int currentTime;
     private bool isTimerRunning = false;
+    private bool isPaused = false;
     private int currentActorTurn = -1;
 
     [Header("UI Reference")]
@@ -27,13 +28,31 @@ public class TurnManager : MonoBehaviourPunCallbacks
         else Destroy(gameObject);
     }
 
+    public void SetPaused(bool paused)
+    {
+        isPaused = paused;
+        if (paused)
+        {
+            if (timerText != null) timerText.text = "Waiting for Player...";
+        }
+        else
+        {
+            UpdateTimerUI();
+
+            // 🚀 RESUME BOT THINKING: If the game was paused waiting for a human and now it's a bot's turn (or player timeout)
+            if (PhotonNetwork.IsMasterClient && PlayerHand.LocalInstance != null && currentActorTurn != -1)
+            {
+                 PlayerHand.LocalInstance.TriggerBotTurnIfApplicable(currentActorTurn);
+            }
+        }
+    }
+
     public void StartTurn(int actorNumber)
     {
         currentActorTurn = actorNumber;
         currentTime = maxTurnTime; // Reset local time
+        isPaused = false;
         
-        Debug.Log($"[TurnManager] Starting turn for Actor {actorNumber}");
-
         if (PhotonNetwork.IsMasterClient)
         {
             photonView.RPC("RPC_SyncTimerTurn", RpcTarget.All, currentActorTurn, maxTurnTime);
@@ -45,6 +64,7 @@ public class TurnManager : MonoBehaviourPunCallbacks
     public void StopTimer()
     {
         isTimerRunning = false;
+        isPaused = false;
         StopAllCoroutines();
         if (timerText != null) timerText.text = "Wait...";
         if (timerFillBar != null) timerFillBar.fillAmount = 0;
@@ -65,15 +85,36 @@ public class TurnManager : MonoBehaviourPunCallbacks
     {
         while (currentTime > 0)
         {
-            yield return new WaitForSeconds(1f);
-            currentTime--;
-            photonView.RPC("RPC_UpdateTime", RpcTarget.All, currentTime);
+            if (!isPaused)
+            {
+                yield return new WaitForSeconds(1f);
+                if (!isPaused) // Double check after wait
+                {
+                    currentTime--;
+                    photonView.RPC("RPC_UpdateTime", RpcTarget.All, currentTime);
+                }
+            }
+            else
+            {
+                yield return new WaitForSeconds(0.5f);
+            }
         }
 
         if (currentTime <= 0)
         {
             photonView.RPC("RPC_TimeUpAutoPlay", RpcTarget.All, currentActorTurn);
         }
+    }
+
+    [PunRPC]
+    public void RPC_SyncTimerState(int actorNumber, int timeRemaining)
+    {
+        currentActorTurn = actorNumber;
+        currentTime = timeRemaining;
+        isTimerRunning = true;
+        UpdateTimerUI();
+        
+        Debug.Log($"[TurnManager] Timer State Restored: Actor {actorNumber}, Time = {timeRemaining}s");
     }
 
     [PunRPC]
@@ -138,7 +179,7 @@ public class TurnManager : MonoBehaviourPunCallbacks
     void AutoPlayValidCard()
     {
         PlayerHand myHand = PlayerHand.LocalInstance;
-        if (myHand == null || myHand.myCards == null || myHand.myCards.Count == 0) return;
+        if (myHand == null || myHand.myCards == null || myHand.myCards.Count == 0 || CardInteract.isPlayingCard) return;
 
         CardData cardToPlay = myHand.myCards[0]; 
 
@@ -167,7 +208,9 @@ public class TurnManager : MonoBehaviourPunCallbacks
 
         if (cardUIObj != null)
         {
+            Debug.Log("[TurnManager] Auto-playing card due to timeout.");
             CardInteract.canPlayCards = true; 
+            CardInteract.isPlayingCard = true; // Set lock
             myHand.OnLocalPlayerPlayedCard(cardToPlay, cardUIObj);
         }
     }
