@@ -165,7 +165,6 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("TC", out object tcObj))
         {
-            Debug.Log("[Sync] Restoring Table Cards from Room Properties...");
             int[] interleaved = (int[])tcObj;
             
             Transform tableCenter = GetTableCenterTransform();
@@ -253,24 +252,16 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         if (mode == GameModeType.Cut1Trump)
         {
             if (cut1TrumpAlreadySet) return;
-
             cut1TrumpAlreadySet = true;
-
-            Debug.Log($"[CUT1TRUMP] First cut by actor {actorNumber}. New trump={playedCard.cardSuit}");
-
             if (PhotonNetwork.IsMasterClient && TrumpManager.Instance != null)
                 TrumpManager.Instance.SetTrumpSuit(playedCard.cardSuit, true, true);
-
             PlayerHand.currentTrumpSuit = playedCard.cardSuit;
             PlayerHand.isTrumpRevealed = true;
         }
         else if (mode == GameModeType.Cut2Trump)
         {
-            Debug.Log($"[CUT2TRUMP] Cut by actor {actorNumber}. Led={ledSuit}, Played={playedCard.cardSuit}, New trump={playedCard.cardSuit}");
-
             if (PhotonNetwork.IsMasterClient && TrumpManager.Instance != null)
                 TrumpManager.Instance.SetTrumpSuit(playedCard.cardSuit, true, true);
-
             PlayerHand.currentTrumpSuit = playedCard.cardSuit;
             PlayerHand.isTrumpRevealed = true;
         }
@@ -533,8 +524,6 @@ ClearAllTableCardClones();
 
         for (int i = 0; i < DeckManager.MaxTableSeats; i++)
             tableTurnOrder.Add(seats[(myIndex + i) % DeckManager.MaxTableSeats]);
-
-        Debug.Log($"[Bot] Turn order built: {string.Join(" → ", tableTurnOrder)}");
     }
 
     bool IsDealingReadyForPlay()
@@ -546,76 +535,6 @@ ClearAllTableCardClones();
 
     static bool IsBotActor(int actorNum) =>
         DeckManager.botActorNumbers != null && DeckManager.botActorNumbers.Contains(actorNum);
-
-    void LogBotPlayState(string tag, int actorNum)
-    {
-        int handCount = 0;
-        if (DeckManager.Instance != null && DeckManager.Instance.botHands.TryGetValue(actorNum, out List<CardData> h))
-            handCount = h != null ? h.Count : 0;
-
-        Debug.Log($"[Bot] {tag} | CurrentTurn={GetAuthoritativeTurnActor()} actor={actorNum} HandCount={handCount}");
-    }
-
-    static void LogBotExit(string reason) => Debug.LogWarning($"[Bot] ExitReason: {reason}");
-
-    string GetCanBotPlayNowReason(int botActorNum)
-    {
-        if (!PhotonNetwork.IsMasterClient) return "not master";
-        if (GameFlowState.Current == GameFlowPhase.GameFinished) return "game finished";
-        if (GameFlowState.Current != GameFlowPhase.InGame && GameFlowState.Current != GameFlowPhase.InRoom)
-            return "wrong game state";
-        if (DeckManager.Instance == null) return "no DeckManager";
-        if (!DeckManager.botActorNumbers.Contains(botActorNum)) return "not in botActorNumbers";
-        if (!DeckManager.Instance.IsActiveSeatActor(botActorNum)) return "not active seat";
-        if (!IsDealingReadyForPlay()) return "dealing not complete";
-        if (IsTrickLocked || _determineTrickRoutineRunning) return "trick locked/resolving";
-        if (currentTrick == null || currentTrick.Count >= 4) return "trick full";
-        if (botActorNum != GetAuthoritativeTurnActor()) return $"not turn (want {botActorNum}, turn={GetAuthoritativeTurnActor()})";
-        if (ActorInCurrentTrick(botActorNum)) return "already in trick";
-        return "ok";
-    }
-
-    string GetRejectCardPlayReason(int senderActorNum, int suitIndex, int rankIndex)
-    {
-        if (GameFlowState.Current == GameFlowPhase.GameFinished) return "game finished";
-        if (GameFlowState.Current != GameFlowPhase.InGame && GameFlowState.Current != GameFlowPhase.InRoom)
-            return "wrong game state";
-        if (!IsDealingReadyForPlay()) return "dealing active";
-        if (IsTrickLocked || _determineTrickRoutineRunning) return "trick resolving/cleaning";
-        if (currentTrick == null || currentTrick.Count >= 4) return "trick full";
-        if (!IsActorsTurnToPlay(senderActorNum)) return "not current turn";
-        if (ActorInCurrentTrick(senderActorNum)) return "duplicate in trick";
-        if (ShouldValidateHandForPlay(senderActorNum) &&
-            !SenderHasCardInHand(senderActorNum, (CardSuit)suitIndex, (CardRank)rankIndex))
-            return IsBotActor(senderActorNum) ? "card not in bot hand" : "card not in hand";
-        return null;
-    }
-
-    static bool ShouldValidateHandForPlay(int actor) =>
-        !IsBotActor(actor) || PhotonNetwork.IsMasterClient;
-
-    bool SenderHasCardInHand(int actor, CardSuit suit, CardRank rank)
-    {
-        if (IsBotActor(actor))
-        {
-            if (!PhotonNetwork.IsMasterClient) return true;
-            if (DeckManager.Instance == null) return false;
-            if (!DeckManager.Instance.botHands.TryGetValue(actor, out List<CardData> botHand) || botHand == null)
-                return false;
-            return botHand.Any(c => c.cardSuit == suit && c.cardRank == rank);
-        }
-
-        if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
-        {
-            if (DeckManager.Instance.TryGetHumanHandOnMaster(actor, out List<CardData> cached))
-                return cached.Any(c => c.cardSuit == suit && c.cardRank == rank);
-        }
-
-        if (PhotonNetwork.LocalPlayer.ActorNumber == actor)
-            return myCards.Any(c => c.cardSuit == suit && c.cardRank == rank);
-
-        return false;
-    }
 
     bool IsExpectedTrickPlayer(int actor, int playIndexInTrick)
     {
@@ -642,72 +561,28 @@ ClearAllTableCardClones();
     public int GetNextTurnActor(int currentActor)
     {
         if (tableTurnOrder.Count < 4) BuildTableTurnOrder();
-        if (tableTurnOrder.Count == 0)
-        {
-            Debug.LogWarning($"[Bot] GetNextTurnActor fallback — empty turn order, staying on {currentActor}");
-            return currentActor;
-        }
-        
+        if (tableTurnOrder.Count == 0) return currentActor;
+
         int idx = tableTurnOrder.IndexOf(currentActor);
         if (idx < 0)
         {
             BuildTableTurnOrder();
             idx = tableTurnOrder.IndexOf(currentActor);
-            if (idx < 0)
-            {
-                Debug.LogWarning($"[Bot] Actor {currentActor} not in turn order — using seat 0 ({tableTurnOrder[0]}).");
-                return tableTurnOrder[0];
-            }
+            if (idx < 0) return tableTurnOrder[0];
         }
 
         int nextIdx = (idx - 1 + tableTurnOrder.Count) % tableTurnOrder.Count;
         return tableTurnOrder[nextIdx];
     }
 
-    private string GetSeatName(int seatIndex)
-    {
-        switch (seatIndex)
-        {
-            case 0: return "Bottom";
-            case 1: return "Left";
-            case 2: return "Top";
-            case 3: return "Right";
-            default: return "Unknown";
-        }
-    }
-
-    static bool TrickContainsActor(List<TrickCard> trick, int actorNum)
-    {
-        if (trick == null) return false;
-        foreach (TrickCard tc in trick)
-        {
-            if (tc.actorNumber == actorNum)
-                return true;
-        }
-        return false;
-    }
-
-    bool CanBotPlayNow(int botActorNum) => GetCanBotPlayNowReason(botActorNum) == "ok";
-
     bool CanAcceptCardPlay(int senderActorNum, int suitIndex = -1, int rankIndex = -1)
     {
-        string reject = suitIndex >= 0 ? GetRejectCardPlayReason(senderActorNum, suitIndex, rankIndex) : GetRejectCardPlayReason(senderActorNum, 0, 0);
-        if (suitIndex < 0)
-        {
-            if (GameFlowState.Current == GameFlowPhase.GameFinished) reject = "game finished";
-            else if (!IsDealingReadyForPlay()) reject = "dealing active";
-            else if (IsTrickLocked || _determineTrickRoutineRunning) reject = "trick resolving/cleaning";
-            else if (currentTrick == null || currentTrick.Count >= 4) reject = "trick full";
-            else if (!IsActorsTurnToPlay(senderActorNum)) reject = "not current turn";
-            else if (ActorInCurrentTrick(senderActorNum)) reject = "duplicate in trick";
-            else reject = null;
-        }
-
-        if (reject != null)
-        {
-            Debug.LogWarning($"[RPC] Card play rejected: {reject} | actor={senderActorNum}");
-            return false;
-        }
+        if (GameFlowState.Current == GameFlowPhase.GameFinished) return false;
+        if (!IsDealingReadyForPlay()) return false;
+        if (IsTrickLocked || _determineTrickRoutineRunning) return false;
+        if (currentTrick == null || currentTrick.Count >= 4) return false;
+        if (!IsActorsTurnToPlay(senderActorNum)) return false;
+        if (ActorInCurrentTrick(senderActorNum)) return false;
         return true;
     }
 
@@ -750,11 +625,9 @@ ClearAllTableCardClones();
         if (GameFlowState.Current != GameFlowPhase.InGame && GameFlowState.Current != GameFlowPhase.InRoom) return;
 
         int trickCount = currentTrick?.Count ?? 0;
-        if (!GameStabilityAudit.ValidateTrickCount(trickCount, "ProcessTurn")) return;
 
         if (_lastProcessTurnActor == actorNumber && _lastProcessTurnTrickCount == trickCount && trickCount < 4)
         {
-            Debug.LogWarning($"[Turn] Duplicate ProcessTurn ignored — actor={actorNumber} trickCount={trickCount}");
             if (PhotonNetwork.IsMasterClient && IsBotActor(actorNumber) && !ActorInCurrentTrick(actorNumber))
                 TriggerBotTurnIfApplicable(actorNumber);
             return;
@@ -766,8 +639,6 @@ ClearAllTableCardClones();
         _lastHandledTurnActor = actorNumber;
 
         if (PhotonNetwork.IsMasterClient) currentTurnActor = actorNumber;
-
-        Debug.Log($"[TURN] Current actor={currentTurnActor}, IsBot={DeckManager.Instance.IsActorBotControlled(currentTurnActor)}");
 
         if (TurnManager.Instance != null && PhotonNetwork.IsMasterClient)
             TurnManager.Instance.StartTurn(actorNumber);
@@ -788,15 +659,7 @@ ClearAllTableCardClones();
         if (!IsBotActor(actorNumber)) return;
         if (IsTrickLocked || _determineTrickRoutineRunning) return;
 
-        int trickCount = currentTrick?.Count ?? 0;
-        Debug.Log($"[BOT TRIGGER] actor={actorNumber}, currentTurn={currentTurnActor}, trickCount={trickCount}");
-
-        if (botActorsThinking.Contains(actorNumber) || ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber))
-        {
-            Debug.Log($"[BOT BLOCK] duplicate coroutine or already played actor={actorNumber}");
-            return;
-        }
-
+        if (botActorsThinking.Contains(actorNumber) || ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber)) return;
         if (actorNumber != GetAuthoritativeTurnActor()) return;
         if (DeckManager.Instance == null || !DeckManager.Instance.IsActiveSeatActor(actorNumber)) return;
         if (!IsDealingReadyForPlay() || GameFlowState.Current == GameFlowPhase.GameFinished) return;
@@ -807,71 +670,32 @@ ClearAllTableCardClones();
 
     void PlayBotCard(int actorNumber, CardData card)
     {
-        if (ActorInCurrentTrick(actorNumber))
-        {
-            Debug.LogWarning($"[DUPLICATE RPC IGNORED] Actor {actorNumber} already played this trick. Ignoring duplicate RPC only.");
-            return;
-        }
-
-        if (photonView == null)
-        {
-            LogBotExit("photonView is null");
-            return;
-        }
+        if (ActorInCurrentTrick(actorNumber)) return;
+        if (photonView == null) return;
         photonView.RPC("RPC_PlayCard", RpcTarget.All, actorNumber, (int)card.cardSuit, (int)card.cardRank);
     }
 
     IEnumerator BotPlayRoutine(int actorNumber)
     {
-        Debug.Log($"BOT THINK START actor={actorNumber}");
-
         yield return new WaitForSeconds(0.8f);
 
         bool cardActuallyPlayed = false;
         try
         {
-            if (actorNumber != GetAuthoritativeTurnActor())
-            {
-                LogBotExit($"turn changed (want {actorNumber}, turn={GetAuthoritativeTurnActor()})");
+            if (actorNumber != GetAuthoritativeTurnActor() || IsTrickLocked || ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber))
                 yield break;
-            }
 
-            if (IsTrickLocked)
-            {
-                LogBotExit("trick locked");
-                yield break;
-            }
+            if (DehlaPakadAI.Instance == null || DeckManager.Instance == null) yield break;
 
-            if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber))
-            {
-                LogBotExit("already played this trick");
-                yield break;
-            }
-
-            if (DehlaPakadAI.Instance == null || DeckManager.Instance == null)
-            {
-                LogBotExit(DehlaPakadAI.Instance == null ? "DehlaPakadAI missing" : "DeckManager missing");
-                yield break;
-            }
-
-            if (!DeckManager.Instance.botHands.TryGetValue(actorNumber, out List<CardData> hand) || hand == null || hand.Count == 0)
-            {
-                LogBotExit("empty bot hand");
-                yield break;
-            }
+            if (!DeckManager.Instance.botHands.TryGetValue(actorNumber, out List<CardData> hand) || hand == null || hand.Count == 0) yield break;
 
             CardData botCard = DehlaPakadAI.Instance.ThinkAndSelectCard(hand, currentTrick, currentTrumpSuit, isTrumpRevealed, actorNumber);
-            if (!SenderHasCardInHand(actorNumber, botCard.cardSuit, botCard.cardRank))
-                botCard = hand[0];
-
-            Debug.Log($"[BOT TRIGGER] Final Check passed for actor={actorNumber}, playing card.");
             PlayBotCard(actorNumber, botCard);
             cardActuallyPlayed = true;
         }
         finally
         {
             botActorsThinking.Remove(actorNumber);
-            Debug.Log($"BOT THINK END actor={actorNumber}");
 
             if (!cardActuallyPlayed && PhotonNetwork.IsMasterClient && IsBotActor(actorNumber)
                 && actorNumber == GetAuthoritativeTurnActor()
@@ -879,10 +703,7 @@ ClearAllTableCardClones();
             {
                 long retryKey = BotRetryKey(actorNumber, currentTrick?.Count ?? 0);
                 if (botRetryKeys.Add(retryKey))
-                {
-                    LogBotExit("turn incomplete after think — re-triggering");
                     TriggerBotTurnIfApplicable(actorNumber);
-                }
             }
         }
     }
@@ -890,7 +711,6 @@ ClearAllTableCardClones();
     void ApplyNotMyTurnVisualState()
     {
         if (handAreaTransform == null) return;
-        Debug.Log("Applied NotMyTurn Visual State");
         CardInteract.ClearGlobalSelection();
         CardInteract[] interacts = handAreaTransform.GetComponentsInChildren<CardInteract>();
         foreach (CardInteract ci in interacts)
@@ -903,7 +723,6 @@ ClearAllTableCardClones();
 
     void EndTurnCardVisuals()
     {
-        Debug.Log("Exited My Turn");
         CardInteract.canPlayCards = false;
         ApplyNotMyTurnVisualState();
     }
@@ -911,12 +730,9 @@ ClearAllTableCardClones();
     void HighlightPlayableCards()
     {
         if (handAreaTransform == null) return;
-        Debug.Log("Applied Playable Highlights");
 
         bool isLeading = currentTrick == null || currentTrick.Count == 0;
         List<CardData> validPlayableCards = isLeading ? new List<CardData>(myCards) : GetValidCards(myCards, currentTrick);
-        var playableInHand = new List<CardData>();
-        var blockedInHand = new List<CardData>();
         var usedValidMatches = new Dictionary<(CardSuit, CardRank), int>();
         CardInteract[] interacts = handAreaTransform.GetComponentsInChildren<CardInteract>();
 
@@ -928,70 +744,22 @@ ClearAllTableCardClones();
 
             bool isValid = isLeading || IsCardPlayableForUi(d.myCardData, validPlayableCards, usedValidMatches);
             ci.isValidToPlay = isValid;
-            if (isValid) playableInHand.Add(d.myCardData);
-            else blockedInHand.Add(d.myCardData);
 
-            if (isValid)
-                ci.ApplyPlayableVisual(true);
-            else
-                ci.ApplyBlockedOnTurnVisual();
+            if (isValid) ci.ApplyPlayableVisual(true);
+            else ci.ApplyBlockedOnTurnVisual();
         }
-
-        if (!isLeading && currentTrick != null && currentTrick.Count > 0)
-            LogCardRulesDebug(currentTrick, validPlayableCards, playableInHand, blockedInHand);
     }
 
     public void ApplyRules(bool isMyTurn)
     {
         if (handAreaTransform == null) return;
-        if (IsTrickLocked)
+        if (IsTrickLocked || !isMyTurn)
         {
             EndTurnCardVisuals();
             return;
         }
-        if (!isMyTurn)
-        {
-            EndTurnCardVisuals();
-            return;
-        }
-
-        Debug.Log("Entered My Turn");
         CardInteract.ClearGlobalSelection();
         HighlightPlayableCards();
-    }
-
-    static void LogCardRulesDebug(List<TrickCard> trick, List<CardData> validFromRules, List<CardData> playableUi, List<CardData> blockedUi)
-    {
-        CardSuit lead = trick[0].suit;
-        string winning = GetCurrentWinningCardLabel(trick);
-        string playable = playableUi.Count > 0
-            ? string.Join(", ", playableUi.Select(GetCardLabel))
-            : string.Join(", ", validFromRules.Select(GetCardLabel));
-        string blocked = blockedUi.Count > 0
-            ? string.Join(", ", blockedUi.Select(GetCardLabel))
-            : "(none)";
-
-        Debug.Log(
-            $"[CardRules] Lead Suit: {lead}\n" +
-            $"[CardRules] Current Winning Card: {winning}\n" +
-            $"[CardRules] Playable Cards: {playable}\n" +
-            $"[CardRules] Blocked Cards: {blocked}");
-    }
-
-    static string GetCurrentWinningCardLabel(List<TrickCard> trick)
-    {
-        if (trick == null || trick.Count == 0) return "(none)";
-        TrickCard w = trick[0];
-        CardSuit led = trick[0].suit;
-        for (int i = 1; i < trick.Count; i++)
-        {
-            bool challengerTrump = trick[i].suit == currentTrumpSuit;
-            bool winnerTrump = w.suit == currentTrumpSuit;
-            if (challengerTrump && !winnerTrump) w = trick[i];
-            else if (challengerTrump && winnerTrump && trick[i].rankValue > w.rankValue) w = trick[i];
-            else if (!challengerTrump && !winnerTrump && trick[i].suit == led && trick[i].rankValue > w.rankValue) w = trick[i];
-        }
-        return $"{(CardRank)w.rankValue} of {w.suit}";
     }
 
     /// <summary>
@@ -1043,45 +811,11 @@ ClearAllTableCardClones();
         return new List<CardData>(hand);
     }
 
-    static int GetHighestLedSuitRankInTrick(List<TrickCard> trick, CardSuit ledSuit)
-    {
-        int highest = -1;
-        foreach (TrickCard tc in trick)
-        {
-            if (tc.suit == ledSuit && tc.rankValue > highest)
-                highest = tc.rankValue;
-        }
-        return highest;
-    }
-
-    static string GetCardLabel(CardData c) => $"{c.cardRank} of {c.cardSuit}";
-
-    static string ExplainInvalidCard(CardData card, List<CardData> validList, List<TrickCard> trick, List<CardData> fullHand)
-    {
-        if (trick == null || trick.Count == 0) return "not your turn or unknown";
-
-        CardSuit ledSuit = trick[0].suit;
-        bool hasLedSuit = fullHand != null && fullHand.Any(c => c.cardSuit == ledSuit);
-
-        if (hasLedSuit && card.cardSuit != ledSuit)
-            return $"must follow {ledSuit}; {GetCardLabel(card)} is wrong suit";
-
-        if (card.cardSuit == ledSuit)
-        {
-            int highLed = GetHighestLedSuitRankInTrick(trick, ledSuit);
-            if ((int)card.cardRank <= highLed && validList.Any(v => (int)v.cardRank > highLed))
-                return $"must beat highest {ledSuit} on table (rank {highLed}); lower {ledSuit} cards blocked";
-        }
-
-        return "not a legal play for current trick";
-    }
-
     public void OnLocalPlayerPlayedCard(CardData cardData, GameObject cardObj)
     {
         int localActor = PhotonNetwork.LocalPlayer.ActorNumber;
         if (currentTrick != null && currentTrick.Any(c => c.actorNumber == localActor))
         {
-            Debug.LogWarning("[LOCAL PLAY BLOCKED] Local actor already has card in current trick.");
             CardInteract.isPlayingCard = false;
             return;
         }
@@ -1094,33 +828,27 @@ ClearAllTableCardClones();
         CardInteract.isPlayingCard = true;
         EndTurnCardVisuals();
 
-        // Store the exact clicked card position for the subsequent RPC animation.
-        // (We destroy the original cardObj immediately, so we must cache its transform position now.)
         _hasPendingLocalPlayStart = cardObj != null;
-        if (cardObj != null)
-            _pendingLocalPlayStartWorldPos = cardObj.transform.position;
+        if (cardObj != null) _pendingLocalPlayStartWorldPos = cardObj.transform.position;
         _pendingLocalPlaySuitIndex = (int)cardData.cardSuit;
         _pendingLocalPlayRankIndex = (int)cardData.cardRank;
 
         Destroy(cardObj);
         RemoveOneCardFromHand(myCards, cardData.cardSuit, cardData.cardRank);
-        RefreshHandUI(animate: false); // Ensure spacing is updated immediately
+        RefreshHandUI(animate: false);
         if (photonView != null) photonView.RPC("RPC_PlayCard", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber, (int)cardData.cardSuit, (int)cardData.cardRank);
     }
 
     [PunRPC]
-    public void RPC_PlayCard(int senderActorNum, int suitIndex, int rankIndex)
+    public void RPC_PlayCard(int senderActorNum, int suitIndex, int rankIndex, PhotonMessageInfo info)
     {
         if (LocalInstance == null) return;
-        if (LocalInstance != this) { LocalInstance.RPC_PlayCard(senderActorNum, suitIndex, rankIndex); return; }
+        if (LocalInstance != this) { LocalInstance.RPC_PlayCard(senderActorNum, suitIndex, rankIndex, info); return; }
 
-        int trickBefore = currentTrick?.Count ?? 0;
-        CardData playedCardPreview = new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex };
-        Debug.Log($"[RPC_PlayCard] actor={senderActorNum}, card={playedCardPreview.cardRank} of {playedCardPreview.cardSuit}, trickCount={trickBefore}");
-        if (currentTrick != null)
+        if (DeckManager.Instance != null && DeckManager.Instance.IsActorBotControlled(senderActorNum))
         {
-            foreach (var c in currentTrick)
-                Debug.Log($"[CurrentTrick] actor={c.actorNumber}, card={c.rankValue} of {c.suit}");
+            if (info.Sender != null && !info.Sender.IsMasterClient)
+                return;
         }
 
         bool actorAlreadyPlayed = currentTrick != null && currentTrick.Any(c => c.actorNumber == senderActorNum);
@@ -1128,7 +856,6 @@ ClearAllTableCardClones();
         {
             if (PhotonNetwork.LocalPlayer != null && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber)
                 _hasPendingLocalPlayStart = false;
-            Debug.LogWarning($"[DUPLICATE RPC IGNORED] Actor {senderActorNum} already played this trick. Ignoring duplicate RPC only.");
             return;
         }
 
@@ -1140,10 +867,6 @@ ClearAllTableCardClones();
         }
 
         CardData playedCard = new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex };
-        Debug.Log($"[CARD ACCEPTED] actor={senderActorNum}, card={playedCard.cardRank} of {playedCard.cardSuit}");
-
-        if (IsBotActor(senderActorNum))
-            Debug.Log($"[Bot] PlayedCard: {playedCard.cardRank} of {playedCard.cardSuit} actor={senderActorNum} trick={trickBefore + 1}");
 
         LockTrickPlayInput();
 
@@ -1159,12 +882,7 @@ ClearAllTableCardClones();
         GameObject cardObj = Object.Instantiate(cardUIPrefab, GetSeatSpawnPosition(seatIndex), Quaternion.identity, center);
         cardObj.GetComponent<CardDisplay>()?.SetCardData(playedCard);
 
-        // If this RPC corresponds to the local human click we just made, start the visual from that exact card position.
-        if (PhotonNetwork.LocalPlayer != null
-            && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber
-            && _hasPendingLocalPlayStart
-            && suitIndex == _pendingLocalPlaySuitIndex
-            && rankIndex == _pendingLocalPlayRankIndex)
+        if (PhotonNetwork.LocalPlayer != null && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber && _hasPendingLocalPlayStart && suitIndex == _pendingLocalPlaySuitIndex && rankIndex == _pendingLocalPlayRankIndex)
         {
             cardObj.transform.position = _pendingLocalPlayStartWorldPos;
             _hasPendingLocalPlayStart = false;
@@ -1176,11 +894,9 @@ ClearAllTableCardClones();
 
         currentTrick.Add(new TrickCard { actorNumber = senderActorNum, suit = playedCard.cardSuit, rankValue = rankIndex, cardObject = cardObj });
         actorsPlayedThisTrick.Add(senderActorNum);
-        Debug.Log($"TURN END: {senderActorNum}");
-        GameStabilityAudit.LogTrick("RPC_PlayCard", currentTrick.Count);
+
         if (currentTrick.Count > 4)
         {
-            Debug.LogError("[Trick] Fifth card blocked — removing last play.");
             currentTrick.RemoveAt(currentTrick.Count - 1);
             actorsPlayedThisTrick.Remove(senderActorNum);
             Destroy(cardObj);
@@ -1189,11 +905,10 @@ ClearAllTableCardClones();
         }
 
         if (PhotonNetwork.IsMasterClient) SyncCurrentTrickToRoom();
-
         HandleTrumpModeAfterCardAdded(playedCard, senderActorNum);
 
         if (currentTrick.Count == 4)
-{
+        {
             if (TurnManager.Instance != null) TurnManager.Instance.StopTimer();
             botActorsThinking.Clear();
             if (!_determineTrickRoutineRunning)
@@ -1202,15 +917,14 @@ ClearAllTableCardClones();
                 _determineTrickCoroutine = StartCoroutine(DetermineTrickWinnerRoutine());
             }
         }
-        else 
+        else
         {
             CardInteract.isPlayingCard = false;
             int nextActor = GetNextTurnActor(senderActorNum);
-            if (PhotonNetwork.IsMasterClient)
-                currentTurnActor = nextActor;
+            if (PhotonNetwork.IsMasterClient) currentTurnActor = nextActor;
             ProcessTurn(nextActor);
         }
-}
+    }
 
     IEnumerator DetermineTrickWinnerRoutine()
     {
@@ -1223,7 +937,6 @@ ClearAllTableCardClones();
         CardInteract.canPlayCards = false;
         CardInteract.isPlayingCard = true;
         LockTrickPlayInput();
-        Debug.Log($"[Trick] Resolving: count={currentTrick?.Count ?? 0}");
 
         if (currentTrick == null || currentTrick.Count < 4)
         {
@@ -1235,8 +948,6 @@ ClearAllTableCardClones();
         }
 
         List<TrickCard> trickSnapshot = new List<TrickCard>(currentTrick);
-        Debug.Log($"[Trick] Resolving trick with {trickSnapshot.Count} cards.");
-
         yield return new WaitForSeconds(1.5f);
 
         if (trickSnapshot.Count < 4)
@@ -1250,9 +961,6 @@ ClearAllTableCardClones();
 
         TrickCard winnerCard = TaashRules.DetermineTrickWinner(trickSnapshot, currentTrumpSuit);
         int tricksToWin = TaashRules.TricksPerGame;
-        Debug.Log($"[Trick] Winner: actor {winnerCard.actorNumber} ({winnerCard.suit} {winnerCard.rankValue})");
-        Debug.Log($"[Trick] Count: {totalTricksPlayed + 1}");
-
         lastTrickWinnerActor = winnerCard.actorNumber;
         int winnerSeat = GetSeatIndex(winnerCard.actorNumber);
         if (ResultManager.Instance != null)
@@ -1481,26 +1189,14 @@ ClearAllTableCardClones();
         if (IsDealAnimationRunning || !isDealingComplete)
             return;
 
-        Debug.Log($"[ModeCheck] CurrentMode={GameSettings.Instance.currentMode}, Trump={PlayerHand.currentTrumpSuit}, Revealed={PlayerHand.isTrumpRevealed}");
-        Debug.Log($"[HandLayout] Cards={myCards.Count}, TwoTaash={TaashRules.IsTwoTaashMode}");
-
-        myCards = myCards
-            .OrderBy(c => SuitOrder(c.cardSuit))
-            .ThenBy(c => RankOrder(c.cardRank))
-            .ToList();
-
+        myCards = myCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
         HorizontalLayoutGroup hlg = handAreaTransform.GetComponent<HorizontalLayoutGroup>();
-if (hlg != null) hlg.enabled = false;
+        if (hlg != null) hlg.enabled = false;
 
         float handWidthPx = HandLayoutHelper.GetHandAreaWidth(handAreaTransform as RectTransform);
         float prefabWidth = HandLayoutHelper.GetPrefabCardWidth(cardUIPrefab);
         HandLayoutConfig layout = HandLayoutHelper.GetLayout(myCards.Count, handWidthPx, prefabWidth);
         float startX = HandLayoutHelper.ComputeStartX(layout, myCards.Count);
-        Debug.Log(
-            $"[PlayerHand.RefreshHandUI] Card Count: {myCards.Count}\n" +
-            $"[PlayerHand.RefreshHandUI] Spacing Used: {layout.spacing}\n" +
-            $"[PlayerHand.RefreshHandUI] Hand Width: {handWidthPx}\n" +
-            $"[PlayerHand.RefreshHandUI] HorizontalLayoutGroup enabled: {(hlg != null && hlg.enabled)}");
 
         foreach (Transform child in handAreaTransform) { child.DOKill(); Object.Destroy(child.gameObject); }
 
@@ -1510,12 +1206,8 @@ if (hlg != null) hlg.enabled = false;
             newCardUI.GetComponent<CardDisplay>()?.SetCardData(myCards[i]);
             RectTransform rt = newCardUI.GetComponent<RectTransform>();
             float targetX = startX + i * (layout.prefabCardWidth + layout.spacing);
-            if (animate)
-                rt.anchoredPosition = new Vector2(targetX, -12f);
-            else
-                rt.anchoredPosition = new Vector2(targetX, 0f);
-
-            HandLayoutHelper.LogCardSizeIntegrity(cardUIPrefab, rt, $"RefreshHandUI card {i + 1}/{myCards.Count}");
+            if (animate) rt.anchoredPosition = new Vector2(targetX, -12f);
+            else rt.anchoredPosition = new Vector2(targetX, 0f);
         }
 
         if (animate && myCards.Count > 0)
@@ -1541,17 +1233,14 @@ if (hlg != null) hlg.enabled = false;
         for (int i = 0; i < suitIndices.Length; i++)
             myCards.Add(new CardData { cardSuit = (CardSuit)suitIndices[i], cardRank = (CardRank)rankIndices[i] });
 
-        int expected = TaashRules.CardsPerPlayer;
-        if (myCards.Count != expected)
-            Debug.LogError($"[Cards] AssignFullHandLocal — got {myCards.Count} cards, expected {expected}");
+        if (isDealingComplete)
+            RefreshHandUI(animate: false);
     }
 
     public void OnDealingComplete(int starterActor)
     {
-        if (isDealingComplete) return; 
+        if (isDealingComplete) return;
         if (LocalInstance != null && LocalInstance != this) { LocalInstance.OnDealingComplete(starterActor); return; }
-        
-        Debug.Log($"[PlayerHand] OnDealingComplete. Starter: {starterActor}");
 
         bool matchInProgress = false;
         if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object started))
@@ -1580,24 +1269,16 @@ if (hlg != null) hlg.enabled = false;
             ClearHandUI();
 
         _handRevealRunning = true;
-        Debug.Log("[Hand] Pop reveal started");
         yield return AnimateHandSpreadReveal();
         _handRevealRunning = false;
         isDealingComplete = true;
-        Debug.Log("[Hand] Pop reveal complete");
-        Debug.Log("[Deal] Finished");
 
         ShowOpponentFansWithAnimation();
-
         yield return new WaitForSeconds(turnDelay);
 
         GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
         BuildTableTurnOrder();
-        GameStabilityAudit.ValidateTrump("HandRevealComplete");
-        GameStabilityAudit.ValidateLocalHandCount("HandRevealComplete");
-        GameStabilityAudit.LogSnapshot("FirstTurn");
-        if (PhotonNetwork.IsMasterClient)
-            currentTurnActor = starterActor;
+        if (PhotonNetwork.IsMasterClient) currentTurnActor = starterActor;
         ProcessTurn(starterActor);
     }
 
@@ -1653,11 +1334,7 @@ if (hlg != null) hlg.enabled = false;
 
     public void ShowGameResultLocal()
     {
-        if (_resultPanelShown)
-        {
-            Debug.LogWarning("[Result] ShowGameResultLocal ignored — panel already shown.");
-            return;
-        }
+        if (_resultPanelShown) return;
         _resultPanelShown = true;
 
         botActorsThinking.Clear();
@@ -1665,16 +1342,8 @@ if (hlg != null) hlg.enabled = false;
         CardInteract.isPlayingCard = true;
         if (TurnManager.Instance != null) TurnManager.Instance.StopTimer();
 
-        Debug.Log("Game Finished");
-        Debug.Log("[Result] Showing panel");
         GameFlowState.SetPhase(GameFlowPhase.GameFinished, forceRecovery: true);
-        if (ResultManager.Instance != null)
-        {
-            ResultManager.Instance.ShowResult();
-            Debug.Log("[Result] Showing panel: opened");
-        }
-        else
-            Debug.LogError("[Result] ResultManager.Instance is null — panel cannot open.");
+        if (ResultManager.Instance != null) ResultManager.Instance.ShowResult();
     }
 
     static Vector2 GetAnchorInCanvas(RectTransform canvasRect, Vector3 worldPos)

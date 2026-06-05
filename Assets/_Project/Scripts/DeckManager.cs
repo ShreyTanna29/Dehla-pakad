@@ -73,13 +73,6 @@ public class DeckManager : MonoBehaviourPunCallbacks
         humanHandsOnMaster.Clear();
     }
 
-    void Update()
-    {
-        // Instant bot replacement disabled — wait for PlayerTtl (30s) before bot takeover.
-        // if (PhotonNetwork.IsMasterClient && gameStarted)
-        //     EnsureInactivePlayersReplacedByBots();
-    }
-
     public bool IsActorBotControlled(int actorNumber) => botActorNumbers.Contains(actorNumber);
 
     public static int GetActiveHumanPlayerCount()
@@ -339,21 +332,6 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
     }
 
-    void EnsureInactivePlayersReplacedByBots()
-    {
-        if (!PhotonNetwork.InRoom || !gameStarted) return;
-
-        foreach (Player p in PhotonNetwork.PlayerList)
-        {
-            if (!p.IsInactive || botActorNumbers.Contains(p.ActorNumber))
-                continue;
-
-            EnsureHandCachedForActor(p.ActorNumber);
-            Debug.Log($"🤖 Inactive player {p.ActorNumber} — instant bot takeover.");
-            photonView.RPC("RPC_MarkPlayerAsBot", RpcTarget.All, p.ActorNumber);
-        }
-    }
-
     [PunRPC]
     void RPC_MarkPlayerAsBot(int actorNumber)
     {
@@ -399,22 +377,19 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     void EnsureHandCachedForActor(int actorNumber)
     {
-        if (humanHandsOnMaster.ContainsKey(actorNumber) && humanHandsOnMaster[actorNumber].Count > 0)
-            return;
+        if (humanHandsOnMaster.ContainsKey(actorNumber) && humanHandsOnMaster[actorNumber].Count > 0) return;
 
         if (botHands.TryGetValue(actorNumber, out List<CardData> botHand) && botHand.Count > 0)
-            return;
-
-        Player target = null;
-        foreach (Player p in PhotonNetwork.PlayerList)
         {
-            if (p.ActorNumber == actorNumber) { target = p; break; }
-        }
-
-        if (target != null && TryParseHandProperty(target, out List<CardData> handFromPlayer))
-        {
-            humanHandsOnMaster[actorNumber] = handFromPlayer;
-            return;
+            if (!IsActorBotControlled(actorNumber))
+            {
+                humanHandsOnMaster[actorNumber] = new List<CardData>(botHand);
+                botHands.Remove(actorNumber);
+            }
+            else
+            {
+                return;
+            }
         }
 
         if (PhotonNetwork.CurrentRoom != null &&
@@ -441,15 +416,6 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
         PhotonNetwork.CurrentRoom.SetCustomProperties(
             new ExitGames.Client.Photon.Hashtable { { "H" + actorNumber, interleaved } });
-    }
-
-    static bool TryParseHandProperty(Player player, out List<CardData> hand)
-    {
-        hand = null;
-        if (player == null || !player.CustomProperties.TryGetValue("Hand", out object handObj))
-            return false;
-        hand = ParseInterleavedHand((int[])handObj);
-        return hand != null && hand.Count > 0;
     }
 
     static List<CardData> ParseInterleavedHand(int[] interleaved)
@@ -527,95 +493,67 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
-        Debug.Log($"[DeckManager] OnJoinedRoom. InRoom: {PhotonNetwork.InRoom}, OfflineMode: {PhotonNetwork.OfflineMode}, Master: {PhotonNetwork.IsMasterClient}");
-        
         if (gameStarted)
         {
-            Debug.Log("[DeckManager] Rejoin Mode Active");
-            Debug.Log("[DeckManager] Skipping Match Initialization | Skipping Deal | Skipping Reset");
-
-            RestoreBotsFromRoom();
-            
-            if (PlayerProfileSync.Instance != null) PlayerProfileSync.Instance.UpdateAllNames();
-
-            // 🚀 STATE RESTORATION PASS
-            if (PlayerHand.LocalInstance != null)
-            {
-                Debug.Log("[Sync] Restoring Table Cards...");
-                PlayerHand.LocalInstance.RestoreTableCardsFromRoom();
-                
-                // Pull hand from properties if it was lost during reconnect
-                if (PlayerHand.LocalInstance.myCards.Count == 0)
-                {
-                    if (PhotonNetwork.LocalPlayer.CustomProperties.TryGetValue("Hand", out object handObj))
-                    {
-                        Debug.Log("[Sync] Restoring Hand from Player Properties.");
-                        int[] interleaved = (int[])handObj;
-                        int[] suits = new int[interleaved.Length / 2];
-                        int[] ranks = new int[interleaved.Length / 2];
-                        for (int i = 0; i < interleaved.Length / 2; i++)
-                        {
-                            suits[i] = interleaved[i * 2];
-                            ranks[i] = interleaved[i * 2 + 1];
-                        }
-                        PlayerHand.LocalInstance.AssignFullHandLocal(PhotonNetwork.LocalPlayer.ActorNumber, suits, ranks);
-                    }
-                }
-            }
-
-            if (TrumpManager.Instance != null)
-            {
-                Debug.Log("[Sync] Restoring Trump Suit...");
-                TrumpManager.Instance.RefreshFromRoomProperties(false);
-            }
-
-            // 🚀 LOCAL RESTORATION: Re-trigger Turn and UI
-            if (IsDealingComplete && PlayerHand.LocalInstance != null)
-            {
-                Debug.Log("[DeckManager] Restoring Dealing Complete State & Unfreezing Turn Logic.");
-                int currentActor = PlayerHand.LocalInstance.currentTurnActor;
-                
-                // Initialize UI and table order
-                PlayerHand.LocalInstance.OnDealingComplete(currentActor);
-                Debug.Log("[DeckManager] Turn Restored | Card Input Enabled");
-
-                // If Master Client, restart the timer routine
-                if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
-                {
-                    Debug.Log("[Sync] Master Client Rejoined: Restarting Turn Timer.");
-                    TurnManager.Instance.StartTurn(currentActor);
-                    Debug.Log("[DeckManager] Timer Restored");
-                }
-            }
-            
-            Debug.Log("[Sync] Rejoin State Sync Complete. Gameplay Resumed Successfully.");
-            Debug.Log("[DeckManager] Gameplay Resumed");
+            StartCoroutine(RejoinStateRoutine());
             return;
         }
 
         bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs) && (bool)gs;
-        if (!rejoining)
-        {
-            Debug.Log("[DeckManager] Fresh join — reset match state.");
-            ResetMatchState();
-        }
+        if (!rejoining) ResetMatchState();
+        if (TrumpManager.Instance != null) TrumpManager.ApplyTrumpForCurrentGameMode(false);
 
-        if (TrumpManager.Instance != null)
-            TrumpManager.ApplyTrumpForCurrentGameMode(false);
-
-        if (PhotonNetwork.IsMasterClient) 
+        if (PhotonNetwork.IsMasterClient)
         {
             if (matchmakingCoroutine != null) StopCoroutine(matchmakingCoroutine);
+            if (PhotonNetwork.OfflineMode) FillBotsAndStart();
+            else OnRoomJoinedCheckStart();
+        }
+    }
 
-            if (PhotonNetwork.OfflineMode)
+    IEnumerator RejoinStateRoutine()
+    {
+        RestoreBotsFromRoom();
+        if (PlayerProfileSync.Instance != null) PlayerProfileSync.Instance.UpdateAllNames();
+
+        float timeout = 2.0f;
+        while (PlayerHand.LocalInstance == null && timeout > 0)
+        {
+            yield return null;
+            timeout -= Time.deltaTime;
+        }
+
+        if (PlayerHand.LocalInstance != null)
+        {
+            PlayerHand.LocalInstance.RestoreTableCardsFromRoom();
+
+            if (PhotonNetwork.IsMasterClient)
             {
-                Debug.Log("🤖 [Bot Mode] Offline Mode Detected. Starting Match with 3 Bots Instantly.");
-                FillBotsAndStart();
+                EnsureHandCachedForActor(PhotonNetwork.LocalPlayer.ActorNumber);
+                if (humanHandsOnMaster.TryGetValue(PhotonNetwork.LocalPlayer.ActorNumber, out List<CardData> masterHand))
+                {
+                    int[] suits = new int[masterHand.Count];
+                    int[] ranks = new int[masterHand.Count];
+                    for (int i = 0; i < masterHand.Count; i++)
+                    {
+                        suits[i] = (int)masterHand[i].cardSuit;
+                        ranks[i] = (int)masterHand[i].cardRank;
+                    }
+                    PlayerHand.LocalInstance.AssignFullHandLocal(PhotonNetwork.LocalPlayer.ActorNumber, suits, ranks);
+                }
             }
-            else
-            {
-                OnRoomJoinedCheckStart();
-            }
+        }
+
+        if (TrumpManager.Instance != null) TrumpManager.Instance.RefreshFromRoomProperties(false);
+
+        yield return new WaitForSeconds(0.6f);
+
+        if (IsDealingComplete && PlayerHand.LocalInstance != null)
+        {
+            int currentActor = PlayerHand.LocalInstance.currentTurnActor;
+            PlayerHand.LocalInstance.OnDealingComplete(currentActor);
+            if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
+                TurnManager.Instance.StartTurn(currentActor);
         }
     }
 
@@ -629,75 +567,55 @@ public class DeckManager : MonoBehaviourPunCallbacks
     {
         if (botActorNumbers.Contains(newPlayer.ActorNumber))
         {
-            Debug.Log($"[DeckManager] Actor {newPlayer.ActorNumber} reconnected but seat is bot-controlled — match continues as bot.");
+            Debug.Log($"[DeckManager] Player {newPlayer.ActorNumber} reconnected! Handing control back to Human.");
+            if (PhotonNetwork.IsMasterClient)
+            {
+                botActorNumbers.Remove(newPlayer.ActorNumber);
+                SyncBotsToRoom();
+                if (gameStarted && IsDealingComplete)
+                    SyncReconnectingPlayer(newPlayer);
+            }
             if (PlayerProfileSync.Instance != null)
                 PlayerProfileSync.Instance.UpdateAllNames();
             return;
         }
 
         if (PhotonNetwork.IsMasterClient && gameStarted && IsDealingComplete)
-        {
             SyncReconnectingPlayer(newPlayer);
-        }
         else if (PhotonNetwork.IsMasterClient)
-        {
             OnRoomJoinedCheckStart();
-        }
     }
 
     void SyncReconnectingPlayer(Player p)
     {
-        Debug.Log($"[Sync] Master Pushing data to {p.NickName} (Actor {p.ActorNumber}). BotCount: {botActorNumbers.Count}");
-        
-        // 1. Resend Bot list via non-destructive RPC
         photonView.RPC("RPC_SyncBotsOnly", p, botActorNumbers.ToArray());
 
-        // 2. Resend their specific hand (since this is not in room properties)
-        List<CardData> hand = null;
-        if (humanHandsOnMaster.TryGetValue(p.ActorNumber, out var cachedHand)) 
-        {
-            hand = cachedHand;
-            Debug.Log($"[Sync] Found cached hand for {p.ActorNumber} on Master. Cards: {hand.Count}");
-        }
-        else if (p.CustomProperties.TryGetValue("Hand", out object handObj))
-        {
-            int[] interleaved = (int[])handObj;
-            hand = new List<CardData>();
-            for (int i = 0; i < interleaved.Length / 2; i++)
-                hand.Add(new CardData { cardSuit = (CardSuit)interleaved[i*2], cardRank = (CardRank)interleaved[i*2+1] });
-            Debug.Log($"[Sync] Found hand in Player Properties for {p.ActorNumber}. Cards: {hand.Count}");
-        }
+        EnsureHandCachedForActor(p.ActorNumber);
 
-        if (hand != null)
+        if (humanHandsOnMaster.TryGetValue(p.ActorNumber, out List<CardData> hand) && hand != null)
         {
             int[] suits = new int[hand.Count];
             int[] ranks = new int[hand.Count];
-            for (int i = 0; i < hand.Count; i++) { suits[i] = (int)hand[i].cardSuit; ranks[i] = (int)hand[i].cardRank; }
+            for (int i = 0; i < hand.Count; i++)
+            {
+                suits[i] = (int)hand[i].cardSuit;
+                ranks[i] = (int)hand[i].cardRank;
+            }
             photonView.RPC("RPC_AssignFullHand", p, p.ActorNumber, suits, ranks);
         }
-        else
-        {
-            Debug.LogWarning($"[Sync] Hand NOT FOUND for reconnecting player {p.ActorNumber}!");
-        }
 
-        // 3. Resend timer state
         if (TurnManager.Instance != null && PlayerHand.LocalInstance != null)
         {
             int remaining = (int)typeof(TurnManager).GetField("currentTime", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(TurnManager.Instance);
             int currentTurnActor = PlayerHand.LocalInstance.currentTurnActor;
             TurnManager.Instance.photonView.RPC("RPC_SyncTimerState", p, currentTurnActor, remaining);
-            Debug.Log($"[Sync] Sent Timer State. Current Turn: {currentTurnActor}, Remaining: {remaining}");
         }
 
-        // 4. Resend dealing complete to trigger UI setup
         if (PlayerHand.LocalInstance != null)
         {
             int currentActor = PlayerHand.LocalInstance.currentTurnActor;
             photonView.RPC("RPC_DealingComplete", p, currentActor);
-            Debug.Log($"[Sync] Sent Dealing Complete for Actor {currentActor}.");
         }
-        
-        Debug.Log("[Sync] Rejoin State Sync Complete.");
     }
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
@@ -707,14 +625,17 @@ public class DeckManager : MonoBehaviourPunCallbacks
             if (PhotonNetwork.IsMasterClient)
                 EnsureHandCachedForActor(otherPlayer.ActorNumber);
 
-            if (PhotonNetwork.IsMasterClient && !otherPlayer.IsInactive)
+            if (otherPlayer.IsInactive)
             {
-                Debug.Log($"❌ Player {otherPlayer.ActorNumber} left permanently (30s over) — bot takeover, match continues.");
+                Debug.Log($"⚠️ Player {otherPlayer.ActorNumber} disconnected. Waiting for 30s reconnect...");
+                if (PlayerProfileSync.Instance != null)
+                    PlayerProfileSync.Instance.UpdateAllNames();
+            }
+            else if (PhotonNetwork.IsMasterClient)
+            {
+                Debug.Log($"❌ Player {otherPlayer.ActorNumber} left permanently — bot takeover.");
                 photonView.RPC("RPC_MarkPlayerAsBot", RpcTarget.All, otherPlayer.ActorNumber);
             }
-
-            if (PlayerProfileSync.Instance != null)
-                PlayerProfileSync.Instance.UpdateAllNames();
         }
         else if (PhotonNetwork.IsMasterClient && !gameStarted)
         {
@@ -1084,6 +1005,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
                 for (int i = 0; i < cardsPerPlayer; i++) { suits[i] = (int)hand[i].cardSuit; ranks[i] = (int)hand[i].cardRank; }
                 masterTrackingCounts[seatActor] = cardsPerPlayer;
                 humanHandsOnMaster[seatActor] = new List<CardData>(hand);
+                PersistHandToRoom(seatActor, hand);
                 photonView.RPC("RPC_AssignFullHand", RpcTarget.All, seatActor, suits, ranks);
             }
 
@@ -1111,19 +1033,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
                 }
             }
             masterTrackingCounts[actorNum] = hand.Count;
-
-            // 🚀 Update Player Property too
-            Player target = null;
-            foreach (var p in PhotonNetwork.PlayerList) if (p.ActorNumber == actorNum) { target = p; break; }
-            
-            if (target != null)
-            {
-                int[] interleaved = new int[hand.Count * 2];
-                for (int i = 0; i < hand.Count; i++) { interleaved[i*2] = (int)hand[i].cardSuit; interleaved[i*2+1] = (int)hand[i].cardRank; }
-                ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable();
-                props.Add("Hand", interleaved);
-                target.SetCustomProperties(props);
-            }
+            PersistHandToRoom(actorNum, hand);
         }
     }
 

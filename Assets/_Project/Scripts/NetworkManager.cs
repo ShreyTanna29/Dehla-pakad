@@ -273,23 +273,44 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     System.Collections.IEnumerator AbandonMatchAfterDisconnectRoutine()
     {
-        yield return new WaitForSeconds(DisconnectAbandonHomeSeconds);
+        float timeLeft = DisconnectAbandonHomeSeconds;
+        while (timeLeft > 0 && isAttemptingRejoin)
+        {
+            yield return new WaitForSeconds(1f);
+            timeLeft -= 1f;
+        }
 
-        isAttemptingRejoin = false;
-        _localMatchAbandoned = true;
-        ShowReconnectionLostPanel("Connection lost permanently.\nReturning to Home...");
-        yield return new WaitForSeconds(2.5f);
+        if (isAttemptingRejoin)
+        {
+            _localMatchAbandoned = true;
+            isAttemptingRejoin = false;
+            ShowReconnectionLostPanel("Connection lost permanently.\nReturning to Home...");
+            yield return new WaitForSeconds(2.5f);
+            Debug.Log("[Photon] Match abandoned by local player — leaving room and returning home.");
+            LeaveMatchAndReturnHome();
+        }
 
-        Debug.Log("[Photon] Match abandoned by local player — leaving room and returning home.");
-        LeaveMatchAndReturnHome();
         _disconnectAbandonCoroutine = null;
+    }
+
+    void CleanUpLocalNetworkPlayer()
+    {
+        if (PlayerHand.LocalInstance != null)
+        {
+            Debug.Log("[Reconnect] Cleaning up old NetworkPlayer to prevent duplicate view ID.");
+            PlayerHand.LocalInstance.ResetHand();
+            if (PlayerHand.LocalInstance.gameObject != null)
+                Destroy(PlayerHand.LocalInstance.gameObject);
+            PlayerHand.LocalInstance = null;
+        }
     }
 
     void BeginInMatchDisconnectFlow()
     {
         StopDisconnectAbandonCoroutine();
         GameFlowState.SetPhase(GameFlowPhase.Disconnected, forceRecovery: true);
-        ShowReconnectingPanel("Internet lost.\nReconnecting... please wait (30s)");
+        CleanUpLocalNetworkPlayer();
+        ShowReconnectionLostPanel("Internet lost.\nReconnecting... please wait (30s)");
         isAttemptingRejoin = true;
         _disconnectAbandonCoroutine = StartCoroutine(AbandonMatchAfterDisconnectRoutine());
         StartCoroutine(AutoReconnectRoutine());
@@ -301,8 +322,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             if (!PhotonNetwork.IsConnectedAndReady && PhotonNetwork.NetworkClientState == ClientState.Disconnected)
             {
-                Debug.Log("[Photon] Network available — attempting ReconnectAndRejoin...");
-                PhotonNetwork.ReconnectAndRejoin();
+                if (Application.internetReachability != NetworkReachability.NotReachable)
+                {
+                    Debug.Log("[Photon] Internet is back! Attempting ReconnectAndRejoin...");
+                    PhotonNetwork.ReconnectAndRejoin();
+                }
             }
             yield return new WaitForSeconds(3f);
         }
@@ -656,12 +680,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
-        Debug.Log($"[Photon] Joined Room | Name: {PhotonNetwork.CurrentRoom?.Name} | Count: {PhotonNetwork.CurrentRoom?.PlayerCount}");
-        LogRoomInfo("JoinedRoom");
-
         if (_localMatchAbandoned)
         {
-            Debug.Log("[Photon] Rejoined room after local abandon — leaving immediately.");
             PhotonNetwork.LeaveRoom();
             return;
         }
@@ -669,23 +689,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.CurrentRoom != null)
             storedRoomName = PhotonNetwork.CurrentRoom.Name;
 
-        bool rejoiningActiveGame = DeckManager.Instance != null && 
+        bool rejoiningActiveGame = DeckManager.Instance != null &&
             PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs) && (bool)gs;
 
         if (rejoiningActiveGame)
-        {
-            Debug.Log("[Photon] Rejoin — active game detected, preserving state");
             GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
-        }
-        else if (PhotonNetwork.OfflineMode)
-        {
-            GameFlowState.SetPhase(GameFlowPhase.InRoom);
-        }
         else
-        {
             GameFlowState.SetPhase(GameFlowPhase.InRoom);
-        }
 
         StopDisconnectAbandonCoroutine();
         _localMatchAbandoned = false;
@@ -694,39 +705,20 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         HideLoading();
         isAttemptingRejoin = false;
 
-        // 🚀 REJOIN PROTECTION: Always check for existing local player object to prevent duplicate PhotonView IDs.
-        // ReconnectAndRejoin() will automatically restore the existing PhotonView from the room buffer.
         bool hasExistingPlayer = false;
         PlayerHand[] allHands = Object.FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
         foreach (var hand in allHands)
         {
             if (hand.photonView != null && hand.photonView.IsMine)
             {
-                PlayerHand.LocalInstance = hand; 
+                PlayerHand.LocalInstance = hand;
                 hasExistingPlayer = true;
-                Debug.Log("[Photon] Rejoin Mode Active");
-                Debug.Log("[Photon] Reusing Existing Player Object");
                 break;
             }
         }
 
-        if (hasExistingPlayer)
-        {
-            Debug.Log("[Photon] Skipping NetworkPlayer Spawn to prevent duplicate PhotonView IDs.");
-        }
-        else
-        {
-            // Fresh join or rejoin where object was cleaned up
-            if (PlayerHand.LocalInstance == null)
-            {
-                Debug.Log("[Photon] Fresh Join: Instantiating new NetworkPlayer.");
-                PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
-            }
-            else
-            {
-                Debug.Log("[Photon] NetworkPlayer already exists, skipping instantiation.");
-            }
-        }
+        if (!hasExistingPlayer && PlayerHand.LocalInstance == null)
+            PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
 
         if (DeckManager.Instance != null)
             DeckManager.Instance.OnRoomJoinedCheckStart();
