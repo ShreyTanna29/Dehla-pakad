@@ -53,6 +53,9 @@ public class DehlaPakadAI : MonoBehaviour
                 return PickCheapestWinningCard(trumpWinners);
         }
 
+        if (TryPickTwoTaashDuplicateWinner(validCards, currentTrick, trumpSuit, botActorNumber, out CardData duplicateWinner))
+            return duplicateWinner;
+
         return ChooseLowestDump(validCards, currentTrick, trumpSuit, botActorNumber, mustFollowSuit, twoTaash);
     }
 
@@ -119,7 +122,7 @@ public class DehlaPakadAI : MonoBehaviour
     {
         if (trick == null || trick.Count == 0) return false;
 
-        if (twoTaash && CanWinByMatchingCurrentWinner(card, trick, trumpSuit))
+        if (TaashRules.IsTwoTaashMode && CanWinByMatchingCurrentWinner(card, trick, trumpSuit))
             return true;
 
         var simulated = new List<PlayerHand.TrickCard>(trick);
@@ -130,7 +133,7 @@ public class DehlaPakadAI : MonoBehaviour
             rankValue = RankValue(card)
         });
 
-        PlayerHand.TrickCard winner = EvaluateTrickWinner(simulated, trumpSuit, twoTaash);
+        PlayerHand.TrickCard winner = EvaluateTrickWinner(simulated, trumpSuit, TaashRules.IsTwoTaashMode || twoTaash);
         return winner.actorNumber == botActorNumber;
     }
 
@@ -139,8 +142,35 @@ public class DehlaPakadAI : MonoBehaviour
     /// </summary>
     static bool CanWinByMatchingCurrentWinner(CardData card, List<PlayerHand.TrickCard> trick, CardSuit trumpSuit)
     {
-        PlayerHand.TrickCard currentWinner = EvaluateTrickWinner(trick, trumpSuit, twoTaash: true);
+        if (!TaashRules.IsTwoTaashMode || trick == null || trick.Count == 0)
+            return false;
+
+        PlayerHand.TrickCard currentWinner = TaashRules.DetermineTrickWinner(trick, trumpSuit);
         return card.cardSuit == currentWinner.suit && RankValue(card) == currentWinner.rankValue;
+    }
+
+    static bool TryPickTwoTaashDuplicateWinner(
+        List<CardData> validCards,
+        List<PlayerHand.TrickCard> trick,
+        CardSuit trumpSuit,
+        int botActorNumber,
+        out CardData selected)
+    {
+        selected = default;
+        if (!TaashRules.IsTwoTaashMode || trick == null || trick.Count == 0 || validCards == null || validCards.Count == 0)
+            return false;
+
+        PlayerHand.TrickCard currentWinner = TaashRules.DetermineTrickWinner(trick, trumpSuit);
+        List<CardData> duplicateWinners = validCards
+            .Where(c => c.cardSuit == currentWinner.suit && RankValue(c) == currentWinner.rankValue)
+            .ToList();
+
+        if (duplicateWinners.Count == 0)
+            return false;
+
+        selected = duplicateWinners[0];
+        Debug.Log($"[AI 2TAASH DUPLICATE WIN] Bot {botActorNumber} plays duplicate winner: {selected.cardRank} of {selected.cardSuit}");
+        return true;
     }
 
     /// <summary>
@@ -209,26 +239,30 @@ public class DehlaPakadAI : MonoBehaviour
         bool mustFollowSuit,
         bool twoTaash)
     {
-        IEnumerable<CardData> dumpPool = validCards.Where(c =>
-            !WouldBotWinTrick(c, trick, trumpSuit, botActorNumber, twoTaash));
+        List<CardData> nonWinners = validCards
+            .Where(c => !WouldBotWinTrick(c, trick, trumpSuit, botActorNumber, twoTaash))
+            .ToList();
 
-        if (!dumpPool.Any())
-            dumpPool = validCards;
+        if (nonWinners.Count == 0)
+            nonWinners = validCards;
 
-        if (!mustFollowSuit)
+        CardSuit ledSuit = trick[0].suit;
+        CardData selected;
+
+        if (mustFollowSuit)
         {
-            List<CardData> nonTrump = dumpPool.Where(c => c.cardSuit != trumpSuit).ToList();
-            if (nonTrump.Count > 0)
-                dumpPool = nonTrump;
+            List<CardData> ledSuitCards = nonWinners.Where(c => c.cardSuit == ledSuit).ToList();
+            List<CardData> followPool = ledSuitCards.Count > 0 ? ledSuitCards : nonWinners;
+            selected = followPool.OrderBy(c => RankValue(c)).ThenBy(c => (int)c.cardSuit).First();
+        }
+        else
+        {
+            List<CardData> nonTrump = nonWinners.Where(c => c.cardSuit != trumpSuit).ToList();
+            List<CardData> dumpPool = nonTrump.Count > 0 ? nonTrump : nonWinners;
+            selected = dumpPool.OrderBy(c => RankValue(c)).ThenBy(c => (int)c.cardSuit).First();
         }
 
-        List<CardData> pool = dumpPool.ToList();
-        List<CardData> withoutPremium = pool
-            .Where(c => c.cardRank != CardRank.Ace && c.cardRank != CardRank.King)
-            .ToList();
-        if (withoutPremium.Count > 0)
-            pool = withoutPremium;
-
-        return pool.OrderBy(c => RankValue(c)).First();
+        Debug.Log($"[AI LOWEST DUMP] Bot {botActorNumber} cannot win, playing lowest valid card: {selected.cardRank} of {selected.cardSuit}");
+        return selected;
     }
 }

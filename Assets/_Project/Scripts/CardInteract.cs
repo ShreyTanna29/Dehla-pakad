@@ -320,9 +320,12 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler
     public void OnPointerClick(PointerEventData eventData)
     {
         // Input Locking & Turn Validation
-        if (isPlayed || !canPlayCards || !isValidToPlay || isPlayingCard) 
+        if (isPlayed || !canPlayCards || !isValidToPlay || isPlayingCard || PlayerHand.IsGameplayInputBlocked
+            || (DeckManager.Instance != null && !DeckManager.Instance.IsDealingComplete)
+            || !GameStabilityAudit.CanAcceptPlayerInput())
         {
-            Debug.Log($"[CardInteract] Input Ignored. Played: {isPlayed}, CanPlay: {canPlayCards}, Valid: {isValidToPlay}, PlayingAnim: {isPlayingCard}");
+            if (!isPlayingCard)
+                Debug.Log($"[CardInteract] Input Ignored. Played: {isPlayed}, CanPlay: {canPlayCards}, Valid: {isValidToPlay}, PlayingAnim: {isPlayingCard}");
             return;
         }
 

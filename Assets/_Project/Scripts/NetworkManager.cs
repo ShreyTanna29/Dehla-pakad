@@ -35,7 +35,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     [Header("Reconnection UI")]
     public GameObject connectionLostPanel;
-    const float DisconnectAbandonHomeSeconds = 2.5f;
+    const float DisconnectAbandonHomeSeconds = 30f;
 
     private bool isAttemptingRejoin = false;
     private bool _localMatchAbandoned;
@@ -45,7 +45,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     private TMP_Text reconnectionLostStatusText;
     private GameObject reconnectingSpinner;
     private GameObject reconnectionLostRoot;
-    private bool _reconnectPanelFindAttempted;
+    private static bool _connectionLostPanelWarned;
 
     void Awake()
     {
@@ -130,7 +130,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 Debug.LogWarning("[Reconnect UI] connectionLostPanel reference is stale — clearing cache.");
             connectionLostPanel = null;
             ClearReconnectPanelCache();
-            _reconnectPanelFindAttempted = false;
         }
     }
 
@@ -140,22 +139,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (!IsUiObjectAlive(connectionLostPanel))
         {
-            if (!_reconnectPanelFindAttempted)
+            if (!_connectionLostPanelWarned)
             {
-                _reconnectPanelFindAttempted = true;
-                GameObject panel = GameObject.Find("Panel_ConnectionLost");
-                if (IsUiObjectAlive(panel))
-                {
-                    connectionLostPanel = panel;
-                    Debug.Log("[Reconnect UI] Resolved Panel_ConnectionLost via one-time Find.");
-                }
-                else
-                    Debug.LogWarning("[Reconnect UI] Panel_ConnectionLost not found (inactive, destroyed, or wrong scene). Assign connectionLostPanel in Inspector.");
+                _connectionLostPanelWarned = true;
+                Debug.LogWarning("[Reconnect UI] connectionLostPanel not assigned in Inspector — reconnect UI will be skipped.");
             }
-        }
-
-        if (!IsUiObjectAlive(connectionLostPanel))
             return;
+        }
 
         Transform root = connectionLostPanel.transform;
 
@@ -283,12 +273,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     System.Collections.IEnumerator AbandonMatchAfterDisconnectRoutine()
     {
-        _localMatchAbandoned = true;
-        isAttemptingRejoin = false;
-
-        ShowReconnectionLostPanel("Connection lost.\nReturning to Home...");
-
         yield return new WaitForSeconds(DisconnectAbandonHomeSeconds);
+
+        isAttemptingRejoin = false;
+        _localMatchAbandoned = true;
+        ShowReconnectionLostPanel("Connection lost permanently.\nReturning to Home...");
+        yield return new WaitForSeconds(2.5f);
 
         Debug.Log("[Photon] Match abandoned by local player — leaving room and returning home.");
         LeaveMatchAndReturnHome();
@@ -298,8 +288,24 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     void BeginInMatchDisconnectFlow()
     {
         StopDisconnectAbandonCoroutine();
-        ShowReconnectionLostPanel("Connection lost.\nReturning to Home...");
+        GameFlowState.SetPhase(GameFlowPhase.Disconnected, forceRecovery: true);
+        ShowReconnectingPanel("Internet lost.\nReconnecting... please wait (30s)");
+        isAttemptingRejoin = true;
         _disconnectAbandonCoroutine = StartCoroutine(AbandonMatchAfterDisconnectRoutine());
+        StartCoroutine(AutoReconnectRoutine());
+    }
+
+    System.Collections.IEnumerator AutoReconnectRoutine()
+    {
+        while (isAttemptingRejoin)
+        {
+            if (!PhotonNetwork.IsConnectedAndReady && PhotonNetwork.NetworkClientState == ClientState.Disconnected)
+            {
+                Debug.Log("[Photon] Network available — attempting ReconnectAndRejoin...");
+                PhotonNetwork.ReconnectAndRejoin();
+            }
+            yield return new WaitForSeconds(3f);
+        }
     }
 
     public void ConnectToPhoton()
@@ -319,21 +325,72 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void UpdateUIState(bool isHome)
     {
+        if (isHome)
+            ShowHomeUI();
+        else
+            ShowGameScene();
+    }
+
+    public void ShowGameScene()
+    {
+        if (gameCanvasGroup != null)
+        {
+            if (!gameCanvasGroup.gameObject.activeSelf)
+                gameCanvasGroup.gameObject.SetActive(true);
+            gameCanvasGroup.DOKill();
+            gameCanvasGroup.alpha = 1f;
+            gameCanvasGroup.interactable = true;
+            gameCanvasGroup.blocksRaycasts = true;
+        }
+
         if (homeCanvasGroup != null)
         {
             homeCanvasGroup.DOKill();
-            homeCanvasGroup.DOFade(isHome ? 1 : 0, transitionTime).SetUpdate(true);
-            homeCanvasGroup.interactable = isHome;
-            homeCanvasGroup.blocksRaycasts = isHome;
+            homeCanvasGroup.alpha = 0f;
+            homeCanvasGroup.interactable = false;
+            homeCanvasGroup.blocksRaycasts = false;
+        }
+
+        if (loadingCanvasGroup != null)
+        {
+            loadingCanvasGroup.alpha = 0f;
+            loadingCanvasGroup.interactable = false;
+            loadingCanvasGroup.blocksRaycasts = false;
+        }
+
+        InitializeGameplayScene();
+        Debug.Log("[GameInit] Game scene visible");
+    }
+
+    void ShowHomeUI()
+    {
+        if (homeCanvasGroup != null)
+        {
+            if (!homeCanvasGroup.gameObject.activeSelf)
+                homeCanvasGroup.gameObject.SetActive(true);
+            homeCanvasGroup.DOKill();
+            homeCanvasGroup.DOFade(1, transitionTime).SetUpdate(true);
+            homeCanvasGroup.interactable = true;
+            homeCanvasGroup.blocksRaycasts = true;
         }
 
         if (gameCanvasGroup != null)
         {
             gameCanvasGroup.DOKill();
-            gameCanvasGroup.DOFade(isHome ? 0 : 1, transitionTime).SetUpdate(true);
-            gameCanvasGroup.interactable = !isHome;
-            gameCanvasGroup.blocksRaycasts = !isHome;
+            gameCanvasGroup.DOFade(0, transitionTime).SetUpdate(true);
+            gameCanvasGroup.interactable = false;
+            gameCanvasGroup.blocksRaycasts = false;
         }
+    }
+
+    public static void InitializeGameplayScene()
+    {
+        if (PlayerHand.LocalInstance != null)
+            PlayerHand.LocalInstance.InitializeGameScene();
+        if (PlayerProfileSync.Instance != null)
+            PlayerProfileSync.Instance.InitializeGameScene();
+        if (TrumpManager.Instance != null)
+            TrumpManager.Instance.InitializeGameScene();
     }
 
     public void ReturnToHomeScreen()
@@ -349,8 +406,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         UpdateUIState(true);
         if (ModeManager.Instance != null)
         {
-            if (ModeManager.Instance.panelModes != null) ModeManager.Instance.panelModes.SetActive(false);
-            if (ModeManager.Instance.panelHomeScreen != null) ModeManager.Instance.panelHomeScreen.SetActive(true);
+            if (ModeManager.Instance.panelModes != null && ModeManager.Instance.panelModes.activeSelf)
+                ModeManager.Instance.panelModes.SetActive(false);
+            if (ModeManager.Instance.panelHomeScreen != null && !ModeManager.Instance.panelHomeScreen.activeSelf)
+                ModeManager.Instance.panelHomeScreen.SetActive(true);
             ModeManager.Instance.ApplyHomeScreenButtonColors();
         }
     }
@@ -617,7 +676,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (rejoiningActiveGame)
         {
             Debug.Log("[Photon] Rejoin — active game detected, preserving state");
-            GameFlowState.SetPhase(GameFlowPhase.InGame);
+            GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
         }
         else if (PhotonNetwork.OfflineMode)
         {
@@ -628,6 +687,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             GameFlowState.SetPhase(GameFlowPhase.InRoom);
         }
 
+        StopDisconnectAbandonCoroutine();
+        _localMatchAbandoned = false;
         UpdateUIState(false);
         HideReconnectPanels();
         HideLoading();
@@ -668,10 +729,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
 
         if (DeckManager.Instance != null)
-        {
             DeckManager.Instance.OnRoomJoinedCheckStart();
-        }
 
+        InitializeGameplayScene();
     }
 
     public override void OnLeftRoom()

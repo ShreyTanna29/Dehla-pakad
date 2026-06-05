@@ -37,6 +37,22 @@ public class TrumpManager : MonoBehaviourPunCallbacks
     {
         if (trumpChangePopup != null) trumpChangePopup.SetActive(false);
         ApplyTrumpForCurrentGameMode(false);
+        GameStabilityAudit.ValidateTrump("TrumpManager.Start");
+    }
+
+    public void InitializeGameScene()
+    {
+        if (trumpIcon != null)
+        {
+            Transform t = trumpIcon.transform;
+            while (t != null)
+            {
+                if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
+                t = t.parent;
+            }
+        }
+
+        RefreshFromRoomProperties(false);
     }
 
     public static void ApplyTrumpForCurrentGameMode(bool showPopup)
@@ -47,26 +63,51 @@ public class TrumpManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        GameModeType mode = GameSettings.Instance != null
-            ? GameSettings.Instance.currentMode
-            : GameModeType.TrumpSpades;
-
+        GameModeType mode = Instance.GetCurrentGameMode();
         switch (mode)
         {
-            case GameModeType.TrumpSpades:
-                Instance.ApplyTrumpState(CardSuit.Spades, true, showPopup);
-                break;
             case GameModeType.ThirteenthCardTrump:
                 Instance.ApplyTrumpState(CardSuit.Spades, false, false);
                 break;
             case GameModeType.Cut1Trump:
-            case GameModeType.Cut2Trump:
                 Instance.ApplyTrumpState(CardSuit.Spades, false, false);
                 break;
+            case GameModeType.Cut2Trump:
+                Instance.ApplyTrumpState(CardSuit.Spades, true, false);
+                break;
+            case GameModeType.TrumpSpades:
             default:
                 Instance.ApplyTrumpState(CardSuit.Spades, true, showPopup);
                 break;
         }
+    }
+
+    GameModeType GetCurrentGameMode()
+    {
+        return GameSettings.Instance != null
+            ? GameSettings.Instance.currentMode
+            : GameModeType.TrumpSpades;
+    }
+
+    bool ShouldDisplayTrumpAsHidden()
+    {
+        switch (GetCurrentGameMode())
+        {
+            case GameModeType.ThirteenthCardTrump:
+            case GameModeType.Cut2Trump:
+                return !isTrumpRevealed;
+            case GameModeType.TrumpSpades:
+            case GameModeType.Cut1Trump:
+            default:
+                return false;
+        }
+    }
+
+    CardSuit ResolveTrumpSuitForDisplay(CardSuit suit)
+    {
+        if (suit >= CardSuit.Spades && suit <= CardSuit.Clubs)
+            return suit;
+        return CardSuit.Spades;
     }
 
     public void RefreshFromRoomProperties(bool showPopupIfChanged)
@@ -74,7 +115,7 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         CardSuit oldSuit = currentTrumpSuit;
         bool oldRevealed = isTrumpRevealed;
 
-        CardSuit suit = GetCurrentTrumpSuit();
+        CardSuit suit = ResolveTrumpSuitForDisplay(GetCurrentTrumpSuit());
         bool revealed = IsTrumpRevealed();
 
         currentTrumpSuit = suit;
@@ -88,7 +129,7 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         EnsureTrumpDisplayVisible();
         UpdateTrumpUI(suit);
 
-        if (showPopupIfChanged && changed && revealed)
+        if (showPopupIfChanged && changed && revealed && !ShouldDisplayTrumpAsHidden())
             ShowTrumpChangePopup(suit);
     }
 
@@ -100,8 +141,8 @@ public class TrumpManager : MonoBehaviourPunCallbacks
     public CardSuit GetCurrentTrumpSuit()
     {
         if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("TS", out object suit))
-            return (CardSuit)(int)suit;
-        return currentTrumpSuit;
+            return ResolveTrumpSuitForDisplay((CardSuit)(int)suit);
+        return ResolveTrumpSuitForDisplay(currentTrumpSuit);
     }
 
     public bool IsTrumpRevealed()
@@ -113,32 +154,28 @@ public class TrumpManager : MonoBehaviourPunCallbacks
 
     public void SetTrumpSuit(CardSuit newSuit, bool showPopup, bool isRevealed = true)
     {
-        CardSuit oldSuit = currentTrumpSuit;
-        bool oldRevealed = isTrumpRevealed;
-
-        if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
-        {
-            ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
-            {
-                { "TS", (int)newSuit },
-                { "TR", isRevealed }
-            };
-            PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        }
-
         currentTrumpSuit = newSuit;
         isTrumpRevealed = isRevealed;
+
         PlayerHand.currentTrumpSuit = newSuit;
         PlayerHand.isTrumpRevealed = isRevealed;
 
-        LogTrumpState("SetTrumpSuit", oldSuit, oldRevealed, newSuit, isRevealed);
+        if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
+        {
+            PhotonNetwork.CurrentRoom.SetCustomProperties(
+                new ExitGames.Client.Photon.Hashtable
+                {
+                    { "TS", (int)newSuit },
+                    { "TR", isRevealed }
+                });
+        }
 
-        EnsureTrumpDisplayVisible();
         UpdateTrumpUI(newSuit);
 
-        bool changed = newSuit != oldSuit || isRevealed != oldRevealed;
-        if (showPopup && changed && isRevealed)
+        if (showPopup && isRevealed)
             ShowTrumpChangePopup(newSuit);
+
+        Debug.Log($"[TrumpUI] Updated trump to {newSuit}, revealed={isRevealed}");
     }
 
     public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
@@ -163,7 +200,7 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         EnsureTrumpDisplayVisible();
         UpdateTrumpUI(suit);
 
-        if (changed && revealed)
+        if (changed && revealed && !ShouldDisplayTrumpAsHidden())
             ShowTrumpChangePopup(suit);
     }
 
@@ -195,17 +232,20 @@ public class TrumpManager : MonoBehaviourPunCallbacks
     {
         EnsureTrumpDisplayVisible();
 
+        CardSuit displaySuit = ResolveTrumpSuitForDisplay(newTrump);
+        bool displayHidden = ShouldDisplayTrumpAsHidden();
+
         if (trumpIcon != null)
         {
-            Sprite sprite = GetSpriteForTrump(newTrump, isTrumpRevealed);
+            Sprite sprite = GetSpriteForTrump(displaySuit, displayHidden);
             if (sprite != null)
             {
                 trumpIcon.sprite = sprite;
-                trumpIcon.color = isTrumpRevealed ? Color.white : new Color(0.85f, 0.85f, 0.85f, 1f);
+                trumpIcon.color = displayHidden ? new Color(0.85f, 0.85f, 0.85f, 1f) : Color.white;
                 trumpIcon.enabled = true;
             }
             else
-                Debug.LogWarning($"[Trump] No sprite for {newTrump} (revealed={isTrumpRevealed}). Assign suit sprites on TrumpManager.");
+                Debug.LogWarning($"[Trump] No sprite for {displaySuit} (displayHidden={displayHidden}). Assign suit sprites on TrumpManager.");
         }
         else
         {
@@ -215,10 +255,17 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         if (trumpSuitText != null)
         {
             trumpSuitText.gameObject.SetActive(true);
-            trumpSuitText.text = isTrumpRevealed
-                ? "Trump: " + newTrump
-                : "Trump: Hidden";
+            trumpSuitText.text = displayHidden
+                ? "Trump: Hidden"
+                : "Trump: " + displaySuit;
         }
+
+        Debug.Log($"[TrumpUI] icon updated to {newTrump}");
+        Debug.Log(
+            $"[TrumpUI] Mode: {GetCurrentGameMode()}\n" +
+$"[TrumpUI] Current Trump: {displaySuit} (gameplay revealed={isTrumpRevealed})\n" +
+            $"[TrumpUI] Is Hidden: {displayHidden}\n" +
+            $"[TrumpUI] Display Updated: {(displayHidden ? "Hidden" : displaySuit.ToString())}");
     }
 
     void EnsureTrumpDisplayVisible()
@@ -246,10 +293,10 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         }
     }
 
-    Sprite GetSpriteForTrump(CardSuit suit, bool revealed)
+    Sprite GetSpriteForTrump(CardSuit suit, bool displayHidden)
     {
-        if (!revealed)
-            return hiddenTrumpSprite;
+        if (displayHidden)
+            return hiddenTrumpSprite != null ? hiddenTrumpSprite : spadeSprite;
 
         switch (suit)
         {

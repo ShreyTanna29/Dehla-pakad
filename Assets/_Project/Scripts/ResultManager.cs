@@ -13,6 +13,8 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     [Header("UI Root")]
     public CanvasGroup resultPanel;
+    [Tooltip("Optional root to find Panel_Winning without GameObject.Find (e.g. game canvas).")]
+    public Transform resultPanelSearchRoot;
     public TMP_FontAsset customFont;
 
     [Header("Optional — wired in scene or auto-built")]
@@ -40,6 +42,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
     private Image _dimOverlay;
     private readonly List<GameObject> _dynamicRows = new List<GameObject>();
     private bool _isShowingResult;
+    private static bool _resultPanelResolveWarned;
 
     // Professional Theme Colors
     static readonly Color PanelBgColor = new Color(0.25f, 0.15f, 0.05f, 0.95f); // Wooden Dark
@@ -92,17 +95,32 @@ public class ResultManager : MonoBehaviourPunCallbacks
     {
         if (resultPanel != null) return true;
 
-        GameObject panelGo = GameObject.Find("Panel_Winning");
-        if (panelGo != null)
+        Transform root = resultPanelSearchRoot;
+        if (root == null)
         {
-            resultPanel = panelGo.GetComponent<CanvasGroup>();
-            if (resultPanel == null)
-                resultPanel = panelGo.AddComponent<CanvasGroup>();
-            Debug.Log("[ResultManager] Resolved resultPanel via Panel_Winning lookup.");
-            return true;
+            Canvas canvas = Object.FindAnyObjectByType<Canvas>();
+            if (canvas != null)
+                root = canvas.transform.root;
         }
 
-        Debug.LogError("[ResultManager] resultPanel is null and Panel_Winning was not found.");
+        if (root != null)
+        {
+            UiSafeLookup.SetSearchRoot(root);
+            if (UiSafeLookup.TryGet("Panel_Winning", out GameObject panelGo) && panelGo != null)
+            {
+                resultPanel = panelGo.GetComponent<CanvasGroup>();
+                if (resultPanel == null)
+                    resultPanel = panelGo.AddComponent<CanvasGroup>();
+                Debug.Log("[ResultManager] Resolved Panel_Winning under canvas hierarchy.");
+                return true;
+            }
+        }
+
+        if (!_resultPanelResolveWarned)
+        {
+            _resultPanelResolveWarned = true;
+            Debug.LogWarning("[ResultManager] resultPanel not found — assign resultPanel or Panel_Winning under resultPanelSearchRoot.");
+        }
         return false;
     }
 
@@ -208,12 +226,19 @@ public class ResultManager : MonoBehaviourPunCallbacks
     [ContextMenu("Show Test Result")]
     public void ShowResult()
     {
-        if (_isShowingResult) return;
-        if (!ResolveResultPanel())
+        if (_isShowingResult)
+        {
+            Debug.LogWarning("[Result] ShowResult ignored — already showing.");
             return;
+        }
+        if (!ResolveResultPanel())
+        {
+            Debug.LogError("[Result] ShowResult aborted — result panel reference missing.");
+            return;
+        }
 
         _isShowingResult = true;
-        Debug.Log("Result Panel Opened");
+        Debug.Log("Result Panel Opening");
         EnsurePanelHierarchyActive();
         EnsureDimOverlay();
 
@@ -235,6 +260,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
         resultPanel.alpha = 0;
         resultPanel.interactable = true;
         resultPanel.blocksRaycasts = true;
+        Debug.Log("Result Panel Opened");
 
         if (_dimOverlay != null)
         {

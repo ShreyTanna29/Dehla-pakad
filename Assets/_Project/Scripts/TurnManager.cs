@@ -40,15 +40,27 @@ public class TurnManager : MonoBehaviourPunCallbacks
             UpdateTimerUI();
 
             // 🚀 RESUME BOT THINKING: If the game was paused waiting for a human and now it's a bot's turn (or player timeout)
-            if (PhotonNetwork.IsMasterClient && PlayerHand.LocalInstance != null && currentActorTurn != -1)
+            if (PhotonNetwork.IsMasterClient && PlayerHand.LocalInstance != null && currentActorTurn != -1
+                && DeckManager.Instance != null && DeckManager.Instance.IsDealingComplete)
             {
-                 PlayerHand.LocalInstance.TriggerBotTurnIfApplicable(currentActorTurn);
+                PlayerHand.LocalInstance.TriggerBotTurnIfApplicable(currentActorTurn);
             }
         }
     }
 
     public void StartTurn(int actorNumber)
     {
+        if (!GameStabilityAudit.CanStartTurn())
+        {
+            Debug.LogWarning($"[TurnManager] StartTurn blocked — actor={actorNumber} state={GameFlowState.Current}");
+            return;
+        }
+
+        GameStabilityAudit.LogTurn("StartTurn", actorNumber,
+            PlayerHand.LocalInstance != null && PlayerHand.LocalInstance.currentTrick != null
+                ? PlayerHand.LocalInstance.currentTrick.Count
+                : 0);
+
         currentActorTurn = actorNumber;
         currentTime = maxTurnTime; // Reset local time
         isPaused = false;
@@ -102,7 +114,8 @@ public class TurnManager : MonoBehaviourPunCallbacks
 
         if (currentTime <= 0)
         {
-            photonView.RPC("RPC_TimeUpAutoPlay", RpcTarget.All, currentActorTurn);
+            if (!PlayerHand.IsTrickLocked)
+                photonView.RPC("RPC_TimeUpAutoPlay", RpcTarget.All, currentActorTurn);
         }
     }
 
@@ -168,6 +181,9 @@ public class TurnManager : MonoBehaviourPunCallbacks
     void RPC_TimeUpAutoPlay(int actorNumber)
     {
         isTimerRunning = false;
+
+        if (!GameStabilityAudit.CanAcceptPlayerInput() || PlayerHand.IsTrickLocked)
+            return;
         
         if (PhotonNetwork.LocalPlayer.ActorNumber == actorNumber)
         {
@@ -178,6 +194,8 @@ public class TurnManager : MonoBehaviourPunCallbacks
 
     void AutoPlayValidCard()
     {
+        if (PlayerHand.IsTrickLocked) return;
+
         PlayerHand myHand = PlayerHand.LocalInstance;
         if (myHand == null || myHand.myCards == null || myHand.myCards.Count == 0 || CardInteract.isPlayingCard) return;
 

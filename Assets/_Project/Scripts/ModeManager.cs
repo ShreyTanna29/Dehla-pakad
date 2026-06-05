@@ -11,6 +11,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
     [Header("UI Panels")]
     public GameObject panelModes; 
     public GameObject panelHomeScreen;
+    [Tooltip("Canvas or parent for home/mode buttons. If empty, uses panel root.")]
+    public Transform uiSearchRoot;
 
     [Header("Game Modes Settings")]
     public int currentTrickMode = 1;
@@ -23,6 +25,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public Image btnPresetTrump;
     public Image btn13thCard;
     public Image btnFirstCut;
+    public Image btnCut2Trump;
 
     private bool findMatchAfterLobby = false;
     private bool isFriendsMatchMode = false;
@@ -33,17 +36,37 @@ public class ModeManager : MonoBehaviourPunCallbacks
         Debug.Log("[Photon] Matchmaking will resume after lobby join");
     }
 
+    public void CancelPendingMatchmaking()
+    {
+        Debug.Log("[ModeManager] CancelPendingMatchmaking called");
+        findMatchAfterLobby = false;
+    }
+
     const string PrefsTrickMode = "DehlaPakad_TrickMode";
     const string PrefsTrumpMode = "DehlaPakad_TrumpMode";
+
+    void EnsureUiSearchRoot()
+    {
+        if (uiSearchRoot != null) return;
+        if (panelHomeScreen != null)
+            uiSearchRoot = panelHomeScreen.transform.root;
+        else if (panelModes != null)
+            uiSearchRoot = panelModes.transform.root;
+        else
+            uiSearchRoot = transform.root;
+        UiSafeLookup.SetSearchRoot(uiSearchRoot);
+    }
 
     void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
 
+        EnsureUiSearchRoot();
         RestoreSavedModes();
         SetupModeButtonHoverEffects();
         WirePlayFriendsButton();
+        WireCut2TrumpButton();
         UpdateFriendsOverlay();
         ApplyHomeScreenButtonColors();
         UpdateModeSelectionUIColors();
@@ -51,8 +74,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     void WirePlayFriendsButton()
     {
-        GameObject go = GameObject.Find("Button_PlayFriends");
-        if (go == null) return;
+        EnsureUiSearchRoot();
+        if (!UiSafeLookup.TryGet("Button_PlayFriends", out GameObject go) || go == null) return;
 
         if (btnFriends == null)
             btnFriends = go.GetComponent<Image>();
@@ -66,6 +89,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     void SetupModeButtonHoverEffects()
     {
+        EnsureUiSearchRoot();
         string[] buttonNames =
         {
             "Button_PlayFriends",
@@ -78,8 +102,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         foreach (string name in buttonNames)
         {
-            GameObject go = GameObject.Find(name);
-            if (go == null) continue;
+            if (!UiSafeLookup.TryGet(name, out GameObject go) || go == null) continue;
             Button btn = go.GetComponent<Button>();
             if (btn != null)
                 UIButtonHoverUtility.SetupHoverScale(btn);
@@ -125,10 +148,11 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
 
-        if (panelHomeScreen != null) panelHomeScreen.SetActive(false);
-        if (panelModes != null) panelModes.SetActive(true);
+        if (panelHomeScreen != null && panelHomeScreen.activeSelf) panelHomeScreen.SetActive(false);
+        if (panelModes != null && !panelModes.activeSelf) panelModes.SetActive(true);
 
         SetupModeButtonHoverEffects();
+        WireCut2TrumpButton();
         UpdateModeSelectionUIColors();
     }
 
@@ -137,8 +161,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
         Debug.Log("[UI] Button Clicked: Back to Home");
         GameFlowState.SetPhase(GameFlowPhase.Home);
 
-        if (panelModes != null) panelModes.SetActive(false);
-        if (panelHomeScreen != null) panelHomeScreen.SetActive(true);
+        if (panelModes != null && panelModes.activeSelf) panelModes.SetActive(false);
+        if (panelHomeScreen != null && !panelHomeScreen.activeSelf) panelHomeScreen.SetActive(true);
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.UpdateUIState(true);
@@ -159,12 +183,11 @@ public class ModeManager : MonoBehaviourPunCallbacks
         SetButtonImageColor("Button_NoADS", bright);
     }
 
-    static void SetButtonImageColor(string objectName, Color color)
+    void SetButtonImageColor(string objectName, Color color)
     {
-        GameObject go = GameObject.Find(objectName);
-        if (go == null) return;
-        Image img = go.GetComponent<Image>();
-        if (img != null) img.color = color;
+        EnsureUiSearchRoot();
+        if (!UiSafeLookup.TryGetImage(objectName, out Image img) || img == null) return;
+        img.color = color;
     }
 
     public void OnClick_TrickMode(int mode)
@@ -189,11 +212,12 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     void UpdateFriendsOverlay()
     {
-        GameObject friendsBtn = GameObject.Find("Button_PlayFriends");
-        if (friendsBtn == null) return;
+        EnsureUiSearchRoot();
+        if (!UiSafeLookup.TryGet("Button_PlayFriends", out GameObject friendsBtn) || friendsBtn == null) return;
 
         Transform overlay = friendsBtn.transform.Find("PlayFriends");
-        if (overlay != null)
+        if (overlay == null) return;
+        if (overlay.gameObject.activeSelf != isFriendsMatchMode)
             overlay.gameObject.SetActive(isFriendsMatchMode);
     }
 
@@ -204,22 +228,70 @@ public class ModeManager : MonoBehaviourPunCallbacks
         UpdateModeSelectionUIColors();
     }
 
+    void WireCut2TrumpButton()
+    {
+        EnsureUiSearchRoot();
+        if (!UiSafeLookup.TryGet("Button_PlayCut2Trump", out GameObject go) || go == null) return;
+
+        if (btnCut2Trump == null)
+            btnCut2Trump = go.GetComponent<Image>();
+
+        Button btn = go.GetComponent<Button>();
+        if (btn == null) return;
+
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(() => OnClick_TrumpMode(4));
+    }
+
+    void ResolveModeButtonImages()
+    {
+        EnsureUiSearchRoot();
+
+        if (btn1Taash == null)
+            UiSafeLookup.TryGetImage("Button_Play1Taash", out btn1Taash);
+
+        if (btn2Taash == null)
+            UiSafeLookup.TryGetImage("Button_Play2Taash", out btn2Taash);
+
+        if (btnPresetTrump == null)
+            UiSafeLookup.TryGetImage("Button_PlayTrumpMode", out btnPresetTrump);
+
+        if (btn13thCard == null)
+            UiSafeLookup.TryGetImage("Button_Play13CardMode", out btn13thCard);
+
+        if (btnFirstCut == null)
+            UiSafeLookup.TryGetImage("Button_PlayFirstCut", out btnFirstCut);
+
+        if (btnCut2Trump == null)
+            UiSafeLookup.TryGetImage("Button_PlayCut2Trump", out btnCut2Trump);
+    }
+
     void UpdateModeSelectionUIColors()
     {
+        ResolveModeButtonImages();
+
         Color selectedColor = Color.white;
-        Color unselectedColor = new Color(0.60f, 0.60f, 0.63f, 1f);
+        Color unselectedColor = new Color(0.35f, 0.35f, 0.35f, 1f);
 
         if (btn1Taash != null)
             btn1Taash.color = !isFriendsMatchMode && currentTrickMode == 1 ? selectedColor : unselectedColor;
+
         if (btn2Taash != null)
             btn2Taash.color = !isFriendsMatchMode && currentTrickMode == 2 ? selectedColor : unselectedColor;
 
-        if (btnPresetTrump != null && btn13thCard != null && btnFirstCut != null)
-        {
+        if (btnPresetTrump != null)
             btnPresetTrump.color = currentTrumpMode == 1 ? selectedColor : unselectedColor;
+
+        if (btn13thCard != null)
             btn13thCard.color = currentTrumpMode == 2 ? selectedColor : unselectedColor;
+
+        if (btnFirstCut != null)
             btnFirstCut.color = currentTrumpMode == 3 ? selectedColor : unselectedColor;
-        }
+
+        if (btnCut2Trump != null)
+            btnCut2Trump.color = currentTrumpMode == 4 ? selectedColor : unselectedColor;
+
+        Debug.Log($"[Mode UI] Trump Mode={currentTrumpMode} | Cut2Trump image assigned={btnCut2Trump != null}");
     }
 
     public void OnClick_FindMatch()
@@ -294,6 +366,13 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     void StartSmartMatchmaking()
     {
+        if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
+        {
+            Debug.Log("[ModeManager] StartSmartMatchmaking blocked because user cancelled");
+            findMatchAfterLobby = false;
+            return;
+        }
+
         if (!PhotonNetwork.InLobby)
         {
             Debug.Log("[Photon] Attempt Join Lobby (before matchmaking)");
@@ -328,13 +407,20 @@ public class ModeManager : MonoBehaviourPunCallbacks
             CustomRoomProperties = roomProperties,
             CustomRoomPropertiesForLobby = new string[] { "TM", "RM" },
             PlayerTtl = 30000,
-            EmptyRoomTtl = 60000
+            EmptyRoomTtl = 30000
         };
     }
 
     public override void OnJoinedLobby()
     {
         Debug.Log("[Photon] JoinedLobby (ModeManager)");
+        if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
+        {
+            Debug.Log("[Photon] JoinedLobby ignored because user cancelled matchmaking");
+            findMatchAfterLobby = false;
+            return;
+        }
+
         if (findMatchAfterLobby)
             StartSmartMatchmaking();
     }
@@ -342,6 +428,13 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public override void OnJoinRandomFailed(short returnCode, string message)
     {
         Debug.Log($"[Photon] JoinRandomFailed | {returnCode} | {message}");
+        if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
+        {
+            Debug.Log("[Photon] JoinRandomFailed ignored because user cancelled matchmaking");
+            findMatchAfterLobby = false;
+            return;
+        }
+
         Debug.Log("[Photon] Attempt Create Room");
         PhotonNetwork.CreateRoom("Room_" + Random.Range(1000, 9999), BuildRoomOptions());
     }
@@ -354,6 +447,13 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public override void OnCreateRoomFailed(short returnCode, string message)
     {
         Debug.LogError($"[Photon] CreateRoomFailed | {returnCode} | {message}");
+        if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
+        {
+            GameFlowState.SetPhase(GameFlowPhase.Home, true);
+            MatchmakingManager.Instance.StopSearching(false);
+            return;
+        }
+
         GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
         if (MatchmakingManager.Instance != null) MatchmakingManager.Instance.StopSearching(false);
         if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();

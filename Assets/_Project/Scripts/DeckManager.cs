@@ -13,6 +13,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
     public int requiredPlayersToStart = 4; 
     public float matchmakingTimeout = 20f; 
 
+    public const int MaxTableSeats = 4;
+    private const int PhantomBotActorBase = 100;
+
     [Header("Bot Tracking")]
     public static List<int> botActorNumbers = new List<int>();
     public Dictionary<int, List<CardData>> botHands = new Dictionary<int, List<CardData>>();
@@ -72,11 +75,269 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     void Update()
     {
-        if (PhotonNetwork.IsMasterClient && gameStarted)
-            EnsureInactivePlayersReplacedByBots();
+        // Instant bot replacement disabled — wait for PlayerTtl (30s) before bot takeover.
+        // if (PhotonNetwork.IsMasterClient && gameStarted)
+        //     EnsureInactivePlayersReplacedByBots();
     }
 
     public bool IsActorBotControlled(int actorNumber) => botActorNumbers.Contains(actorNumber);
+
+    public static int GetActiveHumanPlayerCount()
+    {
+        if (!PhotonNetwork.InRoom)
+            return PhotonNetwork.OfflineMode ? 1 : 0;
+
+        int count = 0;
+        foreach (Player p in PhotonNetwork.PlayerList)
+        {
+            if (!p.IsInactive)
+                count++;
+        }
+        return count;
+    }
+
+    /// <summary>Real (active) humans in room. Bots are not counted.</summary>
+    public static int GetRealPlayerCountInRoom()
+    {
+        int count = GetActiveHumanPlayerCount();
+        if (count < 1 && PhotonNetwork.InRoom)
+            count = 1;
+        return count;
+    }
+
+    /// <summary>Phantom bots needed so real players + bots = 4.</summary>
+    public static int GetRequiredPhantomBotCount()
+    {
+        return Mathf.Max(0, MaxTableSeats - GetRealPlayerCountInRoom());
+    }
+
+    public static bool IsPhantomBotActor(int actorNumber) => actorNumber >= PhantomBotActorBase;
+
+    public List<int> BuildActiveSeatList()
+    {
+        var seats = new List<int>(MaxTableSeats);
+        var used = new HashSet<int>();
+
+        if (PhotonNetwork.InRoom)
+        {
+            foreach (Player p in PhotonNetwork.PlayerList)
+            {
+                if (p.IsInactive) continue;
+                if (used.Add(p.ActorNumber))
+                {
+                    seats.Add(p.ActorNumber);
+                }
+            }
+
+            foreach (int botActor in botActorNumbers)
+            {
+                if (used.Contains(botActor)) continue;
+                if (seats.Count >= MaxTableSeats) break;
+
+                if (used.Add(botActor))
+                {
+                    seats.Add(botActor);
+                }
+            }
+
+            // Fallback: If still under 4, add more phantom bots
+            while (seats.Count < MaxTableSeats)
+            {
+                int nextBotId = PhantomBotActorBase + seats.Count; // Simple unique ID strategy
+                while (used.Contains(nextBotId)) nextBotId++;
+                if (used.Add(nextBotId))
+                {
+                    seats.Add(nextBotId);
+                    if (!botActorNumbers.Contains(nextBotId))
+                        botActorNumbers.Add(nextBotId);
+                }
+            }
+        }
+        else if (PhotonNetwork.OfflineMode)
+        {
+            used.Add(PhotonNetwork.LocalPlayer.ActorNumber);
+            seats.Add(PhotonNetwork.LocalPlayer.ActorNumber);
+            foreach (int botActor in botActorNumbers)
+            {
+                if (used.Add(botActor))
+                    seats.Add(botActor);
+            }
+            while (seats.Count < MaxTableSeats)
+            {
+                 int nextBotId = PhantomBotActorBase + seats.Count;
+                 while (used.Contains(nextBotId)) nextBotId++;
+                 if (used.Add(nextBotId))
+                 {
+                    seats.Add(nextBotId);
+                    if (!botActorNumbers.Contains(nextBotId))
+                        botActorNumbers.Add(nextBotId);
+                 }
+            }
+        }
+
+        Debug.Log($"[MULTIPLAYER SEATS] Real={GetActiveHumanPlayerCount()}, Bots={botActorNumbers.Count}, Total={seats.Count}");
+        return seats;
+    }
+
+    public List<int> GetActiveSeatActorsSorted()
+    {
+        List<int> seats = BuildActiveSeatList();
+        seats.Sort();
+        return seats;
+    }
+
+    public bool IsActiveSeatActor(int actorNumber) => BuildActiveSeatList().Contains(actorNumber);
+
+    public bool TryGetHumanHandOnMaster(int actorNumber, out List<CardData> hand)
+    {
+        hand = null;
+        return humanHandsOnMaster.TryGetValue(actorNumber, out hand) && hand != null && hand.Count > 0;
+    }
+
+    void LogSeatDiagnostics(int activeHumans, List<int> seats)
+    {
+        string actorList = seats.Count > 0 ? string.Join(", ", seats) : "(empty)";
+        string botList = botActorNumbers.Count > 0 ? string.Join(", ", botActorNumbers) : "(empty)";
+
+        Debug.Log(
+            $"[Seat Validation]\n" +
+            $"Real Player Count: {activeHumans}\n" +
+            $"Bot Count: {botActorNumbers.Count}\n" +
+            $"Total Seat Count: {seats.Count}\n" +
+            $"Actor List: {actorList}\n" +
+            $"Bot Actor List: {botList}");
+
+        if (seats.Count != MaxTableSeats)
+            Debug.LogError($"[Seat Validation] Total Seat Count != {MaxTableSeats}. Match must not start until fixed.");
+    }
+
+    /// <summary>Clear old bots, add exactly (4 - realPlayerCount) phantom bots for empty seats.</summary>
+    bool AssignBotsToFillEmptySeats(out List<int> seats, out int realPlayerCount)
+    {
+        realPlayerCount = GetRealPlayerCountInRoom();
+        int requiredBots = Mathf.Max(0, MaxTableSeats - realPlayerCount);
+
+        botActorNumbers.Clear();
+        botHands.Clear();
+        RemoveUnusedPhantomBotHands();
+
+        for (int i = 0; i < requiredBots; i++)
+        {
+            int botID = PhantomBotActorBase + i;
+            if (!botActorNumbers.Contains(botID))
+                botActorNumbers.Add(botID);
+        }
+
+        Debug.Log($"[BotFill] Real players={realPlayerCount} | requiredBots={requiredBots} | formula: {MaxTableSeats}-{realPlayerCount}");
+
+        seats = BuildActiveSeatList();
+        LogSeatDiagnostics(realPlayerCount, seats);
+
+        if (seats.Count == MaxTableSeats)
+            return true;
+
+        TrimExcessPhantomBots();
+        while (botActorNumbers.Count < requiredBots)
+        {
+            int nextId = PhantomBotActorBase + botActorNumbers.Count;
+            if (!botActorNumbers.Contains(nextId))
+                botActorNumbers.Add(nextId);
+        }
+
+        seats = BuildActiveSeatList();
+        LogSeatDiagnostics(realPlayerCount, seats);
+        return seats.Count == MaxTableSeats;
+    }
+
+    void RemoveUnusedPhantomBotHands()
+    {
+        var toRemove = new List<int>();
+        foreach (int key in botHands.Keys)
+        {
+            if (IsPhantomBotActor(key) && !botActorNumbers.Contains(key))
+                toRemove.Add(key);
+        }
+        foreach (int key in toRemove)
+            botHands.Remove(key);
+    }
+
+    void RemovePhantomBotsWhileOverSeatCap()
+    {
+        while (BuildActiveSeatList().Count > MaxTableSeats)
+        {
+            int removed = -1;
+            for (int id = PhantomBotActorBase + MaxTableSeats - 1; id >= PhantomBotActorBase; id--)
+            {
+                if (!botActorNumbers.Contains(id)) continue;
+                removed = id;
+                botActorNumbers.Remove(id);
+                botHands.Remove(id);
+                break;
+            }
+            if (removed < 0) break;
+            Debug.LogWarning($"[BotFill] Trimmed phantom bot {removed} — keeping 4 seats after disconnect takeover.");
+        }
+    }
+
+    void TrimExcessPhantomBots() => RemovePhantomBotsWhileOverSeatCap();
+
+    void ReconcileExcessPhantomBots()
+    {
+        if (!PhotonNetwork.IsMasterClient) return;
+        if (!gameStarted) return;
+
+        int realPlayers = GetRealPlayerCountInRoom();
+        int takeoverBots = 0;
+        foreach (int b in botActorNumbers)
+        {
+            if (IsPhantomBotActor(b)) continue;
+            takeoverBots++;
+        }
+
+        int maxPhantoms = Mathf.Max(0, MaxTableSeats - realPlayers - takeoverBots);
+        var phantomsToRemove = new List<int>();
+        int phantomIndex = 0;
+        foreach (int b in botActorNumbers)
+        {
+            if (!IsPhantomBotActor(b)) continue;
+            if (phantomIndex >= maxPhantoms)
+                phantomsToRemove.Add(b);
+            phantomIndex++;
+        }
+        foreach (int id in phantomsToRemove)
+        {
+            botActorNumbers.Remove(id);
+            botHands.Remove(id);
+            Debug.Log($"[BotFill] Removed excess phantom bot {id} (seat taken by human/takeover).");
+        }
+
+        TrimExcessPhantomBots();
+        DedupeBotActorNumbers();
+        SyncBotsToRoom();
+    }
+
+    void DedupeBotActorNumbers()
+    {
+        var unique = new List<int>();
+        foreach (int botActor in botActorNumbers)
+        {
+            if (!unique.Contains(botActor))
+                unique.Add(botActor);
+        }
+        botActorNumbers.Clear();
+        botActorNumbers.AddRange(unique);
+    }
+
+    static void ApplySyncedBotActorList(int[] bots)
+    {
+        botActorNumbers.Clear();
+        if (bots == null) return;
+        foreach (int botActor in bots)
+        {
+            if (!botActorNumbers.Contains(botActor))
+                botActorNumbers.Add(botActor);
+        }
+    }
 
     void EnsureInactivePlayersReplacedByBots()
     {
@@ -100,6 +361,11 @@ public class DeckManager : MonoBehaviourPunCallbacks
             return;
 
         botActorNumbers.Add(actorNumber);
+        DedupeBotActorNumbers();
+
+        if (!IsPhantomBotActor(actorNumber))
+            RemovePhantomBotsWhileOverSeatCap();
+
         Debug.Log($"🤖 Player {actorNumber} replaced by bot — same seat, hand, and scores preserved.");
 
         EnsureHandCachedForActor(actorNumber);
@@ -115,7 +381,11 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
 
         if (PhotonNetwork.IsMasterClient)
-            SyncBotsToRoom();
+        {
+            ReconcileExcessPhantomBots();
+            List<int> seats = BuildActiveSeatList();
+            LogSeatDiagnostics(GetActiveHumanPlayerCount(), seats);
+        }
 
         if (PlayerProfileSync.Instance != null)
             PlayerProfileSync.Instance.UpdateAllNames();
@@ -207,9 +477,10 @@ public class DeckManager : MonoBehaviourPunCallbacks
             return;
 
         int[] bots = (int[])botsObj;
-        botActorNumbers.Clear();
-        botActorNumbers.AddRange(bots);
-        Debug.Log($"[Sync] Restored {bots.Length} bot seat(s) from room.");
+        ApplySyncedBotActorList(bots);
+        if (PhotonNetwork.IsMasterClient)
+            ReconcileExcessPhantomBots();
+        Debug.Log($"[Sync] Restored {botActorNumbers.Count} bot seat(s) from room.");
     }
 
     [PunRPC]
@@ -436,23 +707,14 @@ public class DeckManager : MonoBehaviourPunCallbacks
             if (PhotonNetwork.IsMasterClient)
                 EnsureHandCachedForActor(otherPlayer.ActorNumber);
 
-            if (otherPlayer.IsInactive)
+            if (PhotonNetwork.IsMasterClient && !otherPlayer.IsInactive)
             {
-                if (PhotonNetwork.IsMasterClient)
-                {
-                    EnsureHandCachedForActor(otherPlayer.ActorNumber);
-                    Debug.Log($"⚠️ Player {otherPlayer.ActorNumber} disconnected — instant bot takeover.");
-                    photonView.RPC("RPC_MarkPlayerAsBot", RpcTarget.All, otherPlayer.ActorNumber);
-                }
-
-                if (PlayerProfileSync.Instance != null)
-                    PlayerProfileSync.Instance.UpdateAllNames();
-            }
-            else if (PhotonNetwork.IsMasterClient)
-            {
-                Debug.Log($"❌ Player {otherPlayer.ActorNumber} left permanently — bot takeover, match continues.");
+                Debug.Log($"❌ Player {otherPlayer.ActorNumber} left permanently (30s over) — bot takeover, match continues.");
                 photonView.RPC("RPC_MarkPlayerAsBot", RpcTarget.All, otherPlayer.ActorNumber);
             }
+
+            if (PlayerProfileSync.Instance != null)
+                PlayerProfileSync.Instance.UpdateAllNames();
         }
         else if (PhotonNetwork.IsMasterClient && !gameStarted)
         {
@@ -469,8 +731,6 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         if (newMasterClient.IsLocal && gameStarted)
         {
-            EnsureInactivePlayersReplacedByBots();
-
             if (IsDealingComplete && TurnManager.Instance != null && PlayerHand.LocalInstance != null)
                 TurnManager.Instance.StartTurn(PlayerHand.LocalInstance.currentTurnActor);
         }
@@ -495,14 +755,16 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         if (!PhotonNetwork.IsMasterClient) return;
 
-        int humanCount = PhotonNetwork.CurrentRoom.PlayerCount;
-        if (humanCount >= requiredPlayersToStart)
+        int humanCount = GetRealPlayerCountInRoom();
+        if (humanCount >= MaxTableSeats)
         {
             if (matchmakingCoroutine != null) { StopCoroutine(matchmakingCoroutine); matchmakingCoroutine = null; }
+            Debug.Log($"[BotFill] Lobby full ({humanCount} real players) — starting with 0 bots.");
             FillBotsAndStart();
         }
         else if (matchmakingCoroutine == null)
         {
+            Debug.Log($"[BotFill] Matchmaking wait started — {humanCount} real player(s), need {MaxTableSeats - humanCount} bot(s) after timeout.");
             matchmakingCoroutine = StartCoroutine(WaitForOpponentRoutine());
         }
     }
@@ -512,12 +774,14 @@ public class DeckManager : MonoBehaviourPunCallbacks
         float timer = matchmakingTimeout;
         while (timer > 0 && !gameStarted && PhotonNetwork.InRoom)
         {
-            int currentPlayers = PhotonNetwork.CurrentRoom.PlayerCount;
-            
+            int currentPlayers = GetRealPlayerCountInRoom();
+            int botsIfStartNow = Mathf.Max(0, MaxTableSeats - currentPlayers);
+
             photonView.RPC("RPC_UpdateMatchmakingUI", RpcTarget.All, currentPlayers, (int)timer);
 
-            if (currentPlayers >= requiredPlayersToStart)
+            if (currentPlayers >= MaxTableSeats)
             {
+                Debug.Log($"[BotFill] {currentPlayers} real players joined — starting with 0 bots.");
                 FillBotsAndStart();
                 yield break;
             }
@@ -527,7 +791,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         if (!gameStarted && PhotonNetwork.InRoom)
         {
-            Debug.Log($"⏰ Matchmaking Timeout! Filling bots for {PhotonNetwork.CurrentRoom.PlayerCount} players.");
+            int realPlayers = GetRealPlayerCountInRoom();
+            int requiredBots = Mathf.Max(0, MaxTableSeats - realPlayers);
+            Debug.Log($"[BotFill] Matchmaking timeout — realPlayers={realPlayers}, adding {requiredBots} bot(s), total seats=4.");
             FillBotsAndStart();
         }
         matchmakingCoroutine = null;
@@ -549,25 +815,49 @@ public class DeckManager : MonoBehaviourPunCallbacks
             Debug.LogWarning("[DeckManager] FillBotsAndStart called but game already started.");
             return;
         }
-        
-        Debug.Log($"🤖 [Bot Mode] Filling bots. Current Player Count: {PhotonNetwork.CurrentRoom.PlayerCount}");
-        gameStarted = true;
-        PhotonNetwork.CurrentRoom.IsOpen = false;
 
-        masterTrackingCounts.Clear();
-        botHands.Clear();
-        humanHandsOnMaster.Clear();
-
-        int botsNeeded = 4 - PhotonNetwork.CurrentRoom.PlayerCount; 
-        botActorNumbers.Clear();
-        for (int i = 0; i < botsNeeded; i++) 
+        if (!PhotonNetwork.InRoom && !PhotonNetwork.OfflineMode)
         {
-            int botID = 100 + i;
-            botActorNumbers.Add(botID);
-            Debug.Log($"🤖 [Bot Mode] Bot Created: Actor {botID}");
+            Debug.LogError("[BotFill] FillBotsAndStart aborted — not in a room.");
+            return;
         }
 
-        Debug.Log("🤖 [Bot Mode] Initializing match via RPC...");
+        if (!PhotonNetwork.IsMasterClient && !PhotonNetwork.OfflineMode)
+        {
+            Debug.LogWarning("[BotFill] FillBotsAndStart ignored on non-master client.");
+            return;
+        }
+
+        masterTrackingCounts.Clear();
+        humanHandsOnMaster.Clear();
+
+        if (!AssignBotsToFillEmptySeats(out List<int> seats, out int realPlayers))
+        {
+            Debug.LogError($"[BotFill] Aborted — could not build 4 seats (real={realPlayers}, bots={botActorNumbers.Count}, seats={seats?.Count ?? 0}).");
+            return;
+        }
+
+        GameStabilityAudit.ValidateSeatCountForMatchStart();
+
+        Debug.Log($"[Matchmaking] Real players: {realPlayers}");
+        Debug.Log($"[Matchmaking] Bots added: {botActorNumbers.Count} [{string.Join(", ", botActorNumbers)}]");
+        Debug.Log($"[Matchmaking] Total seats: {seats.Count}");
+        Debug.Log($"[BotFill] Match ready — realPlayers={realPlayers}, bots={botActorNumbers.Count}, totalSeats={seats.Count}.");
+        gameStarted = true;
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.CurrentRoom.IsOpen = false;
+
+        if (PhotonNetwork.IsMasterClient)
+            SyncBotsToRoom();
+
+        if (photonView == null)
+        {
+            Debug.LogError("[BotFill] photonView missing — cannot RPC_InitializeMatch.");
+            gameStarted = false;
+            return;
+        }
+
+        Debug.Log($"[BotFill] RPC_InitializeMatch — bot actors: [{string.Join(", ", botActorNumbers)}]");
         photonView.RPC("RPC_InitializeMatch", RpcTarget.All, botActorNumbers.ToArray());
 
         if (PlayerProfileSync.Instance != null && botActorNumbers.Count > 0)
@@ -586,22 +876,36 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     void RPC_InitializeMatch(int[] bots)
     {
-        Debug.Log($"🤖 [Bot Mode] RPC Match initialized with {bots.Length} bots.");
-        botActorNumbers.Clear();
-        botActorNumbers.AddRange(bots);
+        ApplySyncedBotActorList(bots);
+        List<int> seats = BuildActiveSeatList();
+        int humans = GetActiveHumanPlayerCount();
+        LogSeatDiagnostics(humans, seats);
+        Debug.Log($"[Seats] Real players: {humans}");
+        Debug.Log($"[Seats] Bots: {botActorNumbers.Count} [{string.Join(", ", botActorNumbers)}]");
+        Debug.Log($"[Seats] Total: {seats.Count}");
+        if (seats.Count != MaxTableSeats)
+            Debug.LogError($"[DeckManager] RPC_InitializeMatch: invalid seat count {seats.Count}, expected {MaxTableSeats}.");
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowGameScene();
+        else
+            NetworkManager.InitializeGameplayScene();
+
+        Debug.Log($"🤖 [Bot Mode] RPC Match initialized with {botActorNumbers.Count} bot actor(s).");
         RPC_ResetAllHands();
     }
 
     [PunRPC]
     void RPC_SyncBotsOnly(int[] bots)
     {
-        Debug.Log($"🤖 [Sync] Bots list synced for reconnect: {bots.Length} bots.");
-        botActorNumbers.Clear();
-        botActorNumbers.AddRange(bots);
+        ApplySyncedBotActorList(bots);
+        if (PhotonNetwork.IsMasterClient)
+            ReconcileExcessPhantomBots();
+        Debug.Log($"🤖 [Sync] Bots list synced for reconnect: {botActorNumbers.Count} bot(s).");
 
         if (PhotonNetwork.IsMasterClient)
         {
-            foreach (int actor in bots)
+            foreach (int actor in botActorNumbers)
                 EnsureHandCachedForActor(actor);
         }
 
@@ -627,6 +931,8 @@ public class DeckManager : MonoBehaviourPunCallbacks
         else if (PhotonNetwork.OfflineMode && PhotonNetwork.IsMasterClient)
         {
             Debug.Log("[Bot Mode] No MatchmakingManager — starting deal directly");
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ShowGameScene();
             StartFullDealingSequence();
         }
 
@@ -642,6 +948,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"[DeckManager] StartFullDealingSequence. Master: {PhotonNetwork.IsMasterClient}, Running: {isDealCoroutineRunning}, Complete: {IsDealingComplete}");
         if (!PhotonNetwork.IsMasterClient || isDealCoroutineRunning || IsDealingComplete) return;
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowGameScene();
+        Debug.Log("[Deal] Started");
         StartCoroutine(FullDealingSequenceRoutine());
     }
 
@@ -674,25 +983,31 @@ public class DeckManager : MonoBehaviourPunCallbacks
         BuildAndShuffleDeck();
         DistributeAllHandsInternal();
 
-        if (ValidateAllHands())
+        List<int> seats = GetActiveSeatActorsSorted();
+        LogSeatDiagnostics(GetActiveHumanPlayerCount(), seats);
+
+        if (seats.Count != MaxTableSeats)
         {
+            Debug.LogError($"[DeckManager] Dealing aborted — seat count {seats.Count}, expected {MaxTableSeats}.");
+        }
+        else if (ValidateAllHands())
+        {
+            AuditHandCounts("AfterDeal");
+            GameStabilityAudit.ValidateTrump("AfterDeal");
             IsDealingComplete = true;
-            
-            List<int> allActors = new List<int>();
-            foreach (Player p in PhotonNetwork.PlayerList) allActors.Add(p.ActorNumber);
-            allActors.AddRange(botActorNumbers);
-            allActors.Sort();
-            
-            int myIdx = allActors.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
-            int starterActor = allActors[(myIdx + 3) % allActors.Count];
+
+            int myIdx = seats.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
+            if (myIdx < 0) myIdx = 0;
+            int starterActor = seats[(myIdx + 3) % MaxTableSeats];
 
             yield return new WaitForSeconds(0.15f);
             Debug.Log($"[DeckManager] Dealing Complete. Starter: {starterActor}");
+            Debug.Log("[Deal] Completed");
             photonView.RPC("RPC_DealingComplete", RpcTarget.All, starterActor);
         }
         else
         {
-            Debug.LogError($"[DeckManager] Hand validation failed! Expected {CardsPerPlayer} cards per player.");
+            Debug.LogError($"[DeckManager] Hand validation failed! Expected {CardsPerPlayer} cards per seat (4 seats).");
         }
         isDealCoroutineRunning = false;
     }
@@ -733,12 +1048,19 @@ public class DeckManager : MonoBehaviourPunCallbacks
         masterTrackingCounts.Clear();
         botHands.Clear();
         humanHandsOnMaster.Clear();
+
+        List<int> seats = GetActiveSeatActorsSorted();
+        if (seats.Count != MaxTableSeats)
+        {
+            Debug.LogError($"[DeckManager] DistributeAllHandsInternal aborted — seat count {seats.Count}, expected {MaxTableSeats}.");
+            return;
+        }
         
         bool isThirteenthMode = GameSettings.Instance != null && GameSettings.Instance.currentMode == GameModeType.ThirteenthCardTrump;
         CardSuit thirteenthTrump = CardSuit.Spades;
 
         int playerIdx = 0;
-        foreach (Player player in PhotonNetwork.PlayerList)
+        foreach (int seatActor in seats)
         {
             int cardsPerPlayer = CardsPerPlayer;
             List<CardData> hand = DrawCards(cardsPerPlayer);
@@ -749,28 +1071,22 @@ public class DeckManager : MonoBehaviourPunCallbacks
                 Debug.Log($"[Mode 2] 13th Card is {hand[cardsPerPlayer - 1].cardRank} of {thirteenthTrump}. Setting as Trump.");
             }
 
-            int[] suits = new int[cardsPerPlayer];
-            int[] ranks = new int[cardsPerPlayer];
-            for (int i = 0; i < cardsPerPlayer; i++) { suits[i] = (int)hand[i].cardSuit; ranks[i] = (int)hand[i].cardRank; }
-            masterTrackingCounts[player.ActorNumber] = cardsPerPlayer;
-            humanHandsOnMaster[player.ActorNumber] = new List<CardData>(hand); // Cache
-            photonView.RPC("RPC_AssignFullHand", RpcTarget.All, player.ActorNumber, suits, ranks);
-            playerIdx++;
-        }
-        
-        foreach (int botActor in botActorNumbers)
-        {
-            int cardsPerPlayer = CardsPerPlayer;
-            List<CardData> hand = DrawCards(cardsPerPlayer);
-            
-            if (isThirteenthMode && playerIdx == 0)
+            if (IsActorBotControlled(seatActor))
             {
-                thirteenthTrump = hand[cardsPerPlayer - 1].cardSuit;
-                Debug.Log($"[Mode 2] (Offline) 13th Card is {hand[cardsPerPlayer - 1].cardRank} of {thirteenthTrump}. Setting as Trump.");
+                botHands[seatActor] = hand;
+                masterTrackingCounts[seatActor] = hand.Count;
+                Debug.Log($"[Bot] Dealt {hand.Count} cards to bot actor {seatActor}");
+            }
+            else
+            {
+                int[] suits = new int[cardsPerPlayer];
+                int[] ranks = new int[cardsPerPlayer];
+                for (int i = 0; i < cardsPerPlayer; i++) { suits[i] = (int)hand[i].cardSuit; ranks[i] = (int)hand[i].cardRank; }
+                masterTrackingCounts[seatActor] = cardsPerPlayer;
+                humanHandsOnMaster[seatActor] = new List<CardData>(hand);
+                photonView.RPC("RPC_AssignFullHand", RpcTarget.All, seatActor, suits, ranks);
             }
 
-            botHands[botActor] = hand;
-            masterTrackingCounts[botActor] = hand.Count;
             playerIdx++;
         }
 
@@ -813,10 +1129,31 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     bool ValidateAllHands()
     {
+        if (masterTrackingCounts.Count != MaxTableSeats)
+            return false;
+
         int expected = CardsPerPlayer;
         foreach (var entry in masterTrackingCounts)
             if (entry.Value != expected) return false;
         return true;
+    }
+
+    public void AuditHandCounts(string source)
+    {
+        int expected = CardsPerPlayer;
+        string taash = TaashRules.IsTwoTaashMode ? "2 Taash (26)" : "1 Taash (13)";
+
+        if (masterTrackingCounts.Count != MaxTableSeats)
+            Debug.LogError($"[Cards] {source} — tracked seats {masterTrackingCounts.Count}/{MaxTableSeats} ({taash})");
+
+        foreach (var entry in masterTrackingCounts)
+        {
+            if (entry.Value != expected)
+                Debug.LogError($"[Cards] {source} — actor {entry.Key} has {entry.Value} cards, expected {expected} ({taash})");
+        }
+
+        if (ValidateAllHands())
+            Debug.Log($"[Cards] {source} — all {MaxTableSeats} seats have {expected} cards ({taash})");
     }
 
     [PunRPC]
@@ -832,6 +1169,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     public void RPC_PlayDealAnimation(int cardsInBatch)
     {
+        GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);
         if (PlayerHand.LocalInstance != null) PlayerHand.LocalInstance.PlayDealAnimationOnly(cardsInBatch);
     }
 

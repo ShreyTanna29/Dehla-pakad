@@ -18,11 +18,13 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
     [Header("Avatar Settings")]
     public Sprite maskSprite;
 
-    [Header("Avatar Components")]
-    private UnityEngine.UI.Image imgMyAvatar;
-    private UnityEngine.UI.Image imgLeftAvatar;
-    private UnityEngine.UI.Image imgTopAvatar;
-    private UnityEngine.UI.Image imgRightAvatar;
+    [Header("Avatar Components (optional — assign in Inspector)")]
+    [SerializeField] UnityEngine.UI.Image imgMyAvatar;
+    [SerializeField] UnityEngine.UI.Image imgLeftAvatar;
+    [SerializeField] UnityEngine.UI.Image imgTopAvatar;
+    [SerializeField] UnityEngine.UI.Image imgRightAvatar;
+    [Tooltip("Root for in-game seat avatars (e.g. game Canvas). Avoids GameObject.Find.")]
+    [SerializeField] Transform gameUiSearchRoot;
 
     void Awake()
     {
@@ -32,12 +34,41 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
         SetupAvatars();
     }
 
+    public void InitializeGameScene()
+    {
+        if (NetworkManager.Instance != null && NetworkManager.Instance.gameCanvasGroup != null)
+            gameUiSearchRoot = NetworkManager.Instance.gameCanvasGroup.transform;
+
+        SetupAvatars();
+        UpdateAllNames();
+        Debug.Log("[GameInit] Player profiles initialized");
+    }
+
     void SetupAvatars()
     {
-        imgMyAvatar = GameObject.Find("You/You_Avatar")?.GetComponent<UnityEngine.UI.Image>();
-        imgLeftAvatar = GameObject.Find("Opponent_Left/Playe2_Avatar")?.GetComponent<UnityEngine.UI.Image>();
-        imgTopAvatar = GameObject.Find("Opponent_Top/Player3_Avatar")?.GetComponent<UnityEngine.UI.Image>();
-        imgRightAvatar = GameObject.Find("Opponent_Right/Playe4_Avatar")?.GetComponent<UnityEngine.UI.Image>();
+        if (gameUiSearchRoot == null && NetworkManager.Instance != null && NetworkManager.Instance.gameCanvasGroup != null)
+            gameUiSearchRoot = NetworkManager.Instance.gameCanvasGroup.transform;
+        if (gameUiSearchRoot == null)
+            gameUiSearchRoot = transform.root;
+        UiSafeLookup.SetSearchRoot(gameUiSearchRoot);
+
+        if (imgMyAvatar == null && UiSafeLookup.TryGetPath("You/You_Avatar", out GameObject myGo))
+            imgMyAvatar = myGo.GetComponent<UnityEngine.UI.Image>();
+        if (imgLeftAvatar == null && UiSafeLookup.TryGetPath("Opponent_Left/Playe2_Avatar", out GameObject leftGo))
+            imgLeftAvatar = leftGo.GetComponent<UnityEngine.UI.Image>();
+        if (imgTopAvatar == null && UiSafeLookup.TryGetPath("Opponent_Top/Player3_Avatar", out GameObject topGo))
+            imgTopAvatar = topGo.GetComponent<UnityEngine.UI.Image>();
+        if (imgRightAvatar == null && UiSafeLookup.TryGetPath("Opponent_Right/Playe4_Avatar", out GameObject rightGo))
+            imgRightAvatar = rightGo.GetComponent<UnityEngine.UI.Image>();
+
+        if (txtMyName == null && UiSafeLookup.TryGetPath("You/You_Name", out GameObject myNameGo))
+            txtMyName = myNameGo.GetComponent<TMP_Text>();
+        if (txtLeftName == null && UiSafeLookup.TryGet("Opponent_Left", out GameObject leftRoot))
+            txtLeftName = leftRoot.GetComponentInChildren<TMP_Text>(true);
+        if (txtTopName == null && UiSafeLookup.TryGet("Opponent_Top", out GameObject topRoot))
+            txtTopName = topRoot.GetComponentInChildren<TMP_Text>(true);
+        if (txtRightName == null && UiSafeLookup.TryGet("Opponent_Right", out GameObject rightRoot))
+            txtRightName = rightRoot.GetComponentInChildren<TMP_Text>(true);
 
         ApplyMask(imgMyAvatar);
         ApplyMask(imgLeftAvatar);
@@ -80,7 +111,12 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
 
     public void UpdateAllNames()
     {
-        if (txtLeftName == null || txtTopName == null || txtRightName == null) return;
+        if (txtLeftName == null || txtTopName == null || txtRightName == null)
+        {
+            SetupAvatars();
+            if (txtLeftName == null || txtTopName == null || txtRightName == null)
+                return;
+        }
 
         if (txtMyName && PhotonNetwork.LocalPlayer != null)
         {

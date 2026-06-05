@@ -11,6 +11,9 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
 {
     public static MatchmakingManager Instance;
 
+    // Global user-cancel flag to block pending Photon callbacks from restarting matchmaking.
+    public bool WasCancelledByUser { get; private set; }
+
     [Header("UI Panels")]
     public CanvasGroup matchmakingPanel;
     public TMP_Text titleText;
@@ -56,6 +59,13 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         }
         else Destroy(gameObject);
 
+        if (cancelButton != null)
+        {
+            // Replace any inspector/scene Cancel bindings with code path that sets the cancel flag.
+            cancelButton.onClick.RemoveAllListeners();
+            cancelButton.onClick.AddListener(OnCancelClicked);
+        }
+
         if (matchmakingPanel != null)
         {
             matchmakingPanel.alpha = 0;
@@ -69,6 +79,7 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
     {
         if (isSearching) return;
         isSearching = true;
+        WasCancelledByUser = false;
 
         Debug.Log("🔍 Matchmaking Started...");
 
@@ -115,7 +126,7 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
     public void StopSearching(bool isMatchFound)
     {
         // For Bots mode or if we were searching, we want the transition
-        if (!isSearching && !isMatchFound) return;
+        if (!isSearching && !isMatchFound && !WasCancelledByUser) return;
         
         // Prevent multiple MatchFoundRoutine calls if already starting
         if (isMatchFound && isMatchFoundRoutineRunning) return;
@@ -132,15 +143,82 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         }
         else
         {
-            HidePanel();
-            if (PhotonNetwork.InRoom) PhotonNetwork.LeaveRoom();
-            
-            GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+            Debug.Log("[Matchmaking] Stopped/Cancelled -> Home Screen");
+
+            HidePanelImmediate();
+
+            if (ModeManager.Instance != null)
+                ModeManager.Instance.CancelPendingMatchmaking();
+
+            if (PhotonNetwork.InRoom)
+                PhotonNetwork.LeaveRoom();
+            else if (PhotonNetwork.InLobby)
+                PhotonNetwork.LeaveLobby();
+
+            if (PhotonNetwork.OfflineMode)
+                PhotonNetwork.OfflineMode = false;
+
+            GameFlowState.SetPhase(GameFlowPhase.Home, true);
+
             if (ModeManager.Instance != null)
             {
-                if (ModeManager.Instance.panelModes != null) ModeManager.Instance.panelModes.SetActive(true);
+                if (ModeManager.Instance.panelModes != null)
+                    ModeManager.Instance.panelModes.SetActive(false);
+
+                if (ModeManager.Instance.panelHomeScreen != null)
+                    ModeManager.Instance.panelHomeScreen.SetActive(true);
+
+                ModeManager.Instance.ApplyHomeScreenButtonColors();
             }
+
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.HideLoading();
+                NetworkManager.Instance.UpdateUIState(true);
+            }
+
+            Debug.Log("[Matchmaking] Cancel clicked -> returned to Home Screen");
         }
+    }
+
+    private void HidePanelImmediate()
+    {
+        if (statusCoroutine != null)
+        {
+            StopCoroutine(statusCoroutine);
+            statusCoroutine = null;
+        }
+
+        if (spawnCoroutine != null)
+        {
+            StopCoroutine(spawnCoroutine);
+            spawnCoroutine = null;
+        }
+
+        if (spinnerTween != null)
+        {
+            spinnerTween.Kill();
+            spinnerTween = null;
+        }
+
+        if (matchmakingPanel != null)
+        {
+            matchmakingPanel.DOKill();
+            matchmakingPanel.transform.DOKill();
+            matchmakingPanel.alpha = 0f;
+            matchmakingPanel.interactable = false;
+            matchmakingPanel.blocksRaycasts = false;
+            matchmakingPanel.gameObject.SetActive(false);
+        }
+
+        if (profileContainer != null)
+            profileContainer.gameObject.SetActive(false);
+
+        if (matchedPlayersContainer != null)
+            matchedPlayersContainer.SetActive(false);
+
+        if (cancelButton != null)
+            cancelButton.gameObject.SetActive(false);
     }
 
     private void HidePanel()
@@ -244,12 +322,8 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
             }
 
             // Immediately show game scene
-            if (NetworkManager.Instance != null && NetworkManager.Instance.gameCanvasGroup != null)
-            {
-                NetworkManager.Instance.gameCanvasGroup.alpha = 1;
-                NetworkManager.Instance.gameCanvasGroup.interactable = true;
-                NetworkManager.Instance.gameCanvasGroup.blocksRaycasts = true;
-            }
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ShowGameScene();
 
             // Immediately start dealing
             if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
@@ -328,7 +402,111 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
 
     public void OnClick_Cancel()
     {
-        StopSearching(false);
+        OnCancelClicked();
+    }
+
+    public void OnCancelClicked()
+    {
+        Debug.Log("[Cancel] Matchmaking cancel clicked -> force Home Screen");
+        WasCancelledByUser = true;
+        isSearching = false;
+        isMatchFoundRoutineRunning = false;
+
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.CancelPendingMatchmaking();
+
+        ForceReturnToHomeFromCancel();
+    }
+
+    private void ForceReturnToHomeFromCancel()
+    {
+        Debug.Log("[Cancel] ForceReturnToHomeFromCancel started");
+
+        // Stop matchmaking coroutines
+        if (statusCoroutine != null)
+        {
+            StopCoroutine(statusCoroutine);
+            statusCoroutine = null;
+        }
+
+        if (spawnCoroutine != null)
+        {
+            StopCoroutine(spawnCoroutine);
+            spawnCoroutine = null;
+        }
+
+        // Kill tweens
+        if (spinnerTween != null)
+        {
+            spinnerTween.Kill();
+            spinnerTween = null;
+        }
+
+        if (matchmakingPanel != null)
+        {
+            matchmakingPanel.DOKill();
+            matchmakingPanel.transform.DOKill();
+            matchmakingPanel.alpha = 0;
+            matchmakingPanel.interactable = false;
+            matchmakingPanel.blocksRaycasts = false;
+            matchmakingPanel.gameObject.SetActive(false);
+        }
+
+        if (profileContainer != null)
+            profileContainer.gameObject.SetActive(false);
+
+        if (matchedPlayersContainer != null)
+            matchedPlayersContainer.SetActive(false);
+
+        if (cancelButton != null)
+            cancelButton.gameObject.SetActive(false);
+
+        // Stop Photon pending flow
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.LeaveRoom();
+        else if (PhotonNetwork.InLobby)
+            PhotonNetwork.LeaveLobby();
+
+        if (PhotonNetwork.OfflineMode)
+            PhotonNetwork.OfflineMode = false;
+
+        // Force state Home
+        GameFlowState.SetPhase(GameFlowPhase.Home, true);
+
+        // Force correct panels
+        if (ModeManager.Instance != null)
+        {
+            if (ModeManager.Instance.panelModes != null)
+                ModeManager.Instance.panelModes.SetActive(false);
+
+            if (ModeManager.Instance.panelHomeScreen != null)
+                ModeManager.Instance.panelHomeScreen.SetActive(true);
+
+            ModeManager.Instance.ApplyHomeScreenButtonColors();
+        }
+
+        // Hide network loading
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.HideLoading();
+            NetworkManager.Instance.UpdateUIState(true);
+        }
+
+        // Hide game scene UI if currently visible
+        GameObject panelGame = GameObject.Find("Panel_Game");
+        if (panelGame == null) panelGame = GameObject.Find("[Panel_Game]");
+        if (panelGame != null)
+            panelGame.SetActive(false);
+
+        GameObject gamePanel = GameObject.Find("GamePanel");
+        if (gamePanel != null)
+            gamePanel.SetActive(false);
+
+        GameObject trumpUI = GameObject.Find("TrumpUI");
+        if (trumpUI != null)
+            trumpUI.SetActive(false);
+
+        Debug.Log("[Cancel] Returned to Home Screen successfully");
     }
 
     void OnApplicationPause(bool paused)
