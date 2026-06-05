@@ -341,10 +341,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
         botActorNumbers.Add(actorNumber);
         DedupeBotActorNumbers();
 
-        if (!IsPhantomBotActor(actorNumber))
-            RemovePhantomBotsWhileOverSeatCap();
-
-        Debug.Log($"🤖 Player {actorNumber} replaced by bot — same seat, hand, and scores preserved.");
+        if (!IsPhantomBotActor(actorNumber)) RemovePhantomBotsWhileOverSeatCap();
 
         EnsureHandCachedForActor(actorNumber);
 
@@ -361,8 +358,8 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.IsMasterClient)
         {
             ReconcileExcessPhantomBots();
-            List<int> seats = BuildActiveSeatList();
-            LogSeatDiagnostics(GetActiveHumanPlayerCount(), seats);
+            if (botHands.TryGetValue(actorNumber, out List<CardData> botH))
+                PersistHandToRoom(actorNumber, botH);
         }
 
         if (PlayerProfileSync.Instance != null)
@@ -378,24 +375,14 @@ public class DeckManager : MonoBehaviourPunCallbacks
     void EnsureHandCachedForActor(int actorNumber)
     {
         if (humanHandsOnMaster.ContainsKey(actorNumber) && humanHandsOnMaster[actorNumber].Count > 0) return;
-
-        if (botHands.TryGetValue(actorNumber, out List<CardData> botHand) && botHand.Count > 0)
-        {
-            if (!IsActorBotControlled(actorNumber))
-            {
-                humanHandsOnMaster[actorNumber] = new List<CardData>(botHand);
-                botHands.Remove(actorNumber);
-            }
-            else
-            {
-                return;
-            }
-        }
+        if (botHands.TryGetValue(actorNumber, out List<CardData> botHand) && botHand.Count > 0) return;
 
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("H" + actorNumber, out object roomHandObj))
         {
             humanHandsOnMaster[actorNumber] = ParseInterleavedHand((int[])roomHandObj);
+            if (IsActorBotControlled(actorNumber))
+                botHands[actorNumber] = new List<CardData>(humanHandsOnMaster[actorNumber]);
         }
 
         if (PhotonNetwork.IsMasterClient &&
@@ -416,6 +403,14 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
         PhotonNetwork.CurrentRoom.SetCustomProperties(
             new ExitGames.Client.Photon.Hashtable { { "H" + actorNumber, interleaved } });
+    }
+
+    static bool TryParseHandProperty(Player player, out List<CardData> hand)
+    {
+        hand = null;
+        if (player == null || !player.CustomProperties.TryGetValue("Hand", out object handObj)) return false;
+        hand = ParseInterleavedHand((int[])handObj);
+        return hand != null && hand.Count > 0;
     }
 
     static List<CardData> ParseInterleavedHand(int[] interleaved)
@@ -527,20 +522,23 @@ public class DeckManager : MonoBehaviourPunCallbacks
         {
             PlayerHand.LocalInstance.RestoreTableCardsFromRoom();
 
+            if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("H" + PhotonNetwork.LocalPlayer.ActorNumber, out object handObj))
+            {
+                int[] interleaved = (int[])handObj;
+                int[] suits = new int[interleaved.Length / 2];
+                int[] ranks = new int[interleaved.Length / 2];
+                for (int i = 0; i < interleaved.Length / 2; i++)
+                {
+                    suits[i] = interleaved[i * 2];
+                    ranks[i] = interleaved[i * 2 + 1];
+                }
+                PlayerHand.LocalInstance.AssignFullHandLocal(PhotonNetwork.LocalPlayer.ActorNumber, suits, ranks);
+            }
+
             if (PhotonNetwork.IsMasterClient)
             {
-                EnsureHandCachedForActor(PhotonNetwork.LocalPlayer.ActorNumber);
-                if (humanHandsOnMaster.TryGetValue(PhotonNetwork.LocalPlayer.ActorNumber, out List<CardData> masterHand))
-                {
-                    int[] suits = new int[masterHand.Count];
-                    int[] ranks = new int[masterHand.Count];
-                    for (int i = 0; i < masterHand.Count; i++)
-                    {
-                        suits[i] = (int)masterHand[i].cardSuit;
-                        ranks[i] = (int)masterHand[i].cardRank;
-                    }
-                    PlayerHand.LocalInstance.AssignFullHandLocal(PhotonNetwork.LocalPlayer.ActorNumber, suits, ranks);
-                }
+                foreach (Player p in PhotonNetwork.PlayerList) EnsureHandCachedForActor(p.ActorNumber);
+                foreach (int bot in botActorNumbers) EnsureHandCachedForActor(bot);
             }
         }
 
@@ -548,30 +546,31 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         yield return new WaitForSeconds(0.6f);
 
-        if (IsDealingComplete && PlayerHand.LocalInstance != null)
+        if (PhotonNetwork.IsMasterClient && IsDealingComplete && PlayerHand.LocalInstance != null)
         {
             int currentActor = PlayerHand.LocalInstance.currentTurnActor;
             PlayerHand.LocalInstance.OnDealingComplete(currentActor);
-            if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
-                TurnManager.Instance.StartTurn(currentActor);
+            if (TurnManager.Instance != null) TurnManager.Instance.StartTurn(currentActor);
         }
     }
 
-    public override void OnLeftRoom()
-    {
-        Debug.Log("[DeckManager] Left Room. Clearing Match State.");
-        ResetMatchState();
-    }
+    public override void OnLeftRoom() { ResetMatchState(); }
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
         if (botActorNumbers.Contains(newPlayer.ActorNumber))
         {
-            Debug.Log($"[DeckManager] Player {newPlayer.ActorNumber} reconnected! Handing control back to Human.");
             if (PhotonNetwork.IsMasterClient)
             {
                 botActorNumbers.Remove(newPlayer.ActorNumber);
                 SyncBotsToRoom();
+
+                if (botHands.TryGetValue(newPlayer.ActorNumber, out List<CardData> bHand))
+                {
+                    humanHandsOnMaster[newPlayer.ActorNumber] = new List<CardData>(bHand);
+                    botHands.Remove(newPlayer.ActorNumber);
+                }
+
                 if (gameStarted && IsDealingComplete)
                     SyncReconnectingPlayer(newPlayer);
             }
@@ -627,13 +626,11 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
             if (otherPlayer.IsInactive)
             {
-                Debug.Log($"⚠️ Player {otherPlayer.ActorNumber} disconnected. Waiting for 30s reconnect...");
                 if (PlayerProfileSync.Instance != null)
                     PlayerProfileSync.Instance.UpdateAllNames();
             }
             else if (PhotonNetwork.IsMasterClient)
             {
-                Debug.Log($"❌ Player {otherPlayer.ActorNumber} left permanently — bot takeover.");
                 photonView.RPC("RPC_MarkPlayerAsBot", RpcTarget.All, otherPlayer.ActorNumber);
             }
         }
@@ -653,7 +650,13 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (newMasterClient.IsLocal && gameStarted)
         {
             if (IsDealingComplete && TurnManager.Instance != null && PlayerHand.LocalInstance != null)
-                TurnManager.Instance.StartTurn(PlayerHand.LocalInstance.currentTurnActor);
+            {
+                int currentTurn = PlayerHand.LocalInstance.currentTurnActor;
+                TurnManager.Instance.StartTurn(currentTurn);
+
+                if (IsActorBotControlled(currentTurn))
+                    PlayerHand.LocalInstance.TriggerBotTurnIfApplicable(currentTurn);
+            }
         }
     }
 
@@ -905,30 +908,15 @@ public class DeckManager : MonoBehaviourPunCallbacks
         DistributeAllHandsInternal();
 
         List<int> seats = GetActiveSeatActorsSorted();
-        LogSeatDiagnostics(GetActiveHumanPlayerCount(), seats);
-
-        if (seats.Count != MaxTableSeats)
+        if (seats.Count == MaxTableSeats)
         {
-            Debug.LogError($"[DeckManager] Dealing aborted — seat count {seats.Count}, expected {MaxTableSeats}.");
-        }
-        else if (ValidateAllHands())
-        {
-            AuditHandCounts("AfterDeal");
-            GameStabilityAudit.ValidateTrump("AfterDeal");
             IsDealingComplete = true;
-
             int myIdx = seats.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
             if (myIdx < 0) myIdx = 0;
             int starterActor = seats[(myIdx + 3) % MaxTableSeats];
 
             yield return new WaitForSeconds(0.15f);
-            Debug.Log($"[DeckManager] Dealing Complete. Starter: {starterActor}");
-            Debug.Log("[Deal] Completed");
             photonView.RPC("RPC_DealingComplete", RpcTarget.All, starterActor);
-        }
-        else
-        {
-            Debug.LogError($"[DeckManager] Hand validation failed! Expected {CardsPerPlayer} cards per seat (4 seats).");
         }
         isDealCoroutineRunning = false;
     }
@@ -996,7 +984,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
             {
                 botHands[seatActor] = hand;
                 masterTrackingCounts[seatActor] = hand.Count;
-                Debug.Log($"[Bot] Dealt {hand.Count} cards to bot actor {seatActor}");
+                PersistHandToRoom(seatActor, hand);
             }
             else
             {
@@ -1005,7 +993,6 @@ public class DeckManager : MonoBehaviourPunCallbacks
                 for (int i = 0; i < cardsPerPlayer; i++) { suits[i] = (int)hand[i].cardSuit; ranks[i] = (int)hand[i].cardRank; }
                 masterTrackingCounts[seatActor] = cardsPerPlayer;
                 humanHandsOnMaster[seatActor] = new List<CardData>(hand);
-                PersistHandToRoom(seatActor, hand);
                 photonView.RPC("RPC_AssignFullHand", RpcTarget.All, seatActor, suits, ranks);
             }
 
@@ -1034,6 +1021,19 @@ public class DeckManager : MonoBehaviourPunCallbacks
             }
             masterTrackingCounts[actorNum] = hand.Count;
             PersistHandToRoom(actorNum, hand);
+        }
+        else if (botHands.TryGetValue(actorNum, out List<CardData> bHand))
+        {
+            for (int i = 0; i < bHand.Count; i++)
+            {
+                if (bHand[i].cardSuit == suit && bHand[i].cardRank == rank)
+                {
+                    bHand.RemoveAt(i);
+                    break;
+                }
+            }
+            masterTrackingCounts[actorNum] = bHand.Count;
+            PersistHandToRoom(actorNum, bHand);
         }
     }
 
@@ -1087,12 +1087,6 @@ public class DeckManager : MonoBehaviourPunCallbacks
     public void RPC_AssignFullHand(int targetActor, int[] suitIndices, int[] rankIndices)
     {
         if (PlayerHand.LocalInstance != null)
-        {
             PlayerHand.LocalInstance.AssignFullHandLocal(targetActor, suitIndices, rankIndices);
-            if (botActorNumbers.Contains(targetActor))
-            {
-                Debug.Log($"🤖 [Bot Mode] Bot Received Cards: Actor {targetActor}");
-            }
-        }
     }
 }

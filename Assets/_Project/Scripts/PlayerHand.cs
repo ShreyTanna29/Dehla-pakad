@@ -161,21 +161,28 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         botRetryKeys.Clear();
     }
 
+    void ClearAllTableCardClones()
+    {
+        Transform tableCenter = GetTableCenterTransform();
+        if (tableCenter == null) return;
+
+        foreach (Transform child in tableCenter)
+        {
+            if (child.GetComponent<CardDisplay>() == null) continue;
+            child.DOKill();
+            Object.Destroy(child.gameObject);
+        }
+    }
+
     public void RestoreTableCardsFromRoom()
     {
         if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("TC", out object tcObj))
         {
             int[] interleaved = (int[])tcObj;
-            
-            Transform tableCenter = GetTableCenterTransform();
-            if (tableCenter != null)
-            {
-                foreach (Transform child in tableCenter)
-                {
-                    if (child.gameObject.name.Contains("(Clone)")) Object.Destroy(child.gameObject);
-                }
-            }
+
+            ClearAllTableCardClones();
             currentTrick.Clear();
+            actorsPlayedThisTrick.Clear();
 
             for (int i = 0; i < interleaved.Length / 3; i++)
             {
@@ -183,11 +190,15 @@ public class PlayerHand : MonoBehaviourPunCallbacks
                 int suit = interleaved[i * 3 + 1];
                 int rank = interleaved[i * 3 + 2];
                 SpawnCardOnTableLocal(actor, suit, rank);
+                actorsPlayedThisTrick.Add(actor);
             }
 
             if (isDealingComplete)
             {
-                ApplyRules(PhotonNetwork.LocalPlayer.ActorNumber == currentTurnActor);
+                if (currentTrick.Count >= 4 && PhotonNetwork.IsMasterClient)
+                    ProcessTurn(currentTurnActor);
+                else
+                    ApplyRules(PhotonNetwork.LocalPlayer.ActorNumber == currentTurnActor);
             }
         }
     }
@@ -438,7 +449,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         _cutsInMatch = 0;
         cut1TrumpAlreadySet = false;
         totalTricksPlayed = 0;
-ClearAllTableCardClones();
+        ClearAllTableCardClones();
         currentTrick.Clear();
         lastTrickWinnerActor = -1;
         _localCurrentTurnActor = -1;
@@ -593,19 +604,6 @@ ClearAllTableCardClones();
         EndTurnCardVisuals();
     }
 
-    void ClearAllTableCardClones()
-    {
-        Transform tableCenter = GetTableCenterTransform();
-        if (tableCenter == null) return;
-
-        foreach (Transform child in tableCenter)
-        {
-            if (!child.gameObject.name.Contains("(Clone)")) continue;
-            child.DOKill();
-            Object.Destroy(child.gameObject);
-        }
-    }
-
     static void DestroyTrickCardObjects(List<TrickCard> trickCards)
     {
         if (trickCards == null) return;
@@ -618,6 +616,30 @@ ClearAllTableCardClones();
         }
     }
 
+    public override void OnPlayerLeftRoom(Player otherPlayer)
+    {
+        if (!isDealingComplete || currentTurnActor != otherPlayer.ActorNumber || !otherPlayer.IsInactive)
+            return;
+
+        if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
+        {
+            TurnManager.Instance.StopTimer();
+            Debug.Log($"[Game Paused] Player {otherPlayer.ActorNumber} is offline. Waiting for reconnect.");
+        }
+    }
+
+    public override void OnPlayerEnteredRoom(Player newPlayer)
+    {
+        if (!isDealingComplete || currentTurnActor != newPlayer.ActorNumber)
+            return;
+
+        if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
+        {
+            TurnManager.Instance.StartTurn(currentTurnActor);
+            Debug.Log($"[Game Resumed] Player {newPlayer.ActorNumber} reconnected. Turn resumed.");
+        }
+    }
+
     void ProcessTurn(int actorNumber)
     {
         if (!IsDealingReadyForPlay()) return;
@@ -625,6 +647,27 @@ ClearAllTableCardClones();
         if (GameFlowState.Current != GameFlowPhase.InGame && GameFlowState.Current != GameFlowPhase.InRoom) return;
 
         int trickCount = currentTrick?.Count ?? 0;
+
+        if (trickCount >= 4)
+        {
+            if (PhotonNetwork.IsMasterClient && !_determineTrickRoutineRunning && !isResolvingTrick)
+            {
+                isResolvingTrick = true;
+                _determineTrickCoroutine = StartCoroutine(DetermineTrickWinnerRoutine());
+            }
+            return;
+        }
+
+        if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber))
+        {
+            if (PhotonNetwork.IsMasterClient)
+            {
+                int nextActor = GetNextTurnActor(actorNumber);
+                currentTurnActor = nextActor;
+                ProcessTurn(nextActor);
+            }
+            return;
+        }
 
         if (_lastProcessTurnActor == actorNumber && _lastProcessTurnTrickCount == trickCount && trickCount < 4)
         {
@@ -641,7 +684,18 @@ ClearAllTableCardClones();
         if (PhotonNetwork.IsMasterClient) currentTurnActor = actorNumber;
 
         if (TurnManager.Instance != null && PhotonNetwork.IsMasterClient)
-            TurnManager.Instance.StartTurn(actorNumber);
+        {
+            Player turnPlayer = PhotonNetwork.CurrentRoom.GetPlayer(actorNumber);
+            if (turnPlayer != null && turnPlayer.IsInactive)
+            {
+                TurnManager.Instance.StopTimer();
+                Debug.Log($"[Game Paused] Player {actorNumber} is offline. Waiting 30s for reconnect...");
+            }
+            else
+            {
+                TurnManager.Instance.StartTurn(actorNumber);
+            }
+        }
 
         bool isMyTurn = (PhotonNetwork.LocalPlayer.ActorNumber == actorNumber);
         CardInteract.canPlayCards = isMyTurn && !IsGameplayInputBlocked && !ActorInCurrentTrick(actorNumber) && !actorsPlayedThisTrick.Contains(actorNumber);
@@ -871,11 +925,7 @@ ClearAllTableCardClones();
         LockTrickPlayInput();
 
         if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
-        {
             DeckManager.Instance.UpdateCachedHandOnMaster(senderActorNum, (CardSuit)suitIndex, (CardRank)rankIndex);
-            if (IsBotActor(senderActorNum) && DeckManager.Instance.botHands.TryGetValue(senderActorNum, out List<CardData> botHand))
-                RemoveOneCardFromHand(botHand, (CardSuit)suitIndex, (CardRank)rankIndex);
-        }
 
         int seatIndex = GetSeatIndex(senderActorNum);
         Transform center = GetTableCenterTransform();
@@ -948,7 +998,7 @@ ClearAllTableCardClones();
         }
 
         List<TrickCard> trickSnapshot = new List<TrickCard>(currentTrick);
-        yield return new WaitForSeconds(1.5f);
+        yield return new WaitForSeconds(1.2f);
 
         if (trickSnapshot.Count < 4)
         {
@@ -978,8 +1028,14 @@ ClearAllTableCardClones();
 
         foreach (TrickCard tc in trickSnapshot)
         {
-            if (tc.cardObject != null)
-                tc.cardObject.transform.DOMove(winnerTransform.position, 0.4f).SetEase(Ease.InBack);
+            if (tc.cardObject == null) continue;
+
+            tc.cardObject.transform.DOMove(winnerTransform.position, 0.45f).SetEase(Ease.InCubic);
+            tc.cardObject.transform.DOScale(Vector3.zero, 0.45f).SetEase(Ease.InBack);
+
+            CanvasGroup cg = tc.cardObject.GetComponent<CanvasGroup>();
+            if (cg == null) cg = tc.cardObject.AddComponent<CanvasGroup>();
+            cg.DOFade(0, 0.4f);
         }
 
         yield return new WaitForSeconds(0.5f);
@@ -995,7 +1051,6 @@ ClearAllTableCardClones();
         isResolvingTrick = false;
         _determineTrickRoutineRunning = false;
         _determineTrickCoroutine = null;
-        Debug.Log("[Trick] Cleanup complete");
 
         if (PhotonNetwork.IsMasterClient)
             SyncCurrentTrickToRoom();
@@ -1006,11 +1061,9 @@ ClearAllTableCardClones();
         if (PhotonNetwork.IsMasterClient)
         {
             totalTricksPlayed++;
-            Debug.Log($"[Trick] Count: {totalTricksPlayed}/{tricksToWin}");
 
             if (totalTricksPlayed >= tricksToWin)
             {
-                Debug.Log("Game Finished");
                 GameFlowState.SetPhase(GameFlowPhase.GameFinished, forceRecovery: true);
                 botActorsThinking.Clear();
                 CardInteract.canPlayCards = false;
@@ -1022,7 +1075,6 @@ ClearAllTableCardClones();
             }
 
             GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
-            Debug.Log($"[Trick] Winner actor {lastTrickWinnerActor} starts next trick.");
             ProcessTurn(lastTrickWinnerActor);
         }
         else
@@ -1183,10 +1235,10 @@ ClearAllTableCardClones();
         return -(int)rank; // Ace highest if enum Two=0 ... Ace=12
     }
 
-    void RefreshHandUI(bool animate = true)
+    void RefreshHandUI(bool animate = true, bool force = false)
     {
         if (handAreaTransform == null) return;
-        if (IsDealAnimationRunning || !isDealingComplete)
+        if (!force && (IsDealAnimationRunning || !isDealingComplete))
             return;
 
         myCards = myCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
@@ -1194,6 +1246,8 @@ ClearAllTableCardClones();
         if (hlg != null) hlg.enabled = false;
 
         float handWidthPx = HandLayoutHelper.GetHandAreaWidth(handAreaTransform as RectTransform);
+        if (handWidthPx < 100f) handWidthPx = 1000f;
+
         float prefabWidth = HandLayoutHelper.GetPrefabCardWidth(cardUIPrefab);
         HandLayoutConfig layout = HandLayoutHelper.GetLayout(myCards.Count, handWidthPx, prefabWidth);
         float startX = HandLayoutHelper.ComputeStartX(layout, myCards.Count);
@@ -1205,8 +1259,9 @@ ClearAllTableCardClones();
             GameObject newCardUI = Object.Instantiate(cardUIPrefab, handAreaTransform);
             newCardUI.GetComponent<CardDisplay>()?.SetCardData(myCards[i]);
             RectTransform rt = newCardUI.GetComponent<RectTransform>();
+            rt.localScale = Vector3.one;
             float targetX = startX + i * (layout.prefabCardWidth + layout.spacing);
-            if (animate) rt.anchoredPosition = new Vector2(targetX, -12f);
+            if (animate) rt.anchoredPosition = new Vector2(targetX, -25f);
             else rt.anchoredPosition = new Vector2(targetX, 0f);
         }
 
@@ -1233,8 +1288,8 @@ ClearAllTableCardClones();
         for (int i = 0; i < suitIndices.Length; i++)
             myCards.Add(new CardData { cardSuit = (CardSuit)suitIndices[i], cardRank = (CardRank)rankIndices[i] });
 
-        if (isDealingComplete)
-            RefreshHandUI(animate: false);
+        if (!IsDealAnimationRunning && !_isDealAnimRunning)
+            RefreshHandUI(animate: false, force: true);
     }
 
     public void OnDealingComplete(int starterActor)
@@ -1263,15 +1318,22 @@ ClearAllTableCardClones();
         while (IsDealAnimationRunning || _isDealAnimRunning)
             yield return null;
 
-        yield return new WaitForSeconds(DealFlyDuration + 0.1f);
-
-        if (handAreaTransform != null)
-            ClearHandUI();
-
-        _handRevealRunning = true;
-        yield return AnimateHandSpreadReveal();
-        _handRevealRunning = false;
         isDealingComplete = true;
+
+        if (!matchInProgress)
+        {
+            yield return new WaitForSeconds(DealFlyDuration + 0.1f);
+            if (handAreaTransform != null)
+                ClearHandUI();
+
+            _handRevealRunning = true;
+            yield return AnimateHandSpreadReveal();
+            _handRevealRunning = false;
+        }
+        else
+        {
+            RefreshHandUI(animate: false, force: true);
+        }
 
         ShowOpponentFansWithAnimation();
         yield return new WaitForSeconds(turnDelay);

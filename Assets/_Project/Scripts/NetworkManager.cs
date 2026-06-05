@@ -68,8 +68,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void Start()
     {
-        // 🚀 Start with Home UI (after login is handled by GoogleLogin)
-        UpdateUIState(true); 
+        // Home UI is shown only after GoogleLogin confirms a valid Firebase session
+        HideHomeUntilLogin();
 
         EnsureLoadingDoesNotBlockUI();
 
@@ -276,6 +276,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         float timeLeft = DisconnectAbandonHomeSeconds;
         while (timeLeft > 0 && isAttemptingRejoin)
         {
+            if (reconnectionLostStatusText != null)
+                reconnectionLostStatusText.text = $"Internet lost.\nReconnecting... please wait ({Mathf.CeilToInt(timeLeft)}s)";
+
             yield return new WaitForSeconds(1f);
             timeLeft -= 1f;
         }
@@ -286,7 +289,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             isAttemptingRejoin = false;
             ShowReconnectionLostPanel("Connection lost permanently.\nReturning to Home...");
             yield return new WaitForSeconds(2.5f);
-            Debug.Log("[Photon] Match abandoned by local player — leaving room and returning home.");
             LeaveMatchAndReturnHome();
         }
 
@@ -310,7 +312,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         StopDisconnectAbandonCoroutine();
         GameFlowState.SetPhase(GameFlowPhase.Disconnected, forceRecovery: true);
         CleanUpLocalNetworkPlayer();
-        ShowReconnectionLostPanel("Internet lost.\nReconnecting... please wait (30s)");
+        ShowReconnectionLostPanel($"Internet lost.\nReconnecting... please wait ({DisconnectAbandonHomeSeconds}s)");
         isAttemptingRejoin = true;
         _disconnectAbandonCoroutine = StartCoroutine(AbandonMatchAfterDisconnectRoutine());
         StartCoroutine(AutoReconnectRoutine());
@@ -345,6 +347,17 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         
         if (playOnlineButton != null) playOnlineButton.interactable = false;
         PhotonNetwork.ConnectUsingSettings();
+    }
+
+    public void HideHomeUntilLogin()
+    {
+        if (homeCanvasGroup == null) return;
+
+        homeCanvasGroup.DOKill();
+        homeCanvasGroup.alpha = 0f;
+        homeCanvasGroup.interactable = false;
+        homeCanvasGroup.blocksRaycasts = false;
+        homeCanvasGroup.gameObject.SetActive(false);
     }
 
     public void UpdateUIState(bool isHome)
@@ -706,18 +719,16 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         isAttemptingRejoin = false;
 
         bool hasExistingPlayer = false;
-        PlayerHand[] allHands = Object.FindObjectsByType<PlayerHand>(FindObjectsSortMode.None);
-        foreach (var hand in allHands)
+        foreach (var view in PhotonNetwork.PhotonViews)
         {
-            if (hand.photonView != null && hand.photonView.IsMine)
+            if (view.IsMine && view.gameObject.name.Contains("NetworkPlayer"))
             {
-                PlayerHand.LocalInstance = hand;
                 hasExistingPlayer = true;
                 break;
             }
         }
 
-        if (!hasExistingPlayer && PlayerHand.LocalInstance == null)
+        if (!hasExistingPlayer)
             PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
 
         if (DeckManager.Instance != null)

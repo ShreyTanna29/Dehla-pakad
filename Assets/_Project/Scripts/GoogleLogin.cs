@@ -27,7 +27,6 @@ public class GoogleLogin : MonoBehaviour
     private GoogleSignInConfiguration configuration;
     private bool isFirebaseReady = false;
 
-    // 🚀 Configuration Constants
     private const string WEB_CLIENT_ID = "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com";
 
     private void Awake()
@@ -35,9 +34,9 @@ public class GoogleLogin : MonoBehaviour
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
 
-        // Initial UI State
-        if (loginPanel != null) loginPanel.SetActive(true);
-        if (homePanel != null) homePanel.SetActive(false);
+        ShowLoginPanel();
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.HideHomeUntilLogin();
     }
 
     void Start()
@@ -71,20 +70,28 @@ public class GoogleLogin : MonoBehaviour
                 auth = FirebaseAuth.DefaultInstance;
                 isFirebaseReady = true;
                 GoogleSignIn.Configuration = configuration;
-                
+
                 if (googleSignInButton != null)
                     googleSignInButton.interactable = true;
 
-                // Check for existing session
-                if (auth.CurrentUser != null)
+                FirebaseUser currentUser = auth.CurrentUser;
+                if (currentUser != null)
                 {
-                    OnFirebaseLoginFinished(Task.FromResult(auth.CurrentUser));
+                    OnFirebaseLoginFinished(Task.FromResult(currentUser));
+                }
+                else
+                {
+                    ShowLoginPanel();
+                    if (GoogleSignIn.DefaultInstance != null)
+                        GoogleSignIn.DefaultInstance.SignOut();
+                    UpdateStatus("Ready to Login");
                 }
             }
             else
             {
                 string error = "Firebase Error: " + status;
                 UpdateStatus(error);
+                ShowLoginPanel();
             }
         });
     }
@@ -169,17 +176,23 @@ public class GoogleLogin : MonoBehaviour
         {
             UpdateStatus("Firebase Error");
             Debug.LogError("❌ Firebase Auth Failed: " + task.Exception);
+            ShowLoginPanel();
             return;
         }
 
         if (task.IsCanceled)
         {
             UpdateStatus("Firebase Canceled");
+            ShowLoginPanel();
             return;
         }
 
         FirebaseUser user = task.Result;
-        if (user == null) return;
+        if (user == null)
+        {
+            ShowLoginPanel();
+            return;
+        }
 
         CompleteLogin(user);
     }
@@ -209,10 +222,25 @@ public class GoogleLogin : MonoBehaviour
         }
     }
 
-    private void TransitionToHome()
+    void ShowLoginPanel()
+    {
+        if (loginPanel != null) loginPanel.SetActive(true);
+        if (homePanel != null) homePanel.SetActive(false);
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.HideHomeUntilLogin();
+    }
+
+    void ShowHomePanel()
     {
         if (loginPanel != null) loginPanel.SetActive(false);
         if (homePanel != null) homePanel.SetActive(true);
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.UpdateUIState(true);
+    }
+
+    private void TransitionToHome()
+    {
+        ShowHomePanel();
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
@@ -266,9 +294,7 @@ public class GoogleLogin : MonoBehaviour
         if (auth != null) auth.SignOut();
         if (GoogleSignIn.DefaultInstance != null) GoogleSignIn.DefaultInstance.SignOut();
 
-        if (loginPanel != null) loginPanel.SetActive(true);
-        if (homePanel != null) homePanel.SetActive(false);
-
+        ShowLoginPanel();
         UpdateStatus("Signed Out");
         Debug.Log("👋 User Signed Out");
     }
