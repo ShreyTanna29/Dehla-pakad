@@ -462,12 +462,70 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         Debug.Log($"[Photon] Joined Room | {PhotonNetwork.CurrentRoom?.Name} | Players: {PhotonNetwork.CurrentRoom?.PlayerCount}/4");
-        GameFlowState.SetPhase(GameFlowPhase.InRoom);
 
-        if (!PhotonNetwork.IsMasterClient)
-            SyncModesFromRoom();
-        else
+        if (PhotonNetwork.IsMasterClient)
+        {
             SaveSelectedModes();
+        }
+        else
+        {
+            SyncModesFromRoom();
+
+            PhotonView pv = GetComponent<PhotonView>();
+            if (pv != null)
+                pv.RPC(nameof(RPC_RequestGameStateSync), RpcTarget.MasterClient);
+        }
+
+        bool matchInProgress = PhotonNetwork.CurrentRoom != null
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
+            && (bool)gs;
+
+        GameFlowState.SetPhase(
+            matchInProgress ? GameFlowPhase.InGame : GameFlowPhase.InRoom,
+            forceRecovery: matchInProgress);
+    }
+
+    [PunRPC]
+    void RPC_RequestGameStateSync(PhotonMessageInfo info)
+    {
+        if (!PhotonNetwork.IsMasterClient || info.Sender == null) return;
+
+        PhotonView pv = GetComponent<PhotonView>();
+        if (pv == null) return;
+
+        int trickMode = currentTrickMode;
+        int trumpMode = currentTrumpMode;
+        if (PhotonNetwork.CurrentRoom != null)
+        {
+            if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("TM"))
+                trickMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["TM"];
+            if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("RM"))
+                trumpMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["RM"];
+        }
+
+        pv.RPC(nameof(RPC_ReceiveGameStateSync), info.Sender, trickMode, trumpMode);
+    }
+
+    [PunRPC]
+    void RPC_ReceiveGameStateSync(int trickMode, int trumpMode)
+    {
+        currentTrickMode = trickMode;
+        currentTrumpMode = trumpMode;
+        ApplyModesToGameSettings();
+        UpdateModeSelectionUIColors();
+
+        if (TrumpManager.Instance != null)
+            TrumpManager.ApplyTrumpForCurrentGameMode(false);
+
+        Debug.Log($"[Sync] Mode synced: TM={trickMode} RM={trumpMode} -> {GameSettings.Instance?.currentMode}");
+
+        bool matchInProgress = PhotonNetwork.CurrentRoom != null
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
+            && (bool)gs;
+
+        GameFlowState.SetPhase(
+            matchInProgress ? GameFlowPhase.InGame : GameFlowPhase.InRoom,
+            forceRecovery: matchInProgress);
     }
 
     void SyncModesFromRoom()

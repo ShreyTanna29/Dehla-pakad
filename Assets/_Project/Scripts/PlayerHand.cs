@@ -15,6 +15,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     // For local human play-card visuals: animate from the exact clicked card world position.
     private bool _hasPendingLocalPlayStart;
+    private Coroutine _unlockPlayFailsafeCoroutine;
     private Vector3 _pendingLocalPlayStartWorldPos;
     private int _pendingLocalPlaySuitIndex;
     private int _pendingLocalPlayRankIndex;
@@ -46,8 +47,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     public int currentTurnActor 
     { 
         get {
-            // Master is authoritative — room CTA can lag behind SetCustomProperties.
-            if (PhotonNetwork.IsMasterClient && _localCurrentTurnActor >= 0)
+            if (_localCurrentTurnActor >= 0)
                 return _localCurrentTurnActor;
             if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("CTA", out object actor))
                 return (int)actor;
@@ -179,27 +179,36 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("TC", out object tcObj))
         {
             int[] interleaved = (int[])tcObj;
-
             ClearAllTableCardClones();
             currentTrick.Clear();
             actorsPlayedThisTrick.Clear();
 
             for (int i = 0; i < interleaved.Length / 3; i++)
             {
-                int actor = interleaved[i * 3];
-                int suit = interleaved[i * 3 + 1];
-                int rank = interleaved[i * 3 + 2];
-                SpawnCardOnTableLocal(actor, suit, rank);
-                actorsPlayedThisTrick.Add(actor);
+                SpawnCardOnTableLocal(interleaved[i * 3], interleaved[i * 3 + 1], interleaved[i * 3 + 2]);
+                actorsPlayedThisTrick.Add(interleaved[i * 3]);
             }
 
             if (isDealingComplete)
             {
+                RefreshHandUI(false, true);
+
                 if (currentTrick.Count >= 4 && PhotonNetwork.IsMasterClient)
                     ProcessTurn(currentTurnActor);
                 else
                     ApplyRules(PhotonNetwork.LocalPlayer.ActorNumber == currentTurnActor);
             }
+        }
+    }
+
+    static Vector3 GetOffsetForSeat(int seatIndex)
+    {
+        switch (seatIndex)
+        {
+            case 0: return new Vector3(0, -120f, 0);
+            case 1: return new Vector3(-180f, 0, 0);
+            case 2: return new Vector3(0, 120f, 0);
+            default: return new Vector3(180f, 0, 0);
         }
     }
 
@@ -217,8 +226,8 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         Transform center = GetTableCenterTransform();
         GameObject cardObj = Object.Instantiate(cardUIPrefab, GetSeatSpawnPosition(seatIndex), Quaternion.identity, center);
         cardObj.GetComponent<CardDisplay>()?.SetCardData(new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex });
-        Vector3 offsetPos = seatIndex == 0 ? new Vector3(0, -120f, 0) : seatIndex == 1 ? new Vector3(-180f, 0, 0) : seatIndex == 2 ? new Vector3(0, 120f, 0) : new Vector3(180f, 0, 0);
-        
+        Vector3 offsetPos = GetOffsetForSeat(seatIndex);
+
         cardObj.transform.localPosition = offsetPos;
         cardObj.transform.localRotation = Quaternion.identity;
 
@@ -250,31 +259,35 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     private void HandleTrumpModeAfterCardAdded(CardData playedCard, int actorNumber)
     {
-        if (GameSettings.Instance == null) return;
-        if (currentTrick == null) return;
-        if (currentTrick.Count < 2) return;
+        if (GameSettings.Instance == null || currentTrick == null || currentTrick.Count < 2) return;
 
         GameModeType mode = GameSettings.Instance.currentMode;
         CardSuit ledSuit = currentTrick[0].suit;
-
         bool isCut = playedCard.cardSuit != ledSuit;
-        if (!isCut) return;
+
+        if (!isCut || playedCard.cardSuit == currentTrumpSuit) return;
 
         if (mode == GameModeType.Cut1Trump)
         {
             if (cut1TrumpAlreadySet) return;
             cut1TrumpAlreadySet = true;
-            if (PhotonNetwork.IsMasterClient && TrumpManager.Instance != null)
-                TrumpManager.Instance.SetTrumpSuit(playedCard.cardSuit, true, true);
-            PlayerHand.currentTrumpSuit = playedCard.cardSuit;
-            PlayerHand.isTrumpRevealed = true;
+            ApplyTrumpChange(playedCard.cardSuit);
         }
         else if (mode == GameModeType.Cut2Trump)
         {
-            if (PhotonNetwork.IsMasterClient && TrumpManager.Instance != null)
-                TrumpManager.Instance.SetTrumpSuit(playedCard.cardSuit, true, true);
-            PlayerHand.currentTrumpSuit = playedCard.cardSuit;
-            PlayerHand.isTrumpRevealed = true;
+            ApplyTrumpChange(playedCard.cardSuit);
+        }
+    }
+
+    void ApplyTrumpChange(CardSuit newSuit)
+    {
+        currentTrumpSuit = newSuit;
+        isTrumpRevealed = true;
+
+        if (TrumpManager.Instance != null)
+        {
+            bool showPopup = PhotonNetwork.IsMasterClient;
+            TrumpManager.Instance.SetTrumpSuit(newSuit, showPopup, true);
         }
     }
 
@@ -442,6 +455,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
             StopCoroutine(_determineTrickCoroutine);
             _determineTrickCoroutine = null;
         }
+        StopUnlockPlayFailsafe();
         _determineTrickRoutineRunning = false;
         isResolvingTrick = false;
         isCleaningTable = false;
@@ -622,22 +636,38 @@ public class PlayerHand : MonoBehaviourPunCallbacks
             return;
 
         if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
-        {
             TurnManager.Instance.StopTimer();
-            Debug.Log($"[Game Paused] Player {otherPlayer.ActorNumber} is offline. Waiting for reconnect.");
-        }
     }
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
-        if (!isDealingComplete || currentTurnActor != newPlayer.ActorNumber)
-            return;
+        if (PhotonNetwork.IsMasterClient && photonView != null)
+            photonView.RPC("RPC_SyncGameState", newPlayer, currentTurnActor, isDealingComplete);
 
-        if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
-        {
+        if (isDealingComplete && currentTurnActor == newPlayer.ActorNumber
+            && PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
             TurnManager.Instance.StartTurn(currentTurnActor);
-            Debug.Log($"[Game Resumed] Player {newPlayer.ActorNumber} reconnected. Turn resumed.");
+    }
+
+    [PunRPC]
+    public void RPC_SyncGameState(int turnActor, bool dealingDone)
+    {
+        if (LocalInstance != null && LocalInstance != this)
+        {
+            LocalInstance.RPC_SyncGameState(turnActor, dealingDone);
+            return;
         }
+
+        currentTurnActor = turnActor;
+        isDealingComplete = dealingDone;
+
+        RefreshHandUI(false, true);
+
+        bool isMyTurn = PhotonNetwork.LocalPlayer.ActorNumber == currentTurnActor;
+        CardInteract.canPlayCards = isMyTurn;
+        ApplyRules(isMyTurn);
+
+        Debug.Log($"[Sync] Game state synced. My Turn: {isMyTurn}");
     }
 
     void ProcessTurn(int actorNumber)
@@ -681,25 +711,24 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         if (actorNumber == _lastHandledTurnActor && !PhotonNetwork.IsMasterClient) return;
         _lastHandledTurnActor = actorNumber;
 
-        if (PhotonNetwork.IsMasterClient) currentTurnActor = actorNumber;
+        currentTurnActor = actorNumber;
 
         if (TurnManager.Instance != null && PhotonNetwork.IsMasterClient)
         {
             Player turnPlayer = PhotonNetwork.CurrentRoom.GetPlayer(actorNumber);
             if (turnPlayer != null && turnPlayer.IsInactive)
-            {
                 TurnManager.Instance.StopTimer();
-                Debug.Log($"[Game Paused] Player {actorNumber} is offline. Waiting 30s for reconnect...");
-            }
             else
-            {
                 TurnManager.Instance.StartTurn(actorNumber);
-            }
         }
 
         bool isMyTurn = (PhotonNetwork.LocalPlayer.ActorNumber == actorNumber);
-        CardInteract.canPlayCards = isMyTurn && !IsGameplayInputBlocked && !ActorInCurrentTrick(actorNumber) && !actorsPlayedThisTrick.Contains(actorNumber);
-        CardInteract.isPlayingCard = false;
+
+        if (isMyTurn && !IsGameplayInputBlocked && !ActorInCurrentTrick(actorNumber) && !actorsPlayedThisTrick.Contains(actorNumber))
+        {
+            CardInteract.canPlayCards = true;
+            CardInteract.isPlayingCard = false;
+        }
 
         ApplyRules(isMyTurn);
 
@@ -807,13 +836,30 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     public void ApplyRules(bool isMyTurn)
     {
         if (handAreaTransform == null) return;
-        if (IsTrickLocked || !isMyTurn)
+
+        if (IsTrickLocked)
         {
+            CardInteract.canPlayCards = false;
             EndTurnCardVisuals();
             return;
         }
-        CardInteract.ClearGlobalSelection();
-        HighlightPlayableCards();
+
+        if (isMyTurn)
+        {
+            int localActor = PhotonNetwork.LocalPlayer.ActorNumber;
+            if (!IsGameplayInputBlocked && !ActorInCurrentTrick(localActor) && !actorsPlayedThisTrick.Contains(localActor))
+            {
+                CardInteract.canPlayCards = true;
+                CardInteract.isPlayingCard = false;
+            }
+
+            CardInteract.ClearGlobalSelection();
+            HighlightPlayableCards();
+        }
+        else
+        {
+            EndTurnCardVisuals();
+        }
     }
 
     /// <summary>
@@ -889,8 +935,36 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
         Destroy(cardObj);
         RemoveOneCardFromHand(myCards, cardData.cardSuit, cardData.cardRank);
-        RefreshHandUI(animate: false);
-        if (photonView != null) photonView.RPC("RPC_PlayCard", RpcTarget.All, PhotonNetwork.LocalPlayer.ActorNumber, (int)cardData.cardSuit, (int)cardData.cardRank);
+        RefreshHandUI(false, true);
+        if (photonView != null)
+            photonView.RPC("RPC_PlayCard", RpcTarget.All, localActor, (int)cardData.cardSuit, (int)cardData.cardRank);
+
+        StartUnlockPlayFailsafe();
+    }
+
+    void StartUnlockPlayFailsafe()
+    {
+        StopUnlockPlayFailsafe();
+        _unlockPlayFailsafeCoroutine = StartCoroutine(UnlockPlayFailsafe());
+    }
+
+    void StopUnlockPlayFailsafe()
+    {
+        if (_unlockPlayFailsafeCoroutine == null) return;
+        StopCoroutine(_unlockPlayFailsafeCoroutine);
+        _unlockPlayFailsafeCoroutine = null;
+    }
+
+    IEnumerator UnlockPlayFailsafe()
+    {
+        yield return new WaitForSeconds(2.0f);
+        _unlockPlayFailsafeCoroutine = null;
+        if (CardInteract.isPlayingCard)
+        {
+            CardInteract.isPlayingCard = false;
+            RefreshHandUI(false, true);
+            ApplyRules(PhotonNetwork.LocalPlayer.ActorNumber == currentTurnActor);
+        }
     }
 
     [PunRPC]
@@ -906,19 +980,15 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         }
 
         bool actorAlreadyPlayed = currentTrick != null && currentTrick.Any(c => c.actorNumber == senderActorNum);
-        if (actorAlreadyPlayed)
+
+        if (PhotonNetwork.LocalPlayer != null && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber)
         {
-            if (PhotonNetwork.LocalPlayer != null && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber)
-                _hasPendingLocalPlayStart = false;
-            return;
+            StopUnlockPlayFailsafe();
+            CardInteract.isPlayingCard = false;
         }
 
-        if (!CanAcceptCardPlay(senderActorNum, suitIndex, rankIndex))
-        {
-            if (PhotonNetwork.LocalPlayer != null && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber)
-                _hasPendingLocalPlayStart = false;
-            return;
-        }
+        if (actorAlreadyPlayed) return;
+        if (!CanAcceptCardPlay(senderActorNum, suitIndex, rankIndex)) return;
 
         CardData playedCard = new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex };
 
@@ -932,13 +1002,13 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         GameObject cardObj = Object.Instantiate(cardUIPrefab, GetSeatSpawnPosition(seatIndex), Quaternion.identity, center);
         cardObj.GetComponent<CardDisplay>()?.SetCardData(playedCard);
 
-        if (PhotonNetwork.LocalPlayer != null && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber && _hasPendingLocalPlayStart && suitIndex == _pendingLocalPlaySuitIndex && rankIndex == _pendingLocalPlayRankIndex)
+        if (PhotonNetwork.LocalPlayer != null && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber && _hasPendingLocalPlayStart)
         {
             cardObj.transform.position = _pendingLocalPlayStartWorldPos;
             _hasPendingLocalPlayStart = false;
         }
 
-        Vector3 offsetPos = seatIndex == 0 ? new Vector3(0, -120f, 0) : seatIndex == 1 ? new Vector3(-180f, 0, 0) : seatIndex == 2 ? new Vector3(0, 120f, 0) : new Vector3(180f, 0, 0);
+        Vector3 offsetPos = GetOffsetForSeat(seatIndex);
         cardObj.transform.DOLocalMove(offsetPos, 0.35f).SetEase(Ease.OutCubic);
         cardObj.transform.DORotate(Vector3.zero, 0.35f);
 
@@ -1073,14 +1143,10 @@ public class PlayerHand : MonoBehaviourPunCallbacks
                     ShowGameResultLocal();
                 yield break;
             }
+        }
 
-            GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
-            ProcessTurn(lastTrickWinnerActor);
-        }
-        else
-        {
-            GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
-        }
+        GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
+        ProcessTurn(lastTrickWinnerActor);
     }
 
     public int GetSeatIndex(int actorNum)
@@ -1092,11 +1158,12 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     private bool _isDealAnimRunning = false;
     public static bool IsDealAnimationRunning { get; private set; }
-    const float DealFlyTargetBlend = 0.5f;
+    const float DealFlyTargetBlend = 1.0f;
 
     public void PlayDealAnimationOnly(int cardsInBatch)
     {
-        Debug.Log($"[Deal] Started batch — {cardsInBatch} cards per seat");
+        if (isDealingComplete) return;
+
         GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);
         CardInteract.canPlayCards = false;
         CardInteract.isPlayingCard = false;
@@ -1106,11 +1173,10 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         StartCoroutine(DealAnimationOnlyRoutine(cardsInBatch));
     }
 
-    public const float DealFlyDuration = 0.25f;
-    public const float DealCardLaunchGap = 0.03f;
+    public const float DealFlyDuration = 0.4f;
+    public const float DealCardLaunchGap = 0.05f;
     public const float DealPacketCardSpread = 12f;
-    public const float DealSeatPause = 0.04f; // Reduced pause between players
-    public const float DealRoundSettlePause = 0.04f; // Reduced pause between batches
+    public const float DealRoundSettlePause = 0.06f;
 
     public static float GetDealBatchDuration(int cardsInBatch)
     {
@@ -1147,11 +1213,19 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     Transform GetPlayerDealTarget(int seatIndex)
     {
+        Transform baseTarget = null;
         if (seatIndex == 0 && handAreaTransform != null)
-            return handAreaTransform;
-        if (playerPositions != null && seatIndex >= 0 && seatIndex < playerPositions.Length && playerPositions[seatIndex] != null)
-            return playerPositions[seatIndex];
-        return null;
+            baseTarget = handAreaTransform;
+        else if (playerPositions != null && seatIndex >= 0 && seatIndex < playerPositions.Length)
+            baseTarget = playerPositions[seatIndex];
+
+        if (baseTarget == null) return null;
+
+        Transform logoTarget = baseTarget.Find("Profile_Logo");
+        if (logoTarget == null) logoTarget = baseTarget.Find("Avatar");
+        if (logoTarget == null) logoTarget = baseTarget.Find("Profile");
+
+        return logoTarget != null ? logoTarget : baseTarget;
     }
 
     IEnumerator DealAnimationOnlyRoutine(int cardsInBatch)
@@ -1202,9 +1276,17 @@ public class PlayerHand : MonoBehaviourPunCallbacks
                 cardRt.anchoredPosition = deckAnchor + new Vector2(spreadOffset * 0.35f, 0f);
 
                 Vector2 target = midwayAnchor + new Vector2(spreadOffset * 0.5f, 0f);
-                cardRt.DOAnchorPos(target, DealFlyDuration).SetEase(Ease.Linear).OnComplete(() => {
-                    if (flyingCard != null) Object.Destroy(flyingCard);
-                });
+
+                Sequence dealSeq = DOTween.Sequence();
+                dealSeq.Insert(0, cardRt.DOAnchorPos(target, DealFlyDuration).SetEase(Ease.OutSine));
+
+                float spinAmount = Random.Range(180f, 360f) * (Random.value > 0.5f ? 1f : -1f);
+                dealSeq.Insert(0, cardRt.DORotate(new Vector3(0, 0, spinAmount), DealFlyDuration, RotateMode.FastBeyond360));
+
+                dealSeq.Insert(0, cardRt.DOScale(Vector3.one * 1.4f, DealFlyDuration * 0.5f).SetEase(Ease.OutQuad));
+                dealSeq.Insert(DealFlyDuration * 0.5f, cardRt.DOScale(Vector3.one * 0.7f, DealFlyDuration * 0.5f).SetEase(Ease.InQuad));
+
+                dealSeq.OnComplete(() => { if (flyingCard != null) Object.Destroy(flyingCard); });
 
                 yield return new WaitForSeconds(DealCardLaunchGap);
             }
@@ -1215,7 +1297,6 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         yield return new WaitForSeconds(DealFlyDuration * 0.5f);
         _isDealAnimRunning = false;
         IsDealAnimationRunning = false;
-        Debug.Log("[Deal] Batch finished");
     }
 
     private int SuitOrder(CardSuit suit)
@@ -1235,15 +1316,24 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         return -(int)rank; // Ace highest if enum Two=0 ... Ace=12
     }
 
-    void RefreshHandUI(bool animate = true, bool force = false)
+    public void RefreshHandUI(bool animate = true, bool force = false)
     {
         if (handAreaTransform == null) return;
-        if (!force && (IsDealAnimationRunning || !isDealingComplete))
-            return;
+        if (!force && (IsDealAnimationRunning || !isDealingComplete)) return;
 
         myCards = myCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
+
         HorizontalLayoutGroup hlg = handAreaTransform.GetComponent<HorizontalLayoutGroup>();
         if (hlg != null) hlg.enabled = false;
+
+        // DestroyImmediate: normal Destroy is end-of-frame — spawning in the same frame
+        // leaves old + new cards together and layout drifts right after each play.
+        for (int i = handAreaTransform.childCount - 1; i >= 0; i--)
+        {
+            Transform child = handAreaTransform.GetChild(i);
+            child.DOKill();
+            Object.DestroyImmediate(child.gameObject);
+        }
 
         float handWidthPx = HandLayoutHelper.GetHandAreaWidth(handAreaTransform as RectTransform);
         if (handWidthPx < 100f) handWidthPx = 1000f;
@@ -1252,8 +1342,6 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         HandLayoutConfig layout = HandLayoutHelper.GetLayout(myCards.Count, handWidthPx, prefabWidth);
         float startX = HandLayoutHelper.ComputeStartX(layout, myCards.Count);
 
-        foreach (Transform child in handAreaTransform) { child.DOKill(); Object.Destroy(child.gameObject); }
-
         for (int i = 0; i < myCards.Count; i++)
         {
             GameObject newCardUI = Object.Instantiate(cardUIPrefab, handAreaTransform);
@@ -1261,8 +1349,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
             RectTransform rt = newCardUI.GetComponent<RectTransform>();
             rt.localScale = Vector3.one;
             float targetX = startX + i * (layout.prefabCardWidth + layout.spacing);
-            if (animate) rt.anchoredPosition = new Vector2(targetX, -25f);
-            else rt.anchoredPosition = new Vector2(targetX, 0f);
+            rt.anchoredPosition = animate ? new Vector2(targetX, -25f) : new Vector2(targetX, 0f);
         }
 
         if (animate && myCards.Count > 0)

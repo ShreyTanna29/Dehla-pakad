@@ -17,6 +17,8 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
     private bool isAutoRaised = false;
     private CardDisplay myDisplay;
     private RectTransform visualRect;
+    private HorizontalLayoutGroup layoutGroup;
+    private bool _layoutWasEnabledBeforeDrag;
     private CanvasGroup cardCanvasGroup;
     private Image blockedOverlay;
     private Text lockIndicator;
@@ -25,8 +27,12 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
     private bool isInitialized = false;
     private bool blockedVisualsCreated = false;
 
-    private Vector2 dragOffset;
     private Vector2 pointerDownPos;
+
+    private Vector2 dragStartPointerLocalPos;
+    private Vector2 dragStartCardAnchoredPos;
+    private const float SwipePlayThreshold = 100f;
+    private const float MaxSwipeUpLimit = 150f;
 
     const float DimmedBrightness = 0.47f;
     const float PlayableBrightness = 1f;
@@ -35,23 +41,18 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
     {
         if (isInitialized) return;
 
-        myDisplay = GetComponent<CardDisplay>();
-        if (myDisplay == null) myDisplay = GetComponentInParent<CardDisplay>();
+        myDisplay = GetComponent<CardDisplay>() ?? GetComponentInParent<CardDisplay>();
 
         if (myDisplay != null)
         {
+            visualRect = myDisplay.GetComponent<RectTransform>();
             if (myDisplay.cardBackgroundImage != null)
-            {
-                visualRect = myDisplay.cardBackgroundImage.GetComponent<RectTransform>();
                 myDisplay.cardBackgroundImage.raycastTarget = true;
-            }
-            else
-            {
-                visualRect = myDisplay.GetComponent<RectTransform>();
-            }
         }
 
         if (visualRect == null) visualRect = GetComponent<RectTransform>();
+
+        layoutGroup = GetComponentInParent<HorizontalLayoutGroup>();
 
         cardCanvasGroup = GetComponent<CanvasGroup>();
         if (cardCanvasGroup == null)
@@ -132,7 +133,8 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
 
     public void ApplyPlayableVisual(bool raise)
     {
-        ApplyBrightnessVisual(PlayableBrightness, true, raise);
+        ApplyBrightnessVisual(1f, true, raise);
+        isValidToPlay = true;
     }
 
     public void ApplyBlockedOnTurnVisual()
@@ -233,24 +235,25 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        if (isPlayed || !canPlayCards || !isValidToPlay || isPlayingCard || PlayerHand.IsGameplayInputBlocked
-            || (DeckManager.Instance != null && !DeckManager.Instance.IsDealingComplete)
-            || !GameStabilityAudit.CanAcceptPlayerInput())
-        {
+        if (isPlayed || !canPlayCards || !isValidToPlay || isPlayingCard || PlayerHand.IsGameplayInputBlocked)
             return;
-        }
+
+        Init();
+        if (visualRect == null) return;
 
         isDragging = true;
+        visualRect.DOKill();
+        transform.SetAsLastSibling();
 
-        if (visualRect != null)
+        if (layoutGroup != null)
         {
-            visualRect.DOKill();
-            transform.SetAsLastSibling();
-
-            RectTransform parentRect = (RectTransform)visualRect.parent;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, eventData.pressEventCamera, out Vector2 localPointerPosition);
-            dragOffset = visualRect.anchoredPosition - localPointerPosition;
+            _layoutWasEnabledBeforeDrag = layoutGroup.enabled;
+            layoutGroup.enabled = false;
         }
+
+        dragStartCardAnchoredPos = visualRect.anchoredPosition;
+        RectTransform parentRect = (RectTransform)visualRect.parent;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, eventData.pressEventCamera, out dragStartPointerLocalPos);
 
         if (currentSelected != null && currentSelected != this)
             currentSelected.DeselectThisCard();
@@ -264,8 +267,12 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (!isDragging || visualRect == null) return;
 
         RectTransform parentRect = (RectTransform)visualRect.parent;
-        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, eventData.pressEventCamera, out Vector2 localPointerPosition))
-            visualRect.anchoredPosition = localPointerPosition + dragOffset;
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, eventData.pressEventCamera, out Vector2 currentPointerLocalPos))
+        {
+            float dragDeltaY = currentPointerLocalPos.y - dragStartPointerLocalPos.y;
+            float newY = Mathf.Clamp(dragStartCardAnchoredPos.y + dragDeltaY, originalY, originalY + MaxSwipeUpLimit);
+            visualRect.anchoredPosition = new Vector2(dragStartCardAnchoredPos.x, newY);
+        }
     }
 
     public void OnEndDrag(PointerEventData eventData)
@@ -273,10 +280,25 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (!isDragging) return;
         isDragging = false;
 
-        if (visualRect != null && visualRect.anchoredPosition.y > originalY + 120f)
+        if (visualRect != null && visualRect.anchoredPosition.y >= originalY + SwipePlayThreshold)
             PlayThisCard();
         else
-            DeselectThisCard();
+            RestoreAfterSwipeCancel();
+    }
+
+    void RestoreAfterSwipeCancel()
+    {
+        if (layoutGroup != null)
+            layoutGroup.enabled = _layoutWasEnabledBeforeDrag;
+
+        isSelected = false;
+        if (currentSelected == this) currentSelected = null;
+
+        if (visualRect == null) return;
+
+        visualRect.DOKill();
+        float targetY = (isAutoRaised && isValidToPlay) ? originalY + 28f : originalY;
+        visualRect.DOAnchorPosY(targetY, 0.2f).SetEase(Ease.OutSine);
     }
 
     private void SelectThisCard()
@@ -303,31 +325,23 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         {
             visualRect.DOKill();
             float targetY = (isAutoRaised && isValidToPlay) ? originalY + 28f : originalY;
-            visualRect.DOAnchorPos(new Vector2(0f, targetY), 0.2f).SetEase(Ease.OutSine);
+            visualRect.DOAnchorPosY(targetY, 0.2f).SetEase(Ease.OutSine);
         }
     }
 
     private void PlayThisCard()
     {
-        if (isPlayingCard) return;
+        Init();
 
         isPlayingCard = true;
         isPlayed = true;
-        isValidToPlay = false;
-        canPlayCards = false;
 
-        if (visualRect != null) visualRect.DOKill();
-
-        PlayerHand pHand = PlayerHand.LocalInstance;
-        if (pHand != null && myDisplay != null)
-        {
-            if (visualRect != null && visualRect != transform)
-                transform.position = visualRect.position;
-
-            pHand.OnLocalPlayerPlayedCard(myDisplay.myCardData, myDisplay.gameObject);
-        }
+        CardDisplay display = myDisplay != null ? myDisplay : GetComponent<CardDisplay>();
+        if (display != null)
+            PlayerHand.LocalInstance?.OnLocalPlayerPlayedCard(display.myCardData, gameObject);
 
         currentSelected = null;
+        isSelected = false;
     }
 
     public void SetCardRuleState(bool valid, bool autoRaise)

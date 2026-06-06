@@ -1079,8 +1079,11 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     public void RPC_PlayDealAnimation(int cardsInBatch)
     {
+        if (IsDealingComplete) return;
+
         GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);
-        if (PlayerHand.LocalInstance != null) PlayerHand.LocalInstance.PlayDealAnimationOnly(cardsInBatch);
+        if (PlayerHand.LocalInstance != null)
+            PlayerHand.LocalInstance.PlayDealAnimationOnly(cardsInBatch);
     }
 
     [PunRPC]
