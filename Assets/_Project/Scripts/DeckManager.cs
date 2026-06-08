@@ -16,6 +16,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
     public const int MaxTableSeats = 4;
     private const int PhantomBotActorBase = 100;
 
+    public static bool IsPrivateFriendsRoom() =>
+        PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible;
+
     [Header("Bot Tracking")]
     public static List<int> botActorNumbers = new List<int>();
     public Dictionary<int, List<CardData>> botHands = new Dictionary<int, List<CardData>>();
@@ -494,7 +497,16 @@ public class DeckManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs) && (bool)gs;
+        bool rejoining = PhotonNetwork.CurrentRoom != null
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
+            && (bool)gs;
+
+        if (IsPrivateFriendsRoom() && !rejoining)
+        {
+            Debug.Log("Private Room Joined. Waiting in Lobby...");
+            return;
+        }
+
         if (!rejoining) ResetMatchState();
         if (TrumpManager.Instance != null) TrumpManager.ApplyTrumpForCurrentGameMode(false);
 
@@ -663,6 +675,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
     public void OnRoomJoinedCheckStart()
     {
         if (!PhotonNetwork.InRoom) return;
+
+        if (IsPrivateFriendsRoom())
+        {
+            Debug.Log("[DeckManager] Private room — waiting for host StartPrivateGame().");
+            return;
+        }
 
         // 🚀 REJOIN CHECK: If we already have a game started, don't reset state
         if (gameStarted)

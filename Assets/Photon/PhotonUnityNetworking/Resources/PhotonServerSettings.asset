@@ -72,6 +72,10 @@ MonoBehaviour:
   - RPC_ShowGameResult
   - RPC_ReceiveGameStateSync
   - RPC_RequestGameStateSync
+  - RPC_SyncTrump
+  - RPC_ShowModesPanelToClients
+  - RPC_SyncGameModeUI
+  - RPC_SyncTrumpModeUI
   DisableAutoOpenWizard: 1
   ShowSettings: 0
   DevRegionSetOnce: 1

@@ -23,7 +23,7 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
     private Image blockedOverlay;
     private Text lockIndicator;
     private Color defaultBgColor = Color.white;
-    private float originalY;
+    private Vector2 originalPos;
     private bool isInitialized = false;
     private bool blockedVisualsCreated = false;
 
@@ -62,11 +62,18 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
             defaultBgColor = myDisplay.cardBackgroundImage.color;
 
         if (visualRect != null)
-            originalY = visualRect.anchoredPosition.y;
+            originalPos = visualRect.anchoredPosition;
 
         EnsureBlockedVisuals();
         isInitialized = true;
     }
+
+    static bool UsesHandLayoutGroup()
+    {
+        return PlayerHand.LocalInstance == null || PlayerHand.LocalInstance.myCards.Count <= 13;
+    }
+
+    Vector2 GetRaisedPos(float yOffset) => originalPos + new Vector2(0f, yOffset);
 
     static Color GetSuitIconColor(CardSuit suit, float brightness)
     {
@@ -118,9 +125,9 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (visualRect != null && !isSelected && !isDragging)
         {
             if (raisePlayable)
-                visualRect.DOAnchorPosY(originalY + 30f, 0.28f).SetEase(Ease.OutBack);
+                visualRect.DOAnchorPos(GetRaisedPos(30f), 0.28f).SetEase(Ease.OutBack);
             else
-                visualRect.DOAnchorPosY(originalY, 0.18f).SetEase(Ease.OutSine);
+                visualRect.DOAnchorPos(originalPos, 0.18f).SetEase(Ease.OutSine);
         }
     }
 
@@ -251,6 +258,7 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
             layoutGroup.enabled = false;
         }
 
+        originalPos = visualRect.anchoredPosition;
         dragStartCardAnchoredPos = visualRect.anchoredPosition;
         RectTransform parentRect = (RectTransform)visualRect.parent;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, eventData.pressEventCamera, out dragStartPointerLocalPos);
@@ -270,7 +278,7 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, eventData.pressEventCamera, out Vector2 currentPointerLocalPos))
         {
             float dragDeltaY = currentPointerLocalPos.y - dragStartPointerLocalPos.y;
-            float newY = Mathf.Clamp(dragStartCardAnchoredPos.y + dragDeltaY, originalY, originalY + MaxSwipeUpLimit);
+            float newY = Mathf.Clamp(dragStartCardAnchoredPos.y + dragDeltaY, originalPos.y, originalPos.y + MaxSwipeUpLimit);
             visualRect.anchoredPosition = new Vector2(dragStartCardAnchoredPos.x, newY);
         }
     }
@@ -280,7 +288,7 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (!isDragging) return;
         isDragging = false;
 
-        if (visualRect != null && visualRect.anchoredPosition.y >= originalY + SwipePlayThreshold)
+        if (visualRect != null && visualRect.anchoredPosition.y >= originalPos.y + SwipePlayThreshold)
             PlayThisCard();
         else
             RestoreAfterSwipeCancel();
@@ -288,7 +296,7 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
 
     void RestoreAfterSwipeCancel()
     {
-        if (layoutGroup != null)
+        if (layoutGroup != null && UsesHandLayoutGroup())
             layoutGroup.enabled = _layoutWasEnabledBeforeDrag;
 
         isSelected = false;
@@ -297,8 +305,8 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (visualRect == null) return;
 
         visualRect.DOKill();
-        float targetY = (isAutoRaised && isValidToPlay) ? originalY + 28f : originalY;
-        visualRect.DOAnchorPosY(targetY, 0.2f).SetEase(Ease.OutSine);
+        Vector2 targetPos = (isAutoRaised && isValidToPlay) ? GetRaisedPos(28f) : originalPos;
+        visualRect.DOAnchorPos(targetPos, 0.2f).SetEase(Ease.OutSine);
     }
 
     private void SelectThisCard()
@@ -312,7 +320,7 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (visualRect != null)
         {
             visualRect.DOKill();
-            visualRect.DOAnchorPosY(originalY + 50f, 0.25f).SetEase(Ease.OutBack);
+            visualRect.DOAnchorPos(GetRaisedPos(50f), 0.25f).SetEase(Ease.OutBack);
         }
     }
 
@@ -324,8 +332,8 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (visualRect != null)
         {
             visualRect.DOKill();
-            float targetY = (isAutoRaised && isValidToPlay) ? originalY + 28f : originalY;
-            visualRect.DOAnchorPosY(targetY, 0.2f).SetEase(Ease.OutSine);
+            Vector2 targetPos = (isAutoRaised && isValidToPlay) ? GetRaisedPos(28f) : originalPos;
+            visualRect.DOAnchorPos(targetPos, 0.2f).SetEase(Ease.OutSine);
         }
     }
 

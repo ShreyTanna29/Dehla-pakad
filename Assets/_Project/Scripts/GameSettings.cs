@@ -8,6 +8,12 @@ public enum GameModeType
     Cut2Trump
 }
 
+public enum SarModeType
+{
+    OneSar,
+    TwoSar
+}
+
 public enum MatchType
 {
     OfflineBots,
@@ -19,15 +25,16 @@ public class GameSettings : MonoBehaviour
 {
     public static GameSettings Instance;
 
+    [Header("Game Modes")]
     public GameModeType currentMode = GameModeType.TrumpSpades;
+    public SarModeType currentSarMode = SarModeType.OneSar;
     public MatchType currentMatchType = MatchType.OnlinePhoton;
-    public int taashCategory = 1; // 1 or 2 Taash
 
-    /// <summary>Cut-2-trump mode (Double Sar) — used by bot AI aggression.</summary>
-    public bool IsDoubleSarMode => currentMode == GameModeType.Cut2Trump;
+    [Header("Deck Settings")]
+    public int taashCategory = 1;
 
     public static bool IsDoubleSarActive =>
-        Instance != null && Instance.IsDoubleSarMode;
+        Instance != null && Instance.currentSarMode == SarModeType.TwoSar;
 
     void Awake()
     {

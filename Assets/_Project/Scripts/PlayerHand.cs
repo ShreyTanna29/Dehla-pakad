@@ -65,7 +65,8 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     public int GetAuthoritativeTurnActor() => currentTurnActor;
     public static bool isTrumpRevealed = true;
-    public static CardSuit currentTrumpSuit = CardSuit.Spades; 
+    public static CardSuit currentTrumpSuit = CardSuit.Spades;
+    public static bool hasTrumpBeenSetOnce = false;
 
     public class TrickCard
     {
@@ -168,9 +169,129 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
         foreach (Transform child in tableCenter)
         {
+            if (_accumulatedPileRoot != null && child == _accumulatedPileRoot) continue;
             if (child.GetComponent<CardDisplay>() == null) continue;
             child.DOKill();
             Object.Destroy(child.gameObject);
+        }
+    }
+
+    static void ClearTwoSarState()
+    {
+        accumulatedTableCards.Clear();
+        lastTrickWinnerActor = -1;
+
+        if (_accumulatedPileRoot != null)
+        {
+            Object.Destroy(_accumulatedPileRoot.gameObject);
+            _accumulatedPileRoot = null;
+        }
+    }
+
+    Transform GetAccumulatedPileRoot()
+    {
+        Transform tableCenter = GetTableCenterTransform();
+        if (tableCenter == null) return null;
+
+        if (_accumulatedPileRoot == null)
+        {
+            var pileGo = new GameObject("AccumulatedPile", typeof(RectTransform));
+            pileGo.transform.SetParent(tableCenter, false);
+            _accumulatedPileRoot = pileGo.transform;
+        }
+
+        return _accumulatedPileRoot;
+    }
+
+    void MoveCardsToAccumulatedPileVisuals(List<TrickCard> trickCards)
+    {
+        if (trickCards == null || trickCards.Count == 0) return;
+
+        Transform pileRoot = GetAccumulatedPileRoot();
+        int baseIndex = accumulatedTableCards.Count - trickCards.Count;
+
+        for (int i = 0; i < trickCards.Count; i++)
+        {
+            TrickCard tc = trickCards[i];
+            if (tc.cardObject == null || pileRoot == null) continue;
+
+            tc.cardObject.transform.SetParent(pileRoot, true);
+            float stackX = (baseIndex + i) % 6 * 4f - 10f;
+            float stackY = (baseIndex + i) / 6 * 3f - 6f;
+            tc.cardObject.transform.DOLocalMove(new Vector3(stackX, stackY, 0f), 0.45f).SetEase(Ease.InCubic);
+            tc.cardObject.transform.DOScale(Vector3.one * 0.55f, 0.45f).SetEase(Ease.InBack);
+
+            CanvasGroup cg = tc.cardObject.GetComponent<CanvasGroup>();
+            if (cg == null) cg = tc.cardObject.AddComponent<CanvasGroup>();
+            cg.DOFade(0.85f, 0.35f);
+        }
+    }
+
+    void CaptureCardsForPlayer(int winnerActor, List<TrickCard> cards)
+    {
+        if (cards == null || cards.Count == 0) return;
+
+        int winnerSeat = GetSeatIndex(winnerActor);
+        int dehlas = 0;
+        foreach (TrickCard tc in cards)
+            if (tc.rankValue == (int)CardRank.Ten) dehlas++;
+
+        if (ResultManager.Instance != null)
+            ResultManager.Instance.OnTrickWon(winnerSeat, dehlas);
+
+        Transform winnerTransform = playerPositions != null && winnerSeat >= 0 && winnerSeat < playerPositions.Length
+            ? playerPositions[winnerSeat]
+            : transform;
+        Transform tableCenter = GetTableCenterTransform();
+
+        foreach (TrickCard tc in cards)
+        {
+            if (tc.cardObject == null) continue;
+            GameObject go = tc.cardObject;
+            if (tableCenter != null)
+                go.transform.SetParent(tableCenter, true);
+            go.transform.DOMove(winnerTransform.position, 0.5f).SetEase(Ease.InCubic);
+            go.transform.DOScale(Vector3.zero, 0.5f).SetEase(Ease.InBack)
+                .OnComplete(() => { if (go != null) Object.Destroy(go); });
+        }
+
+        if (_accumulatedPileRoot != null)
+        {
+            Object.Destroy(_accumulatedPileRoot.gameObject);
+            _accumulatedPileRoot = null;
+        }
+    }
+
+    public void HandleTrickWinner(int currentWinnerActor, List<TrickCard> currentTrickCards, bool isLastTrickOfGame)
+    {
+        if (currentTrickCards == null || currentTrickCards.Count == 0) return;
+
+        accumulatedTableCards.AddRange(currentTrickCards);
+
+        bool isTwoSarMode = GameSettings.Instance != null && GameSettings.Instance.currentSarMode == SarModeType.TwoSar;
+
+        if (isTwoSarMode)
+        {
+            if (currentWinnerActor == lastTrickWinnerActor || isLastTrickOfGame)
+            {
+                Debug.Log($"[2 SAR] BINGO! Player {currentWinnerActor} captured {accumulatedTableCards.Count} cards.");
+                CaptureCardsForPlayer(currentWinnerActor, accumulatedTableCards);
+                accumulatedTableCards.Clear();
+                lastTrickWinnerActor = -1;
+            }
+            else
+            {
+                Debug.Log($"[2 SAR] Player {currentWinnerActor} won 1 trick — cards stay on table.");
+                lastTrickWinnerActor = currentWinnerActor;
+                MoveCardsToAccumulatedPileVisuals(currentTrickCards);
+            }
+        }
+        else
+        {
+            Debug.Log($"[1 SAR] Player {currentWinnerActor} won the trick.");
+            CaptureCardsForPlayer(currentWinnerActor, accumulatedTableCards);
+            accumulatedTableCards.Clear();
+            lastTrickWinnerActor = -1;
         }
     }
 
@@ -212,6 +333,46 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         }
     }
 
+    public Vector3 GetPlayerOrigin(int actorNumber)
+    {
+        int seatIndex = GetSeatIndex(actorNumber);
+        EnsureGameplayUiRefs();
+
+        if (seatIndex == 0 && handAreaTransform != null)
+            return handAreaTransform.position;
+
+        if (playerPositions != null && seatIndex >= 0 && seatIndex < playerPositions.Length && playerPositions[seatIndex] != null)
+            return playerPositions[seatIndex].position;
+
+        Transform center = GetTableCenterTransform();
+        return center != null ? center.position : transform.position;
+    }
+
+    public Vector3 GetFinalPositionForSeat(int seat)
+    {
+        const float gap = 100f;
+
+        switch (seat)
+        {
+            case 0: return new Vector3(0f, -gap, 0f);
+            case 1: return new Vector3(-gap, 0f, 0f);
+            case 2: return new Vector3(0f, gap, 0f);
+            case 3: return new Vector3(gap, 0f, 0f);
+            default: return Vector3.zero;
+        }
+    }
+
+    Vector3 GetPlayerPositionForSeat(int seat)
+    {
+        EnsureGameplayUiRefs();
+        if (playerPositions != null && seat >= 0 && seat < playerPositions.Length && playerPositions[seat] != null)
+            return playerPositions[seat].position;
+        if (seat == 0 && handAreaTransform != null)
+            return handAreaTransform.position;
+        Transform center = GetTableCenterTransform();
+        return center != null ? center.position : transform.position;
+    }
+
     Vector3 GetSeatSpawnPosition(int seatIndex)
     {
         EnsureGameplayUiRefs();
@@ -222,13 +383,16 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     private void SpawnCardOnTableLocal(int senderActorNum, int suitIndex, int rankIndex)
     {
-        int seatIndex = GetSeatIndex(senderActorNum);
+        int seat = GetSeatIndex(senderActorNum);
         Transform center = GetTableCenterTransform();
-        GameObject cardObj = Object.Instantiate(cardUIPrefab, GetSeatSpawnPosition(seatIndex), Quaternion.identity, center);
+        GameObject cardObj = Object.Instantiate(cardUIPrefab, center);
         cardObj.GetComponent<CardDisplay>()?.SetCardData(new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex });
-        Vector3 offsetPos = GetOffsetForSeat(seatIndex);
+        cardObj.transform.position = GetPlayerPositionForSeat(seat);
+        cardObj.transform.localScale = Vector3.one;
 
-        cardObj.transform.localPosition = offsetPos;
+        Vector3 targetLocal = GetFinalPositionForSeat(seat);
+        cardObj.transform.DOScale(0.8f, 0.35f);
+        cardObj.transform.DOLocalMove(targetLocal, 0.35f).SetEase(Ease.OutBack);
         cardObj.transform.localRotation = Quaternion.identity;
 
         currentTrick.Add(new TrickCard { actorNumber = senderActorNum, suit = (CardSuit)suitIndex, rankValue = rankIndex, cardObject = cardObj });
@@ -240,6 +404,11 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     public static bool isCleaningTable;
     public static bool IsTrickLocked => isResolvingTrick || isCleaningTable;
 
+    // 2 Sar logic memory — shared across clients for pile + turn continuity
+    public static int lastTrickWinnerActor = -1;
+    public static List<TrickCard> accumulatedTableCards = new List<TrickCard>();
+    static Transform _accumulatedPileRoot;
+
     static bool _handRevealRunning;
     public static bool IsGameplayInputBlocked =>
         IsDealAnimationRunning || _handRevealRunning || IsTrickLocked ||
@@ -249,7 +418,6 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     private bool _determineTrickRoutineRunning;
     private Coroutine _determineTrickCoroutine;
 
-    private int lastTrickWinnerActor = -1;
     private bool isDealingComplete = false;
     private int _cutsInMatch = 0;
     private bool cut1TrumpAlreadySet = false;
@@ -259,24 +427,42 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     private void HandleTrumpModeAfterCardAdded(CardData playedCard, int actorNumber)
     {
-        if (GameSettings.Instance == null || currentTrick == null || currentTrick.Count < 2) return;
+        if (GameSettings.Instance == null || currentTrick == null || currentTrick.Count < 1) return;
 
         GameModeType mode = GameSettings.Instance.currentMode;
         CardSuit ledSuit = currentTrick[0].suit;
         bool isCut = playedCard.cardSuit != ledSuit;
 
-        if (!isCut || playedCard.cardSuit == currentTrumpSuit) return;
+        if (!isCut) return;
 
         if (mode == GameModeType.Cut1Trump)
         {
-            if (cut1TrumpAlreadySet) return;
+            if (cut1TrumpAlreadySet || playedCard.cardSuit == currentTrumpSuit) return;
             cut1TrumpAlreadySet = true;
             ApplyTrumpChange(playedCard.cardSuit);
+            return;
         }
-        else if (mode == GameModeType.Cut2Trump)
+
+        if (mode == GameModeType.Cut2Trump && !hasTrumpBeenSetOnce)
         {
-            ApplyTrumpChange(playedCard.cardSuit);
+            hasTrumpBeenSetOnce = true;
+            currentTrumpSuit = playedCard.cardSuit;
+            isTrumpRevealed = true;
+
+            if (TrumpManager.Instance != null)
+                TrumpManager.Instance.SetTrumpSuit(currentTrumpSuit, PhotonNetwork.IsMasterClient, true);
+
+            if (PhotonNetwork.IsMasterClient && photonView != null)
+                photonView.RPC(nameof(RPC_SyncTrump), RpcTarget.Others, (int)currentTrumpSuit);
         }
+    }
+
+    [PunRPC]
+    void RPC_SyncTrump(int suitIndex)
+    {
+        if (hasTrumpBeenSetOnce) return;
+        hasTrumpBeenSetOnce = true;
+        ApplyTrumpChange((CardSuit)suitIndex);
     }
 
     void ApplyTrumpChange(CardSuit newSuit)
@@ -462,10 +648,11 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         myCards.Clear();
         _cutsInMatch = 0;
         cut1TrumpAlreadySet = false;
+        hasTrumpBeenSetOnce = false;
         totalTricksPlayed = 0;
         ClearAllTableCardClones();
+        ClearTwoSarState();
         currentTrick.Clear();
-        lastTrickWinnerActor = -1;
         _localCurrentTurnActor = -1;
         _lastHandledTurnActor = -1;
         _lastProcessTurnActor = -1;
@@ -997,19 +1184,24 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
             DeckManager.Instance.UpdateCachedHandOnMaster(senderActorNum, (CardSuit)suitIndex, (CardRank)rankIndex);
 
-        int seatIndex = GetSeatIndex(senderActorNum);
+        int seat = GetSeatIndex(senderActorNum);
         Transform center = GetTableCenterTransform();
-        GameObject cardObj = Object.Instantiate(cardUIPrefab, GetSeatSpawnPosition(seatIndex), Quaternion.identity, center);
+        GameObject cardObj = Object.Instantiate(cardUIPrefab, center);
         cardObj.GetComponent<CardDisplay>()?.SetCardData(playedCard);
 
+        Vector3 startPos = GetPlayerPositionForSeat(seat);
         if (PhotonNetwork.LocalPlayer != null && senderActorNum == PhotonNetwork.LocalPlayer.ActorNumber && _hasPendingLocalPlayStart)
         {
-            cardObj.transform.position = _pendingLocalPlayStartWorldPos;
+            startPos = _pendingLocalPlayStartWorldPos;
             _hasPendingLocalPlayStart = false;
         }
 
-        Vector3 offsetPos = GetOffsetForSeat(seatIndex);
-        cardObj.transform.DOLocalMove(offsetPos, 0.35f).SetEase(Ease.OutCubic);
+        cardObj.transform.position = startPos;
+        cardObj.transform.localScale = Vector3.one;
+
+        Vector3 targetLocal = GetFinalPositionForSeat(seat);
+        cardObj.transform.DOScale(0.8f, 0.35f);
+        cardObj.transform.DOLocalMove(targetLocal, 0.35f).SetEase(Ease.OutBack);
         cardObj.transform.DORotate(Vector3.zero, 0.35f);
 
         currentTrick.Add(new TrickCard { actorNumber = senderActorNum, suit = playedCard.cardSuit, rankValue = rankIndex, cardObject = cardObj });
@@ -1081,36 +1273,17 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
         TrickCard winnerCard = TaashRules.DetermineTrickWinner(trickSnapshot, currentTrumpSuit);
         int tricksToWin = TaashRules.TricksPerGame;
-        lastTrickWinnerActor = winnerCard.actorNumber;
-        int winnerSeat = GetSeatIndex(winnerCard.actorNumber);
-        if (ResultManager.Instance != null)
-        {
-            int dehlas = 0;
-            foreach (TrickCard tc in trickSnapshot)
-                if (tc.rankValue == (int)CardRank.Ten) dehlas++;
-            ResultManager.Instance.OnTrickWon(winnerSeat, dehlas);
-        }
+        int winnerActor = winnerCard.actorNumber;
+        bool isLastTrickOfGame = PhotonNetwork.IsMasterClient && totalTricksPlayed + 1 >= tricksToWin;
 
         isCleaningTable = true;
-        Transform winnerTransform = playerPositions != null && winnerSeat < playerPositions.Length
-            ? playerPositions[winnerSeat]
-            : transform;
-
-        foreach (TrickCard tc in trickSnapshot)
-        {
-            if (tc.cardObject == null) continue;
-
-            tc.cardObject.transform.DOMove(winnerTransform.position, 0.45f).SetEase(Ease.InCubic);
-            tc.cardObject.transform.DOScale(Vector3.zero, 0.45f).SetEase(Ease.InBack);
-
-            CanvasGroup cg = tc.cardObject.GetComponent<CanvasGroup>();
-            if (cg == null) cg = tc.cardObject.AddComponent<CanvasGroup>();
-            cg.DOFade(0, 0.4f);
-        }
+        HandleTrickWinner(winnerActor, trickSnapshot, isLastTrickOfGame);
 
         yield return new WaitForSeconds(0.5f);
 
-        DestroyTrickCardObjects(trickSnapshot);
+        foreach (TrickCard tc in trickSnapshot)
+            tc.cardObject = null;
+
         ClearAllTableCardClones();
         currentTrick.Clear();
         ClearTrickPlayLocks();
@@ -1146,7 +1319,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         }
 
         GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
-        ProcessTurn(lastTrickWinnerActor);
+        ProcessTurn(winnerActor);
     }
 
     public int GetSeatIndex(int actorNum)
@@ -1173,15 +1346,17 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         StartCoroutine(DealAnimationOnlyRoutine(cardsInBatch));
     }
 
-    public const float DealFlyDuration = 0.4f;
-    public const float DealCardLaunchGap = 0.05f;
+    public const float DealFlyDuration = 0.35f;
+    public const float DealFlyDestroyDelay = 0.3f;
+    public const float DealCardLaunchGap = 0.04f;
+    public const float DealShrinkDuration = 0.25f;
     public const float DealPacketCardSpread = 12f;
     public const float DealRoundSettlePause = 0.06f;
 
     public static float GetDealBatchDuration(int cardsInBatch)
     {
-        float perSeat = (cardsInBatch - 1) * DealCardLaunchGap + DealFlyDuration + 0.12f;
-        return 4f * perSeat + DealRoundSettlePause + DealFlyDuration * 0.5f;
+        float perSeat = (cardsInBatch - 1) * DealCardLaunchGap + DealShrinkDuration + 0.2f;
+        return 4f * perSeat + DealRoundSettlePause + 0.2f;
     }
 
     static string GetDealRoundLabel(int cardsInBatch)
@@ -1277,24 +1452,17 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
                 Vector2 target = midwayAnchor + new Vector2(spreadOffset * 0.5f, 0f);
 
-                Sequence dealSeq = DOTween.Sequence();
-                dealSeq.Insert(0, cardRt.DOAnchorPos(target, DealFlyDuration).SetEase(Ease.OutSine));
-
-                float spinAmount = Random.Range(180f, 360f) * (Random.value > 0.5f ? 1f : -1f);
-                dealSeq.Insert(0, cardRt.DORotate(new Vector3(0, 0, spinAmount), DealFlyDuration, RotateMode.FastBeyond360));
-
-                dealSeq.Insert(0, cardRt.DOScale(Vector3.one * 1.4f, DealFlyDuration * 0.5f).SetEase(Ease.OutQuad));
-                dealSeq.Insert(DealFlyDuration * 0.5f, cardRt.DOScale(Vector3.one * 0.7f, DealFlyDuration * 0.5f).SetEase(Ease.InQuad));
-
-                dealSeq.OnComplete(() => { if (flyingCard != null) Object.Destroy(flyingCard); });
+                cardRt.DOAnchorPos(target, DealFlyDuration).SetEase(Ease.OutSine);
+                cardRt.DOScale(new Vector3(0.5f, 0.5f, 1f), DealShrinkDuration).SetEase(Ease.OutQuad);
+                Object.Destroy(flyingCard, DealFlyDestroyDelay);
 
                 yield return new WaitForSeconds(DealCardLaunchGap);
             }
 
-            yield return new WaitForSeconds(DealFlyDuration + 0.12f);
+            yield return new WaitForSeconds(0.2f);
         }
 
-        yield return new WaitForSeconds(DealFlyDuration * 0.5f);
+        yield return new WaitForSeconds(0.2f);
         _isDealAnimRunning = false;
         IsDealAnimationRunning = false;
     }
@@ -1303,9 +1471,9 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     {
         switch (suit)
         {
-            case CardSuit.Spades: return 0;
-            case CardSuit.Hearts: return 1;
-            case CardSuit.Clubs: return 2;
+            case CardSuit.Hearts: return 0;
+            case CardSuit.Clubs: return 1;
+            case CardSuit.Spades: return 2;
             case CardSuit.Diamonds: return 3;
             default: return 99;
         }
@@ -1321,47 +1489,60 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         if (handAreaTransform == null) return;
         if (!force && (IsDealAnimationRunning || !isDealingComplete)) return;
 
-        myCards = myCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
+        LayoutGroup lg = handAreaTransform.GetComponent<LayoutGroup>();
+        if (lg != null) lg.enabled = false;
 
-        HorizontalLayoutGroup hlg = handAreaTransform.GetComponent<HorizontalLayoutGroup>();
-        if (hlg != null) hlg.enabled = false;
-
-        // DestroyImmediate: normal Destroy is end-of-frame — spawning in the same frame
-        // leaves old + new cards together and layout drifts right after each play.
         for (int i = handAreaTransform.childCount - 1; i >= 0; i--)
         {
             Transform child = handAreaTransform.GetChild(i);
+            CardInteract interact = child.GetComponent<CardInteract>();
+            if (interact != null && interact.isPlayed) continue;
             child.DOKill();
             Object.DestroyImmediate(child.gameObject);
         }
 
-        float handWidthPx = HandLayoutHelper.GetHandAreaWidth(handAreaTransform as RectTransform);
-        if (handWidthPx < 100f) handWidthPx = 1000f;
+        myCards = myCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
 
-        float prefabWidth = HandLayoutHelper.GetPrefabCardWidth(cardUIPrefab);
-        HandLayoutConfig layout = HandLayoutHelper.GetLayout(myCards.Count, handWidthPx, prefabWidth);
-        float startX = HandLayoutHelper.ComputeStartX(layout, myCards.Count);
+        bool isTwoRows = myCards.Count > 13;
+        const int cardsPerRow = 13;
+        float spacingX = 120f;
 
         for (int i = 0; i < myCards.Count; i++)
         {
             GameObject newCardUI = Object.Instantiate(cardUIPrefab, handAreaTransform);
             newCardUI.GetComponent<CardDisplay>()?.SetCardData(myCards[i]);
+
             RectTransform rt = newCardUI.GetComponent<RectTransform>();
             rt.localScale = Vector3.one;
-            float targetX = startX + i * (layout.prefabCardWidth + layout.spacing);
-            rt.anchoredPosition = animate ? new Vector2(targetX, -25f) : new Vector2(targetX, 0f);
+
+            int row = i / cardsPerRow;
+            int col = i % cardsPerRow;
+            int cardsInThisRow = Mathf.Min(cardsPerRow, myCards.Count - row * cardsPerRow);
+
+            float startX = -((cardsInThisRow - 1) * spacingX) / 2f;
+            float xPos = startX + col * spacingX;
+
+            float yPos = 0f;
+            if (isTwoRows)
+                yPos = row == 0 ? 50f : -70f;
+
+            rt.anchoredPosition = new Vector2(xPos, yPos);
         }
 
         if (animate && myCards.Count > 0)
         {
-            Sequence popSeq = DOTween.Sequence();
             int idx = 0;
             foreach (Transform child in handAreaTransform)
             {
                 RectTransform rt = child.GetComponent<RectTransform>();
                 if (rt == null) continue;
-                float targetX = startX + idx * (layout.prefabCardWidth + layout.spacing);
-                popSeq.Insert(idx * 0.02f, rt.DOAnchorPos(new Vector2(targetX, 0f), 0.25f).SetEase(Ease.OutBack));
+
+                CardInteract interact = child.GetComponent<CardInteract>();
+                if (interact != null && interact.isPlayed) continue;
+
+                float targetY = rt.anchoredPosition.y;
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, targetY - 100f);
+                rt.DOAnchorPosY(targetY, 0.35f).SetEase(Ease.OutBack).SetDelay(idx * 0.02f);
                 idx++;
             }
         }
@@ -1391,7 +1572,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         if (!matchInProgress)
             GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);
         BuildTableTurnOrder();
-        lastTrickWinnerActor = starterActor;
+        lastTrickWinnerActor = -1;
 
         float turnDelay = matchInProgress ? 0.15f : 1.1f;
         StartCoroutine(HandRevealThenStartGame(starterActor, turnDelay, matchInProgress));

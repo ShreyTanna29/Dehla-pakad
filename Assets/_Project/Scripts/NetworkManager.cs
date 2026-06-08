@@ -399,6 +399,29 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         Debug.Log("[GameInit] Game scene visible");
     }
 
+    public void StayInPrivateLobbyUI()
+    {
+        if (gameCanvasGroup != null)
+        {
+            gameCanvasGroup.DOKill();
+            gameCanvasGroup.alpha = 0f;
+            gameCanvasGroup.interactable = false;
+            gameCanvasGroup.blocksRaycasts = false;
+            gameCanvasGroup.gameObject.SetActive(false);
+        }
+
+        HidePanelGame();
+        HideLoading();
+        Debug.Log("[GameFlow] Waiting for friends. Staying in the Lobby...");
+    }
+
+    static void HidePanelGame()
+    {
+        GameObject panelGame = GameObject.Find("Panel_Game");
+        if (panelGame == null) panelGame = GameObject.Find("[Panel_Game]");
+        if (panelGame != null) panelGame.SetActive(false);
+    }
+
     void ShowHomeUI()
     {
         if (homeCanvasGroup != null)
@@ -699,12 +722,32 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
         }
 
+        bool rejoiningActiveGame = false;
+        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+        {
+            rejoiningActiveGame = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
+                && (bool)gs;
+
+            if (!rejoiningActiveGame)
+            {
+                Debug.Log("Private Room Joined. Waiting in Lobby...");
+                storedRoomName = PhotonNetwork.CurrentRoom.Name;
+                GameFlowState.SetPhase(GameFlowPhase.InRoom);
+                StopDisconnectAbandonCoroutine();
+                _localMatchAbandoned = false;
+                StayInPrivateLobbyUI();
+                HideReconnectPanels();
+                isAttemptingRejoin = false;
+                return;
+            }
+        }
+
         if (PhotonNetwork.CurrentRoom != null)
             storedRoomName = PhotonNetwork.CurrentRoom.Name;
 
-        bool rejoiningActiveGame = DeckManager.Instance != null &&
-            PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs) && (bool)gs;
+        rejoiningActiveGame = PhotonNetwork.CurrentRoom != null
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs2)
+            && (bool)gs2;
 
         if (rejoiningActiveGame)
             GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
@@ -731,7 +774,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (!hasExistingPlayer)
             PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
 
-        if (DeckManager.Instance != null)
+        if (DeckManager.Instance != null && !DeckManager.IsPrivateFriendsRoom())
             DeckManager.Instance.OnRoomJoinedCheckStart();
 
         InitializeGameplayScene();

@@ -11,21 +11,29 @@ public class ModeManager : MonoBehaviourPunCallbacks
     [Header("UI Panels")]
     public GameObject panelModes; 
     public GameObject panelHomeScreen;
+    public GameObject panelPlayWithFriends;
     [Tooltip("Canvas or parent for home/mode buttons. If empty, uses panel root.")]
     public Transform uiSearchRoot;
 
     [Header("Game Modes Settings")]
     public int currentTrickMode = 1;
     public int currentTrumpMode = 3;
+    public int currentSarMode = 1;
+    public int currentLogicMode = 1;
 
     [Header("UI References")]
     public Image btn1Taash;
     public Image btn2Taash;
+    public Image btn1Sar;
+    public Image btn2Sar;
     public Image btnFriends;
     public Image btnPresetTrump;
     public Image btn13thCard;
     public Image btnFirstCut;
     public Image btnCut2Trump;
+    public Image btnLogicA;
+    public Image btnLogicB;
+    public Image btnLogicC;
 
     private bool findMatchAfterLobby = false;
     private bool isFriendsMatchMode = false;
@@ -44,6 +52,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     const string PrefsTrickMode = "DehlaPakad_TrickMode";
     const string PrefsTrumpMode = "DehlaPakad_TrumpMode";
+    const string PrefsSarMode = "DehlaPakad_SarMode";
+    const string PrefsLogicMode = "DehlaPakad_LogicMode";
 
     void EnsureUiSearchRoot()
     {
@@ -97,7 +107,15 @@ public class ModeManager : MonoBehaviourPunCallbacks
             "Button_Play2Taash",
             "Button_PlayTrumpMode",
             "Button_Play13CardMode",
-            "Button_PlayCut2Trump"
+            "Button_PlayCut2Trump",
+            "Button_Play1Sar",
+            "Button_Play2Sar",
+            "Button_LogicA",
+            "Button_LogicB",
+            "Button_LogicC",
+            "Button_BackToHome",
+            "Play",
+            "Button_InviteFriends"
         };
 
         foreach (string name in buttonNames)
@@ -115,6 +133,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
             currentTrickMode = PlayerPrefs.GetInt(PrefsTrickMode, 1);
         if (PlayerPrefs.HasKey(PrefsTrumpMode))
             currentTrumpMode = PlayerPrefs.GetInt(PrefsTrumpMode, 3);
+        if (PlayerPrefs.HasKey(PrefsSarMode))
+            currentSarMode = PlayerPrefs.GetInt(PrefsSarMode, 1);
+        if (PlayerPrefs.HasKey(PrefsLogicMode))
+            currentLogicMode = PlayerPrefs.GetInt(PrefsLogicMode, 1);
         ApplyModesToGameSettings();
     }
 
@@ -122,15 +144,18 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         PlayerPrefs.SetInt(PrefsTrickMode, currentTrickMode);
         PlayerPrefs.SetInt(PrefsTrumpMode, currentTrumpMode);
+        PlayerPrefs.SetInt(PrefsSarMode, currentSarMode);
+        PlayerPrefs.SetInt(PrefsLogicMode, currentLogicMode);
         PlayerPrefs.Save();
         ApplyModesToGameSettings();
-        Debug.Log($"[GameFlow] Modes saved TM={currentTrickMode} RM={currentTrumpMode}");
+        Debug.Log($"[GameFlow] Modes saved TM={currentTrickMode} RM={currentTrumpMode} SM={currentSarMode} LM={currentLogicMode}");
     }
 
     void ApplyModesToGameSettings()
     {
         if (GameSettings.Instance == null) return;
         GameSettings.Instance.taashCategory = currentTrickMode;
+        GameSettings.Instance.currentSarMode = currentSarMode == 2 ? SarModeType.TwoSar : SarModeType.OneSar;
         switch (currentTrumpMode)
         {
             case 1: GameSettings.Instance.currentMode = GameModeType.TrumpSpades; break;
@@ -197,6 +222,19 @@ public class ModeManager : MonoBehaviourPunCallbacks
         SaveSelectedModes();
         UpdateFriendsOverlay();
         UpdateModeSelectionUIColors();
+
+        if (IsPrivateFriendsHost())
+            PlayWithFriendsManager.Instance.HostSelectedGameMode(mode == 1 ? 3 : 4);
+    }
+
+    public void OnClick_SarMode(int mode)
+    {
+        currentSarMode = mode;
+        SaveSelectedModes();
+        UpdateModeSelectionUIColors();
+
+        if (IsPrivateFriendsHost())
+            PlayWithFriendsManager.Instance.HostSelectedGameMode(mode);
     }
 
     public void OnClick_PlayFriends()
@@ -208,6 +246,15 @@ public class ModeManager : MonoBehaviourPunCallbacks
         UpdateFriendsOverlay();
         ApplyHomeScreenButtonColors();
         UpdateModeSelectionUIColors();
+
+        if (panelPlayWithFriends != null)
+            panelPlayWithFriends.SetActive(true);
+    }
+
+    public void OnClick_ClosePlayWithFriends()
+    {
+        if (panelPlayWithFriends != null)
+            panelPlayWithFriends.SetActive(false);
     }
 
     void UpdateFriendsOverlay()
@@ -226,6 +273,79 @@ public class ModeManager : MonoBehaviourPunCallbacks
         currentTrumpMode = mode;
         SaveSelectedModes();
         UpdateModeSelectionUIColors();
+
+        if (IsPrivateFriendsHost())
+            PlayWithFriendsManager.Instance.HostSelectedTrumpMode(mode);
+    }
+
+    public void OnClick_LogicMode(int mode)
+    {
+        currentLogicMode = mode;
+        SaveSelectedModes();
+        UpdateModeSelectionUIColors();
+
+        if (IsPrivateFriendsHost())
+            PlayWithFriendsManager.Instance.HostSelectedLogicMode(mode);
+    }
+
+    public void ApplyRemoteSarModeVisual(int mode)
+    {
+        currentSarMode = mode;
+        UpdateModeSelectionUIColors();
+    }
+
+    public void ApplyRemoteTrumpModeVisual(int mode)
+    {
+        currentTrumpMode = mode;
+        UpdateModeSelectionUIColors();
+    }
+
+    public void ApplyRemoteLogicModeVisual(int mode)
+    {
+        currentLogicMode = mode;
+        UpdateModeSelectionUIColors();
+    }
+
+    public void ApplyLiveModesFromRoomIfPresent()
+    {
+        if (PhotonNetwork.CurrentRoom == null) return;
+        var props = PhotonNetwork.CurrentRoom.CustomProperties;
+        if (props.ContainsKey("GameMode"))
+            ApplyLiveGameModeButtonIndex((int)props["GameMode"]);
+        if (props.ContainsKey("TrumpMode"))
+            ApplyRemoteTrumpModeVisual((int)props["TrumpMode"]);
+        if (props.ContainsKey("LogicMode"))
+            ApplyRemoteLogicModeVisual((int)props["LogicMode"]);
+    }
+
+    public void ApplyLiveGameModeButtonIndex(int index)
+    {
+        switch (index)
+        {
+            case 1: currentSarMode = 1; break;
+            case 2: currentSarMode = 2; break;
+            case 3:
+                isFriendsMatchMode = false;
+                currentTrickMode = 1;
+                break;
+            case 4:
+                isFriendsMatchMode = false;
+                currentTrickMode = 2;
+                break;
+            default:
+                Debug.LogWarning($"[Live Sync] Unknown GameMode index: {index}");
+                return;
+        }
+        UpdateModeSelectionUIColors();
+    }
+
+    static bool IsPrivateFriendsHost()
+    {
+        return PlayWithFriendsManager.Instance != null
+            && PhotonNetwork.InRoom
+            && PhotonNetwork.IsMasterClient
+            && PhotonNetwork.CurrentRoom != null
+            && !PhotonNetwork.CurrentRoom.IsVisible;
     }
 
     void WireCut2TrumpButton()
@@ -253,6 +373,12 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (btn2Taash == null)
             UiSafeLookup.TryGetImage("Button_Play2Taash", out btn2Taash);
 
+        if (btn1Sar == null)
+            UiSafeLookup.TryGetImage("Button_Play1Sar", out btn1Sar);
+
+        if (btn2Sar == null)
+            UiSafeLookup.TryGetImage("Button_Play2Sar", out btn2Sar);
+
         if (btnPresetTrump == null)
             UiSafeLookup.TryGetImage("Button_PlayTrumpMode", out btnPresetTrump);
 
@@ -264,6 +390,15 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         if (btnCut2Trump == null)
             UiSafeLookup.TryGetImage("Button_PlayCut2Trump", out btnCut2Trump);
+
+        if (btnLogicA == null)
+            UiSafeLookup.TryGetImage("Button_LogicA", out btnLogicA);
+
+        if (btnLogicB == null)
+            UiSafeLookup.TryGetImage("Button_LogicB", out btnLogicB);
+
+        if (btnLogicC == null)
+            UiSafeLookup.TryGetImage("Button_LogicC", out btnLogicC);
     }
 
     void UpdateModeSelectionUIColors()
@@ -279,6 +414,12 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (btn2Taash != null)
             btn2Taash.color = !isFriendsMatchMode && currentTrickMode == 2 ? selectedColor : unselectedColor;
 
+        if (btn1Sar != null && SarModeSelector.Instance == null)
+            btn1Sar.color = currentSarMode == 1 ? selectedColor : unselectedColor;
+
+        if (btn2Sar != null && SarModeSelector.Instance == null)
+            btn2Sar.color = currentSarMode == 2 ? selectedColor : unselectedColor;
+
         if (btnPresetTrump != null)
             btnPresetTrump.color = currentTrumpMode == 1 ? selectedColor : unselectedColor;
 
@@ -291,7 +432,19 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (btnCut2Trump != null)
             btnCut2Trump.color = currentTrumpMode == 4 ? selectedColor : unselectedColor;
 
-        Debug.Log($"[Mode UI] Trump Mode={currentTrumpMode} | Cut2Trump image assigned={btnCut2Trump != null}");
+        if (btnLogicA != null)
+            btnLogicA.color = currentLogicMode == 1 ? selectedColor : unselectedColor;
+
+        if (btnLogicB != null)
+            btnLogicB.color = currentLogicMode == 2 ? selectedColor : unselectedColor;
+
+        if (btnLogicC != null)
+            btnLogicC.color = currentLogicMode == 3 ? selectedColor : unselectedColor;
+
+        Debug.Log($"[Mode UI] Trump Mode={currentTrumpMode} | Logic Mode={currentLogicMode} | Cut2Trump image assigned={btnCut2Trump != null}");
+
+        if (SarModeSelector.Instance != null)
+            SarModeSelector.Instance.UpdateButtonVisuals();
     }
 
     public void OnClick_FindMatch()
@@ -385,27 +538,27 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         if (isFriendsMatchMode)
         {
-            string roomName = "Friends_" + currentTrickMode + "_" + currentTrumpMode + "_" + Random.Range(1000, 9999);
+            string roomName = "Friends_" + currentTrickMode + "_" + currentTrumpMode + "_" + currentSarMode + "_" + Random.Range(1000, 9999);
             Debug.Log($"[Photon] Friends room — create {roomName}");
             PhotonNetwork.CreateRoom(roomName, BuildRoomOptions(friendsRoom: true));
             return;
         }
 
         Debug.Log("[Photon] Attempt Join Room (JoinRandomRoom)");
-        Hashtable expected = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode } };
+        Hashtable expected = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode }, { "SM", currentSarMode } };
         PhotonNetwork.JoinRandomRoom(expected, 4);
     }
 
     RoomOptions BuildRoomOptions(bool friendsRoom = false)
     {
-        Hashtable roomProperties = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode } };
+        Hashtable roomProperties = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode }, { "SM", currentSarMode } };
         return new RoomOptions
         {
             MaxPlayers = 4,
             IsOpen = true,
             IsVisible = !PhotonNetwork.OfflineMode && !friendsRoom,
             CustomRoomProperties = roomProperties,
-            CustomRoomPropertiesForLobby = new string[] { "TM", "RM" },
+            CustomRoomPropertiesForLobby = new string[] { "TM", "RM", "SM" },
             PlayerTtl = 30000,
             EmptyRoomTtl = 30000
         };
@@ -461,6 +614,17 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
+        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+        {
+            bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs1) && (bool)gs1;
+            if (!rejoining)
+            {
+                Debug.Log("Private Room Joined. Waiting in Lobby...");
+                GameFlowState.SetPhase(GameFlowPhase.InRoom);
+                return;
+            }
+        }
+
         Debug.Log($"[Photon] Joined Room | {PhotonNetwork.CurrentRoom?.Name} | Players: {PhotonNetwork.CurrentRoom?.PlayerCount}/4");
 
         if (PhotonNetwork.IsMasterClient)
@@ -477,8 +641,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
         }
 
         bool matchInProgress = PhotonNetwork.CurrentRoom != null
-            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
-            && (bool)gs;
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs2)
+            && (bool)gs2;
 
         GameFlowState.SetPhase(
             matchInProgress ? GameFlowPhase.InGame : GameFlowPhase.InRoom,
@@ -495,29 +659,33 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         int trickMode = currentTrickMode;
         int trumpMode = currentTrumpMode;
+        int sarMode = currentSarMode;
         if (PhotonNetwork.CurrentRoom != null)
         {
             if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("TM"))
                 trickMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["TM"];
             if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("RM"))
                 trumpMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["RM"];
+            if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("SM"))
+                sarMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["SM"];
         }
 
-        pv.RPC(nameof(RPC_ReceiveGameStateSync), info.Sender, trickMode, trumpMode);
+        pv.RPC(nameof(RPC_ReceiveGameStateSync), info.Sender, trickMode, trumpMode, sarMode);
     }
 
     [PunRPC]
-    void RPC_ReceiveGameStateSync(int trickMode, int trumpMode)
+    void RPC_ReceiveGameStateSync(int trickMode, int trumpMode, int sarMode)
     {
         currentTrickMode = trickMode;
         currentTrumpMode = trumpMode;
+        currentSarMode = sarMode;
         ApplyModesToGameSettings();
         UpdateModeSelectionUIColors();
 
         if (TrumpManager.Instance != null)
             TrumpManager.ApplyTrumpForCurrentGameMode(false);
 
-        Debug.Log($"[Sync] Mode synced: TM={trickMode} RM={trumpMode} -> {GameSettings.Instance?.currentMode}");
+        Debug.Log($"[Sync] Mode synced: TM={trickMode} RM={trumpMode} SM={sarMode} -> {GameSettings.Instance?.currentMode}");
 
         bool matchInProgress = PhotonNetwork.CurrentRoom != null
             && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
@@ -528,16 +696,20 @@ public class ModeManager : MonoBehaviourPunCallbacks
             forceRecovery: matchInProgress);
     }
 
-    void SyncModesFromRoom()
+    public void SyncModesFromRoom()
     {
         if (PhotonNetwork.CurrentRoom == null) return;
         if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("TM"))
             currentTrickMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["TM"];
         if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("RM"))
             currentTrumpMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["RM"];
+        if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("SM"))
+            currentSarMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["SM"];
+        if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("LM"))
+            currentLogicMode = (int)PhotonNetwork.CurrentRoom.CustomProperties["LM"];
         ApplyModesToGameSettings();
         UpdateModeSelectionUIColors();
-        Debug.Log($"[Photon] Synced modes from room TM={currentTrickMode} RM={currentTrumpMode}");
+        Debug.Log($"[Photon] Synced modes from room TM={currentTrickMode} RM={currentTrumpMode} SM={currentSarMode} LM={currentLogicMode}");
     }
 
     public override void OnJoinRoomFailed(short returnCode, string message)
@@ -546,5 +718,45 @@ public class ModeManager : MonoBehaviourPunCallbacks
         GameFlowState.SetPhase(GameFlowPhase.Matchmaking);
         if (MatchmakingManager.Instance != null) MatchmakingManager.Instance.StopSearching(false);
         if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+    }
+
+    public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
+    {
+        if (propertiesThatChanged == null || PhotonNetwork.CurrentRoom == null) return;
+        if (PhotonNetwork.CurrentRoom.IsVisible) return;
+
+        if (propertiesThatChanged.ContainsKey("ModesLocked")
+            && propertiesThatChanged["ModesLocked"] is bool locked
+            && locked)
+        {
+            SyncModesFromRoom();
+            if (PlayWithFriendsManager.Instance != null)
+                PlayWithFriendsManager.Instance.HidePrivateFriendsLobbyUI();
+            if (TrumpManager.Instance != null)
+                TrumpManager.ApplyTrumpForCurrentGameMode(false);
+            Debug.Log("Host locked the modes!");
+            return;
+        }
+
+        if (propertiesThatChanged.ContainsKey("GameMode"))
+        {
+            int selectedMode = (int)propertiesThatChanged["GameMode"];
+            ApplyLiveGameModeButtonIndex(selectedMode);
+            Debug.Log("Live Sync: Game Mode changed to ID " + selectedMode);
+        }
+
+        if (propertiesThatChanged.ContainsKey("TrumpMode"))
+        {
+            int selectedTrump = (int)propertiesThatChanged["TrumpMode"];
+            ApplyRemoteTrumpModeVisual(selectedTrump);
+            Debug.Log("Live Sync: Trump Mode changed to ID " + selectedTrump);
+        }
+
+        if (propertiesThatChanged.ContainsKey("LogicMode"))
+        {
+            int selectedLogic = (int)propertiesThatChanged["LogicMode"];
+            ApplyRemoteLogicModeVisual(selectedLogic);
+            Debug.Log("Live Sync: Logic Mode changed to ID " + selectedLogic);
+        }
     }
 }
