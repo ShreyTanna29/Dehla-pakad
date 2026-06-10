@@ -76,6 +76,7 @@ MonoBehaviour:
   - RPC_ShowModesPanelToClients
   - RPC_SyncGameModeUI
   - RPC_SyncTrumpModeUI
+  - RPC_StartGameForEveryone
   DisableAutoOpenWizard: 1
   ShowSettings: 0
   DevRegionSetOnce: 1

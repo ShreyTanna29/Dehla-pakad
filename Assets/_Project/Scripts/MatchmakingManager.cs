@@ -125,6 +125,12 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
 
     public void StopSearching(bool isMatchFound)
     {
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !isMatchFound)
+        {
+            Debug.Log("[Matchmaking] Private Room detected, bypassing exit logic.");
+            return;
+        }
+
         // For Bots mode or if we were searching, we want the transition
         if (!isSearching && !isMatchFound && !WasCancelledByUser) return;
         

@@ -50,16 +50,44 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
             gameUiSearchRoot = NetworkManager.Instance.gameCanvasGroup.transform;
         if (gameUiSearchRoot == null)
             gameUiSearchRoot = transform.root;
+            
         UiSafeLookup.SetSearchRoot(gameUiSearchRoot);
 
-        if (imgMyAvatar == null && UiSafeLookup.TryGetPath("You/You_Avatar", out GameObject myGo))
-            imgMyAvatar = myGo.GetComponent<UnityEngine.UI.Image>();
-        if (imgLeftAvatar == null && UiSafeLookup.TryGetPath("Opponent_Left/Playe2_Avatar", out GameObject leftGo))
-            imgLeftAvatar = leftGo.GetComponent<UnityEngine.UI.Image>();
-        if (imgTopAvatar == null && UiSafeLookup.TryGetPath("Opponent_Top/Player3_Avatar", out GameObject topGo))
-            imgTopAvatar = topGo.GetComponent<UnityEngine.UI.Image>();
-        if (imgRightAvatar == null && UiSafeLookup.TryGetPath("Opponent_Right/Playe4_Avatar", out GameObject rightGo))
-            imgRightAvatar = rightGo.GetComponent<UnityEngine.UI.Image>();
+        // More robust finding - try path then by name if path fails
+        if (imgMyAvatar == null)
+        {
+            if (UiSafeLookup.TryGetPath("You/You_Avatar", out GameObject myGo))
+                imgMyAvatar = myGo.GetComponent<UnityEngine.UI.Image>();
+            else if (UiSafeLookup.TryGet("You_Avatar", out GameObject myGo2))
+                imgMyAvatar = myGo2.GetComponent<UnityEngine.UI.Image>();
+        }
+
+        if (imgLeftAvatar == null)
+        {
+            if (UiSafeLookup.TryGetPath("Opponent_Left/Playe2_Avatar", out GameObject leftGo))
+                imgLeftAvatar = leftGo.GetComponent<UnityEngine.UI.Image>();
+            else if (UiSafeLookup.TryGet("Playe2_Avatar", out GameObject leftGo2))
+                imgLeftAvatar = leftGo2.GetComponent<UnityEngine.UI.Image>();
+        }
+
+        if (imgTopAvatar == null)
+        {
+            if (UiSafeLookup.TryGetPath("Opponent_Top/Player3_Avatar", out GameObject topGo))
+                imgTopAvatar = topGo.GetComponent<UnityEngine.UI.Image>();
+            else if (UiSafeLookup.TryGet("Player3_Avatar", out GameObject topGo2))
+                imgTopAvatar = topGo2.GetComponent<UnityEngine.UI.Image>();
+            
+            if (imgTopAvatar == null)
+                Debug.LogWarning("[ProfileSync] Failed to find imgTopAvatar (Opponent_Top/Player3_Avatar)");
+        }
+
+        if (imgRightAvatar == null)
+        {
+            if (UiSafeLookup.TryGetPath("Opponent_Right/Playe4_Avatar", out GameObject rightGo))
+                imgRightAvatar = rightGo.GetComponent<UnityEngine.UI.Image>();
+            else if (UiSafeLookup.TryGet("Playe4_Avatar", out GameObject rightGo2))
+                imgRightAvatar = rightGo2.GetComponent<UnityEngine.UI.Image>();
+        }
 
         if (txtMyName == null && UiSafeLookup.TryGetPath("You/You_Name", out GameObject myNameGo))
             txtMyName = myNameGo.GetComponent<TMP_Text>();
@@ -164,12 +192,19 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
 
     void AssignAvatarSprite(UnityEngine.UI.Image img, int actorNumber)
     {
-        if (img == null) return;
+        if (img == null)
+        {
+             Debug.LogWarning($"[ProfileSync] Cannot assign avatar for actor {actorNumber} - Image component is null");
+             return;
+        }
+        
         List<Sprite> pool = MatchmakingManager.GlobalProfileSprites;
         if (pool == null || pool.Count == 0) return;
+        
         int spriteIndex = Mathf.Abs(actorNumber) % pool.Count;
         img.sprite = pool[spriteIndex];
         img.preserveAspect = true;
+        img.enabled = true; // Ensure it's enabled
     }
 
     private void SetSeatText(int seatIndex, string name)

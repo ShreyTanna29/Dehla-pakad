@@ -752,7 +752,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public void FillBotsAndStart()
     {
-        if (gameStarted)
+        if (gameStarted && !IsPrivateFriendsRoom())
         {
             Debug.LogWarning("[DeckManager] FillBotsAndStart called but game already started.");
             return;
@@ -770,6 +770,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
             return;
         }
 
+        Debug.Log("[DeckManager] Starting Match from Private/Bot Lobby...");
         masterTrackingCounts.Clear();
         humanHandsOnMaster.Clear();
 
@@ -822,16 +823,11 @@ public class DeckManager : MonoBehaviourPunCallbacks
         List<int> seats = BuildActiveSeatList();
         int humans = GetActiveHumanPlayerCount();
         LogSeatDiagnostics(humans, seats);
-        Debug.Log($"[Seats] Real players: {humans}");
-        Debug.Log($"[Seats] Bots: {botActorNumbers.Count} [{string.Join(", ", botActorNumbers)}]");
-        Debug.Log($"[Seats] Total: {seats.Count}");
+
         if (seats.Count != MaxTableSeats)
             Debug.LogError($"[DeckManager] RPC_InitializeMatch: invalid seat count {seats.Count}, expected {MaxTableSeats}.");
 
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowGameScene();
-        else
-            NetworkManager.InitializeGameplayScene();
+        NetworkManager.InitializeGameplayScene();
 
         Debug.Log($"🤖 [Bot Mode] RPC Match initialized with {botActorNumbers.Count} bot actor(s).");
         RPC_ResetAllHands();
@@ -865,17 +861,26 @@ public class DeckManager : MonoBehaviourPunCallbacks
             humanHandsOnMaster.Clear();
         }
 
-        if (MatchmakingManager.Instance != null)
+        bool isPrivate = IsPrivateFriendsRoom();
+
+        if (MatchmakingManager.Instance != null && !isPrivate && !PhotonNetwork.OfflineMode)
         {
             Debug.Log("[DeckManager] Triggering match transition (StopSearching)");
             MatchmakingManager.Instance.StopSearching(true);
         }
-        else if (PhotonNetwork.OfflineMode && PhotonNetwork.IsMasterClient)
+        else
         {
-            Debug.Log("[Bot Mode] No MatchmakingManager — starting deal directly");
+            // For Offline or Private mode, we bypass Matchmaking UI
             if (NetworkManager.Instance != null)
                 NetworkManager.Instance.ShowGameScene();
-            StartFullDealingSequence();
+            else
+                PlayerHand.LocalInstance?.InitializeGameScene();
+
+            if (PhotonNetwork.IsMasterClient)
+            {
+                Debug.Log(isPrivate ? "[Friends Mode] Starting deal directly" : "[Bot Mode] Starting deal directly");
+                StartFullDealingSequence();
+            }
         }
 
         botHands.Clear();
@@ -888,11 +893,27 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public void StartFullDealingSequence()
     {
-        Debug.Log($"[DeckManager] StartFullDealingSequence. Master: {PhotonNetwork.IsMasterClient}, Running: {isDealCoroutineRunning}, Complete: {IsDealingComplete}");
-        if (!PhotonNetwork.IsMasterClient || isDealCoroutineRunning || IsDealingComplete) return;
+        Debug.Log($"[GameStart] StartFullDealingSequence request. Master: {PhotonNetwork.IsMasterClient}, Running: {isDealCoroutineRunning}, Complete: {IsDealingComplete}");
+
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log("[GameStart] StartFullDealingSequence ignored — not master client.");
+            return;
+        }
+
+        if (isDealCoroutineRunning || IsDealingComplete)
+        {
+            Debug.Log("[GameStart] Duplicate start blocked");
+            return;
+        }
+
+        if (PlayerHand.LocalInstance == null)
+            Debug.LogError("[GameStart ERROR] Missing PlayerHand");
+
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.ShowGameScene();
-        Debug.Log("[Deal] Started");
+
+        Debug.Log("[GameStart] StartFullDealingSequence");
         StartCoroutine(FullDealingSequenceRoutine());
     }
 
@@ -901,40 +922,41 @@ public class DeckManager : MonoBehaviourPunCallbacks
         Debug.Log("[DeckManager] FullDealingSequenceRoutine started.");
         isDealCoroutineRunning = true;
         currentDealBatch = 0;
-        float initialWait = PhotonNetwork.OfflineMode ? 0.1f : 0.35f;
-        yield return new WaitForSeconds(initialWait);
+        yield return new WaitForSeconds(0.2f);
 
         int[] dealBatches = TaashRules.GetDealAnimationBatches();
-        string taashLabel = TaashRules.IsTwoTaashMode ? "2 Taash (10-8-8)" : "1 Taash (5-4-4)";
-        const float pauseBetweenRounds = 0.02f; // Reduced from 0.06f
 
         for (int batch = 0; batch < dealBatches.Length; batch++)
         {
             currentDealBatch = batch + 1;
             int cardsThisBatch = dealBatches[batch];
-            Debug.Log($"[DeckManager] Deal round {currentDealBatch}/{dealBatches.Length} — {cardsThisBatch} cards per player ({taashLabel})");
+            Debug.Log($"[DeckManager] Deal round {currentDealBatch}/{dealBatches.Length}");
             photonView.RPC("RPC_PlayDealAnimation", RpcTarget.All, cardsThisBatch);
 
-            yield return new WaitForSeconds(PlayerHand.GetDealBatchDuration(cardsThisBatch));
-
-            if (batch < dealBatches.Length - 1)
-                yield return new WaitForSeconds(pauseBetweenRounds);
+            yield return new WaitForSeconds(PlayerHand.GetDealBatchDuration(cardsThisBatch) + 0.1f);
         }
 
-        Debug.Log("[DeckManager] Animations finished. Distributing cards...");
+        Debug.Log("[DeckManager] Distributing cards manually now...");
         BuildAndShuffleDeck();
         DistributeAllHandsInternal();
+
+        if (PlayerHand.LocalInstance != null)
+        {
+            Debug.Log("[DeckManager] Force-refreshing local hand visuals.");
+            PlayerHand.LocalInstance.RefreshHandUI(animate: true, force: true);
+        }
 
         List<int> seats = GetActiveSeatActorsSorted();
         if (seats.Count == MaxTableSeats)
         {
-            IsDealingComplete = true;
-            int myIdx = seats.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
-            if (myIdx < 0) myIdx = 0;
-            int starterActor = seats[(myIdx + 3) % MaxTableSeats];
+            int starterActor = seats[0];
 
-            yield return new WaitForSeconds(0.15f);
+            yield return new WaitForSeconds(0.2f);
             photonView.RPC("RPC_DealingComplete", RpcTarget.All, starterActor);
+        }
+        else
+        {
+            Debug.LogError($"[DeckManager] RPC_DealingComplete skipped — seat count {seats.Count}/{MaxTableSeats}");
         }
         isDealCoroutineRunning = false;
     }

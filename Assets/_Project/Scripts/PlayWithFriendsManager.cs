@@ -20,6 +20,18 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public GameObject modesPanel;
     public TMP_Text clientWaitingText;
 
+    [Header("Live Player List UI")]
+    public TMP_Text[] playerSlotsText;
+
+    [Header("Toggle Bot Settings")]
+    public GameObject includeBotsButton;
+    public TMP_Text includeBotsBtnText;
+    bool areBotsIncluded;
+
+    [Header("Game Table UI")]
+    public GameObject homeMenuPanel;
+    public GameObject gameTablePanel;
+
     [Header("Friends List Storage")]
     private const string FriendsPrefsKey = "SavedFriendsList";
     public List<string> myFriends = new List<string>();
@@ -36,15 +48,22 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         LoadFriends();
         EnsurePhotonUserId();
+        EnsureNickname();
         EnsurePhotonView();
+        PhotonNetwork.AddCallbackTarget(this);
     }
 
-    PhotonView photonView
+    public override void OnDisable()
     {
-        get
+        // Keep receiving room property updates while this panel is hidden.
+    }
+
+    void EnsureNickname()
+    {
+        if (string.IsNullOrEmpty(PhotonNetwork.NickName))
         {
-            EnsurePhotonView();
-            return _photonView;
+            PhotonNetwork.NickName = "Player_" + Random.Range(100, 999);
+            Debug.Log("My Random Name Set To: " + PhotonNetwork.NickName);
         }
     }
 
@@ -62,6 +81,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     void OnDestroy()
     {
+        PhotonNetwork.RemoveCallbackTarget(this);
         if (Instance == this) Instance = null;
     }
 
@@ -69,6 +89,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (errorText != null) errorText.gameObject.SetActive(false);
         if (startGameButton != null) startGameButton.SetActive(false);
+        if (clientWaitingText != null) clientWaitingText.gameObject.SetActive(false);
+        if (includeBotsButton != null) includeBotsButton.SetActive(false);
+        ClearPlayerListUI();
     }
 
     void EnsurePhotonUserId()
@@ -92,8 +115,14 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (errorText != null) errorText.gameObject.SetActive(false);
 
-        if (!PhotonNetwork.IsConnectedAndReady)
+        if (!PhotonNetwork.IsConnectedAndReady || (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.ConnectedToMasterServer))
         {
+            if (PhotonNetwork.NetworkClientState == ClientState.ConnectedToNameServer)
+            {
+                 Debug.Log("[Photon] Still on NameServer. Waiting...");
+                 ShowUIError("Connecting to Master Server...");
+                 return;
+            }
             ShowUIError("Server not ready. Wait a moment...");
             return;
         }
@@ -163,14 +192,85 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.CurrentRoom == null) return;
 
-        if (pinCreationPanel != null) pinCreationPanel.SetActive(true);
+        if (pinCreationPanel != null)
+        {
+            pinCreationPanel.SetActive(true);
+            pinCreationPanel.transform.SetAsLastSibling();
+        }
         if (generatedPinText != null) generatedPinText.text = "Room PIN: " + PhotonNetwork.CurrentRoom.Name;
         if (errorText != null) errorText.gameObject.SetActive(false);
 
         if (modesPanel != null && !PhotonNetwork.IsMasterClient)
             modesPanel.SetActive(false);
 
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("BotsIncluded", out object botsObj))
+            ApplyBotsIncludedState((bool)botsObj);
+        else
+            ApplyBotsIncludedState(false);
+
+        UpdatePlayerListUI();
         CheckPlayerCountAndToggleStart();
+    }
+
+    public void ToggleBots()
+    {
+        if (!PhotonNetwork.InRoom || !PhotonNetwork.IsMasterClient) return;
+
+        bool newState = !areBotsIncluded;
+        ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable();
+        props["BotsIncluded"] = newState;
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+    }
+
+    void ApplyBotsIncludedState(bool included)
+    {
+        areBotsIncluded = included;
+        if (includeBotsBtnText != null)
+            includeBotsBtnText.text = areBotsIncluded ? "Remove Bots" : "Include Bots";
+    }
+
+    void UpdatePlayerListUI()
+    {
+        if (!PhotonNetwork.InRoom || playerSlotsText == null || playerSlotsText.Length == 0) return;
+
+        Player[] currentPlayers = PhotonNetwork.PlayerList;
+        int realPlayerCount = currentPlayers.Length;
+
+        for (int i = 0; i < playerSlotsText.Length; i++)
+        {
+            if (playerSlotsText[i] == null) continue;
+
+            if (i < realPlayerCount)
+            {
+                string hostTag = currentPlayers[i].IsMasterClient ? " (Host)" : "";
+                playerSlotsText[i].text = currentPlayers[i].NickName + hostTag;
+                playerSlotsText[i].color = Color.white;
+            }
+            else if (areBotsIncluded)
+            {
+                playerSlotsText[i].text = realPlayerCount == 3 && i == realPlayerCount
+                    ? "DehlaBot"
+                    : "AI Bot " + (i - realPlayerCount + 1);
+                playerSlotsText[i].color = new Color(0.4f, 1f, 0.4f, 1f);
+            }
+            else
+            {
+                playerSlotsText[i].text = "Waiting for Friend...";
+                playerSlotsText[i].color = new Color(1f, 1f, 1f, 0.4f);
+            }
+        }
+    }
+
+    void ClearPlayerListUI()
+    {
+        if (playerSlotsText == null) return;
+
+        for (int i = 0; i < playerSlotsText.Length; i++)
+        {
+            if (playerSlotsText[i] == null) continue;
+            playerSlotsText[i].text = "Waiting for Friend...";
+            playerSlotsText[i].color = new Color(1f, 1f, 1f, 0.4f);
+        }
     }
 
     void CheckPlayerCountAndToggleStart()
@@ -178,23 +278,46 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (startGameButton == null)
             UiSafeLookup.TryGet("Btn_StartPrivateGame", out startGameButton);
 
-        if (!PhotonNetwork.InRoom || !PhotonNetwork.IsMasterClient || startGameButton == null)
-            return;
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
 
-        bool roomFull = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats;
-        startGameButton.SetActive(roomFull);
+        if (includeBotsButton != null)
+            includeBotsButton.SetActive(PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.PlayerCount < DeckManager.MaxTableSeats);
+
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            if (startGameButton != null) startGameButton.SetActive(false);
+            return;
+        }
+
+        if (startGameButton == null) return;
+
+        bool canStart = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats || areBotsIncluded;
+        startGameButton.SetActive(canStart);
     }
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
-        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
-            ShowPrivateRoomLobbyUI();
+        if (PhotonNetwork.CurrentRoom == null || PhotonNetwork.CurrentRoom.IsVisible) return;
+
+        if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats && areBotsIncluded)
+        {
+            ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
+            {
+                { "BotsIncluded", false }
+            };
+            PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        }
+
+        ShowPrivateRoomLobbyUI();
     }
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
     {
         if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+        {
+            UpdatePlayerListUI();
             CheckPlayerCountAndToggleStart();
+        }
     }
 
     // ==========================================
@@ -275,7 +398,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         gameObject.SetActive(false);
     }
 
-    // Live sync: 1 Sar=1, 2 Sar=2, 1 Taash=3, 2 Taash=4
+    // Live sync: 1 Sar=1, 2 Sar=2
     public void HostSelectedGameMode(int modeIndex)
     {
         if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom) return;
@@ -283,6 +406,18 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
         {
             { "GameMode", modeIndex }
+        };
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+    }
+
+    // Live sync: 1 Taash=1, 2 Taash=2
+    public void HostSelectedTaashMode(int taashIndex)
+    {
+        if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom) return;
+
+        ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
+        {
+            { "TaashMode", taashIndex }
         };
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
     }
@@ -322,14 +457,48 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             modesPanel = ModeManager.Instance.panelModes;
     }
 
+    void ResolveHomeMenuPanel()
+    {
+        if (homeMenuPanel != null) return;
+        if (NetworkManager.Instance != null)
+            homeMenuPanel = NetworkManager.Instance.homeMenuPanel;
+        else if (ModeManager.Instance != null)
+            homeMenuPanel = ModeManager.Instance.panelHomeScreen;
+    }
+
+    void ResolveGameTablePanel()
+    {
+        if (gameTablePanel != null) return;
+        if (NetworkManager.Instance != null)
+            gameTablePanel = NetworkManager.Instance.gameTablePanel;
+    }
+
     // ==========================================
-    // FINAL PLAY BUTTON (MODE SELECT HONE KE BAAD)
+    // TRAFFIC POLICE: MASTER START BUTTON ROUTER
+    // ==========================================
+
+    // The Mode Panel Start button must ALWAYS go through the single clean router in ModeManager.
+    // PlayWithFriendsManager must never decide Play Online / Play Bots routing itself.
+    public void OnModePanelStartClicked()
+    {
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.StartGameFromModePanel();
+        else
+            Debug.LogError("[StartRoute] ModeManager.Instance missing — cannot route Mode Panel Start.");
+    }
+
+    public void OnStartButtonClick() => OnModePanelStartClicked();
+
+    // ==========================================
+    // FINAL CONFIRM & PLAY (HOST PRESSES START ON MODES PANEL)
     // ==========================================
 
     public void FinalStartWithSelectedModes()
     {
         if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom) return;
         if (GameSettings.Instance == null) return;
+
+        Debug.Log("Host pressed Final Start! Telling everyone to start the game...");
 
         ExitGames.Client.Photon.Hashtable customRoomProperties = new ExitGames.Client.Photon.Hashtable();
 
@@ -349,14 +518,60 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         customRoomProperties["ModesLocked"] = true;
-
+        customRoomProperties["BotsIncluded"] = areBotsIncluded;
         PhotonNetwork.CurrentRoom.SetCustomProperties(customRoomProperties);
+
         PhotonNetwork.CurrentRoom.IsOpen = false;
+        PhotonNetwork.CurrentRoom.IsVisible = false;
 
-        if (DeckManager.Instance != null)
-            DeckManager.Instance.FillBotsAndStart();
+        photonView.RPC(nameof(RPC_StartGameForEveryone), RpcTarget.All);
+    }
 
+    [PunRPC]
+    void RPC_StartGameForEveryone()
+    {
+        Debug.Log("[GameStart] Friends RPC_StartGameForEveryone received");
+
+        ResolveModesPanel();
+        if (modesPanel != null) modesPanel.SetActive(false);
         HidePrivateFriendsLobbyUI();
+
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.SyncModesFromRoom();
+
+        if (TrumpManager.Instance != null)
+            TrumpManager.ApplyTrumpForCurrentGameMode(false);
+
+        DeckManager.botActorNumbers.Clear();
+
+        if (PhotonNetwork.IsMasterClient)
+        {
+            int realPlayerCount = PhotonNetwork.CurrentRoom.PlayerCount;
+            int botsNeeded = DeckManager.MaxTableSeats - realPlayerCount;
+
+            for (int i = 0; i < botsNeeded; i++)
+                DeckManager.botActorNumbers.Add(100 + i);
+
+            Debug.Log($"[Bot System] {botsNeeded} Bots added for private match!");
+
+            if (botsNeeded > 0 && DeckManager.Instance != null)
+            {
+                DeckManager.Instance.photonView.RPC(
+                    "RPC_SyncBotsOnly",
+                    RpcTarget.All,
+                    DeckManager.botActorNumbers.ToArray());
+            }
+        }
+
+        // Single shared, guarded entry: hides menus, shows game scene, ensures local
+        // NetworkPlayer exists, initializes gameplay UI, and (master only) starts dealing once.
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.BeginGameAfterRoomReady();
+        else
+            Debug.LogError("[GameStart ERROR] NetworkManager.Instance missing — cannot start friends game.");
+
+        // Hide this lobby manager LAST so the work above runs while it is still active.
+        gameObject.SetActive(false);
     }
 
     void HidePlayWithFriendsLobbyPanel()
@@ -372,6 +587,57 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (errorText != null) errorText.gameObject.SetActive(false);
     }
 
+    public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
+    {
+        if (propertiesThatChanged == null || !PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
+        if (PhotonNetwork.CurrentRoom.IsVisible) return;
+
+        if (propertiesThatChanged.ContainsKey("ModesLocked")
+            && propertiesThatChanged["ModesLocked"] is bool locked
+            && locked)
+        {
+            if (ModeManager.Instance != null)
+                ModeManager.Instance.SyncModesFromRoom();
+            HidePrivateFriendsLobbyUI();
+            if (TrumpManager.Instance != null)
+                TrumpManager.ApplyTrumpForCurrentGameMode(false);
+            Debug.Log("Host locked the modes!");
+            return;
+        }
+
+        if (ModeManager.Instance == null) return;
+
+        if (propertiesThatChanged.ContainsKey("GameMode"))
+        {
+            int selectedMode = (int)propertiesThatChanged["GameMode"];
+            ModeManager.Instance.OnClick_SarMode(selectedMode, broadcastToRoom: false);
+        }
+
+        if (propertiesThatChanged.ContainsKey("TrumpMode"))
+        {
+            int selectedTrump = (int)propertiesThatChanged["TrumpMode"];
+            ModeManager.Instance.OnClick_TrumpMode(selectedTrump, broadcastToRoom: false);
+        }
+
+        if (propertiesThatChanged.ContainsKey("TaashMode"))
+        {
+            int selectedTaash = (int)propertiesThatChanged["TaashMode"];
+            ModeManager.Instance.OnClick_TrickMode(selectedTaash, broadcastToRoom: false);
+        }
+
+        if (propertiesThatChanged.ContainsKey("LogicMode"))
+        {
+            int selectedLogic = (int)propertiesThatChanged["LogicMode"];
+            ModeManager.Instance.OnClick_LogicMode(selectedLogic, broadcastToRoom: false);
+        }
+
+        if (propertiesThatChanged.ContainsKey("BotsIncluded"))
+        {
+            ApplyBotsIncludedState((bool)propertiesThatChanged["BotsIncluded"]);
+            UpdatePlayerListUI();
+            CheckPlayerCountAndToggleStart();
+        }
+    }
 
     // ==========================================
     // 6. FRIENDS LIST LOGIC

@@ -38,6 +38,15 @@ public class ModeManager : MonoBehaviourPunCallbacks
     private bool findMatchAfterLobby = false;
     private bool isFriendsMatchMode = false;
 
+    // Guards to prevent duplicate start/deal calls from the Mode Panel Start button.
+    private bool gameStartInProgress;
+
+    /// <summary>Clears the start guard so a new match can be started after returning home / cancelling.</summary>
+    public void ResetStartGuard()
+    {
+        gameStartInProgress = false;
+    }
+
     public void ScheduleMatchmakingAfterLobby()
     {
         findMatchAfterLobby = true;
@@ -48,6 +57,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("[ModeManager] CancelPendingMatchmaking called");
         findMatchAfterLobby = false;
+        gameStartInProgress = false;
     }
 
     const string PrefsTrickMode = "DehlaPakad_TrickMode";
@@ -140,7 +150,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         ApplyModesToGameSettings();
     }
 
-    void SaveSelectedModes()
+    public void SaveSelectedModes()
     {
         PlayerPrefs.SetInt(PrefsTrickMode, currentTrickMode);
         PlayerPrefs.SetInt(PrefsTrumpMode, currentTrumpMode);
@@ -169,12 +179,16 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("[UI] Button Clicked: Open Modes (no loading screen)");
         GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+        isFriendsMatchMode = false; // Reset by default when opening from home
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
 
-        if (panelHomeScreen != null && panelHomeScreen.activeSelf) panelHomeScreen.SetActive(false);
-        if (panelModes != null && !panelModes.activeSelf) panelModes.SetActive(true);
+        if (panelModes != null)
+        {
+            panelModes.SetActive(true);
+            panelModes.transform.SetAsLastSibling();
+        }
 
         SetupModeButtonHoverEffects();
         WireCut2TrumpButton();
@@ -185,6 +199,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("[UI] Button Clicked: Back to Home");
         GameFlowState.SetPhase(GameFlowPhase.Home);
+        isFriendsMatchMode = false; // Reset when going back
+        gameStartInProgress = false;
 
         if (panelModes != null && panelModes.activeSelf) panelModes.SetActive(false);
         if (panelHomeScreen != null && !panelHomeScreen.activeSelf) panelHomeScreen.SetActive(true);
@@ -215,7 +231,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         img.color = color;
     }
 
-    public void OnClick_TrickMode(int mode)
+    public void OnClick_TrickMode(int mode, bool broadcastToRoom = true)
     {
         isFriendsMatchMode = false;
         currentTrickMode = mode;
@@ -223,17 +239,17 @@ public class ModeManager : MonoBehaviourPunCallbacks
         UpdateFriendsOverlay();
         UpdateModeSelectionUIColors();
 
-        if (IsPrivateFriendsHost())
-            PlayWithFriendsManager.Instance.HostSelectedGameMode(mode == 1 ? 3 : 4);
+        if (broadcastToRoom && IsPrivateFriendsHost())
+            PlayWithFriendsManager.Instance.HostSelectedTaashMode(mode);
     }
 
-    public void OnClick_SarMode(int mode)
+    public void OnClick_SarMode(int mode, bool broadcastToRoom = true)
     {
         currentSarMode = mode;
         SaveSelectedModes();
         UpdateModeSelectionUIColors();
 
-        if (IsPrivateFriendsHost())
+        if (broadcastToRoom && IsPrivateFriendsHost())
             PlayWithFriendsManager.Instance.HostSelectedGameMode(mode);
     }
 
@@ -268,29 +284,36 @@ public class ModeManager : MonoBehaviourPunCallbacks
             overlay.gameObject.SetActive(isFriendsMatchMode);
     }
 
-    public void OnClick_TrumpMode(int mode)
+    public void OnClick_TrumpMode(int mode, bool broadcastToRoom = true)
     {
         currentTrumpMode = mode;
         SaveSelectedModes();
         UpdateModeSelectionUIColors();
 
-        if (IsPrivateFriendsHost())
+        if (broadcastToRoom && IsPrivateFriendsHost())
             PlayWithFriendsManager.Instance.HostSelectedTrumpMode(mode);
     }
 
-    public void OnClick_LogicMode(int mode)
+    public void OnClick_LogicMode(int mode, bool broadcastToRoom = true)
     {
         currentLogicMode = mode;
         SaveSelectedModes();
         UpdateModeSelectionUIColors();
 
-        if (IsPrivateFriendsHost())
+        if (broadcastToRoom && IsPrivateFriendsHost())
             PlayWithFriendsManager.Instance.HostSelectedLogicMode(mode);
     }
 
     public void ApplyRemoteSarModeVisual(int mode)
     {
         currentSarMode = mode;
+        UpdateModeSelectionUIColors();
+    }
+
+    public void ApplyRemoteTaashModeVisual(int mode)
+    {
+        isFriendsMatchMode = false;
+        currentTrickMode = mode;
         UpdateModeSelectionUIColors();
     }
 
@@ -311,11 +334,13 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.CurrentRoom == null) return;
         var props = PhotonNetwork.CurrentRoom.CustomProperties;
         if (props.ContainsKey("GameMode"))
-            ApplyLiveGameModeButtonIndex((int)props["GameMode"]);
+            OnClick_SarMode((int)props["GameMode"], broadcastToRoom: false);
+        if (props.ContainsKey("TaashMode"))
+            OnClick_TrickMode((int)props["TaashMode"], broadcastToRoom: false);
         if (props.ContainsKey("TrumpMode"))
-            ApplyRemoteTrumpModeVisual((int)props["TrumpMode"]);
+            OnClick_TrumpMode((int)props["TrumpMode"], broadcastToRoom: false);
         if (props.ContainsKey("LogicMode"))
-            ApplyRemoteLogicModeVisual((int)props["LogicMode"]);
+            OnClick_LogicMode((int)props["LogicMode"], broadcastToRoom: false);
     }
 
     public void ApplyLiveGameModeButtonIndex(int index)
@@ -447,10 +472,81 @@ public class ModeManager : MonoBehaviourPunCallbacks
             SarModeSelector.Instance.UpdateButtonVisuals();
     }
 
-    public void OnClick_FindMatch()
+    // Scene Mode-Panel Start button is wired to OnClick_FindMatch.
+    public void OnClick_FindMatch() => StartGameFromModePanel();
+
+    // Backward-compatible alias — always routes through the single clean entry point.
+    public void OnModePanelStartClicked() => StartGameFromModePanel();
+
+    /// <summary>
+    /// SINGLE clean entry point for the Mode Panel Start button.
+    /// Routes to exactly one flow based on match type / private-room state:
+    ///   1) Private Friends (in an invisible Photon room) -> PlayWithFriends final start.
+    ///   2) Play Bots (offline)                            -> offline/bot start.
+    ///   3) Play Online (default)                          -> public matchmaking.
+    /// PlayWithFriendsManager NEVER controls Play Online or Play Bots.
+    /// </summary>
+    public void StartGameFromModePanel()
+    {
+        Debug.Log("[StartRoute] Mode panel Start clicked");
+
+        bool isPrivateFriends = PhotonNetwork.InRoom
+            && PhotonNetwork.CurrentRoom != null
+            && !PhotonNetwork.CurrentRoom.IsVisible;
+        bool isBots = NetworkManager.Instance != null && NetworkManager.Instance.isPlayBotsMode;
+        MatchType matchType = GameSettings.Instance != null
+            ? GameSettings.Instance.currentMatchType
+            : MatchType.OnlinePhoton;
+
+        Debug.Log($"[StartRoute] MatchType = {(isPrivateFriends ? "PlayWithFriends (private room)" : matchType.ToString())} | isPlayBotsMode={isBots}");
+
+        if (gameStartInProgress)
+        {
+            Debug.Log("[GameStart] Duplicate start blocked");
+            return;
+        }
+
+        // Always persist the selected modes before any routing.
+        SaveSelectedModes();
+
+        // 1) PRIVATE FRIENDS ROUTE -----------------------------------------
+        if (isPrivateFriends)
+        {
+            Debug.Log("[StartRoute] Private Friends route");
+            gameStartInProgress = true;
+
+            if (PlayWithFriendsManager.Instance != null)
+            {
+                // Host saves modes to room props + RPCs everyone to start together.
+                PlayWithFriendsManager.Instance.FinalStartWithSelectedModes();
+            }
+            else
+            {
+                Debug.LogError("[StartRoute] PlayWithFriendsManager.Instance missing — cannot start private game.");
+                gameStartInProgress = false;
+            }
+            return;
+        }
+
+        // 2) PLAY BOTS ROUTE -----------------------------------------------
+        if (isBots || matchType == MatchType.OfflineBots)
+        {
+            Debug.Log("[StartRoute] Play Bots route");
+            gameStartInProgress = true;
+            // StartNormalMatchFromModesPanel internally detects bot mode and goes offline.
+            StartNormalMatchFromModesPanel();
+            return;
+        }
+
+        // 3) PLAY ONLINE ROUTE ---------------------------------------------
+        Debug.Log("[StartRoute] Play Online route");
+        gameStartInProgress = true;
+        StartNormalMatchFromModesPanel();
+    }
+
+    public void StartNormalMatchFromModesPanel()
     {
         Debug.Log("[UI] Button Clicked: Find Match");
-        SaveSelectedModes();
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
@@ -526,7 +622,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        if (!PhotonNetwork.InLobby)
+        if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
         {
             Debug.Log("[Photon] Attempt Join Lobby (before matchmaking)");
             findMatchAfterLobby = true;
@@ -600,6 +696,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public override void OnCreateRoomFailed(short returnCode, string message)
     {
         Debug.LogError($"[Photon] CreateRoomFailed | {returnCode} | {message}");
+        gameStartInProgress = false;
         if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
         {
             GameFlowState.SetPhase(GameFlowPhase.Home, true);
@@ -715,48 +812,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
         Debug.LogError($"[Photon] JoinRoomFailed | {returnCode} | {message}");
+        gameStartInProgress = false;
         GameFlowState.SetPhase(GameFlowPhase.Matchmaking);
         if (MatchmakingManager.Instance != null) MatchmakingManager.Instance.StopSearching(false);
         if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
     }
 
-    public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
-    {
-        if (propertiesThatChanged == null || PhotonNetwork.CurrentRoom == null) return;
-        if (PhotonNetwork.CurrentRoom.IsVisible) return;
-
-        if (propertiesThatChanged.ContainsKey("ModesLocked")
-            && propertiesThatChanged["ModesLocked"] is bool locked
-            && locked)
-        {
-            SyncModesFromRoom();
-            if (PlayWithFriendsManager.Instance != null)
-                PlayWithFriendsManager.Instance.HidePrivateFriendsLobbyUI();
-            if (TrumpManager.Instance != null)
-                TrumpManager.ApplyTrumpForCurrentGameMode(false);
-            Debug.Log("Host locked the modes!");
-            return;
-        }
-
-        if (propertiesThatChanged.ContainsKey("GameMode"))
-        {
-            int selectedMode = (int)propertiesThatChanged["GameMode"];
-            ApplyLiveGameModeButtonIndex(selectedMode);
-            Debug.Log("Live Sync: Game Mode changed to ID " + selectedMode);
-        }
-
-        if (propertiesThatChanged.ContainsKey("TrumpMode"))
-        {
-            int selectedTrump = (int)propertiesThatChanged["TrumpMode"];
-            ApplyRemoteTrumpModeVisual(selectedTrump);
-            Debug.Log("Live Sync: Trump Mode changed to ID " + selectedTrump);
-        }
-
-        if (propertiesThatChanged.ContainsKey("LogicMode"))
-        {
-            int selectedLogic = (int)propertiesThatChanged["LogicMode"];
-            ApplyRemoteLogicModeVisual(selectedLogic);
-            Debug.Log("Live Sync: Logic Mode changed to ID " + selectedLogic);
-        }
-    }
 }

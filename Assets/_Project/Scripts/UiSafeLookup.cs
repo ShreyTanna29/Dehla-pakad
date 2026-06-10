@@ -26,21 +26,47 @@ public static class UiSafeLookup
         if (_cacheByName.TryGetValue(objectName, out go) && go != null)
             return true;
 
-        if (_searchRoot == null)
+        // 1. Try search root
+        if (_searchRoot != null)
         {
-            WarnOnce(objectName, "no UI search root assigned");
-            return false;
+            foreach (Transform t in _searchRoot.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name == objectName)
+                {
+                    go = t.gameObject;
+                    _cacheByName[objectName] = go;
+                    return true;
+                }
+            }
         }
 
-        foreach (Transform t in _searchRoot.GetComponentsInChildren<Transform>(true))
+        // 2. Fallback: Try Canvas (common for UI)
+        Canvas canvas = Object.FindAnyObjectByType<Canvas>();
+        if (canvas != null && canvas.transform != _searchRoot)
         {
-            if (t.name != objectName) continue;
-            go = t.gameObject;
-            _cacheByName[objectName] = go;
-            return true;
+            foreach (Transform t in canvas.transform.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name == objectName)
+                {
+                    go = t.gameObject;
+                    _cacheByName[objectName] = go;
+                    return true;
+                }
+            }
         }
 
-        WarnOnce(objectName, $"not found under '{_searchRoot.name}'");
+        // 3. Last resort: Find inactive objects globally (costly, but safer than failing)
+        var allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+        foreach (var obj in allObjects)
+        {
+            if (obj.name == objectName && obj.hideFlags == HideFlags.None && !UnityEditor.EditorUtility.IsPersistent(obj))
+            {
+                go = obj;
+                _cacheByName[objectName] = go;
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -52,33 +78,40 @@ public static class UiSafeLookup
         if (_cacheByPath.TryGetValue(hierarchyPath, out go) && go != null)
             return true;
 
-        if (_searchRoot == null)
+        string[] parts = hierarchyPath.Split('/');
+        
+        // Try current search root
+        if (_searchRoot != null && TryResolvePathRecursive(_searchRoot, parts, out go))
         {
-            WarnOnce(hierarchyPath, "no UI search root assigned");
-            return false;
+            _cacheByPath[hierarchyPath] = go;
+            return true;
         }
 
-        string[] parts = hierarchyPath.Split('/');
-        Transform current = FindFirstNamed(_searchRoot, parts[0]);
-        if (current == null)
+        // Fallback: Try Canvas root
+        Canvas canvas = Object.FindAnyObjectByType<Canvas>();
+        if (canvas != null && canvas.transform != _searchRoot && TryResolvePathRecursive(canvas.transform, parts, out go))
         {
-            WarnOnce(hierarchyPath, $"missing segment '{parts[0]}'");
-            return false;
+            _cacheByPath[hierarchyPath] = go;
+            return true;
         }
+
+        return false;
+    }
+
+    private static bool TryResolvePathRecursive(Transform root, string[] parts, out GameObject result)
+    {
+        result = null;
+        Transform current = FindFirstNamed(root, parts[0]);
+        if (current == null) return false;
 
         for (int i = 1; i < parts.Length; i++)
         {
             Transform next = FindDirectChild(current, parts[i]);
-            if (next == null)
-            {
-                WarnOnce(hierarchyPath, $"missing segment '{parts[i]}'");
-                return false;
-            }
+            if (next == null) return false;
             current = next;
         }
 
-        go = current.gameObject;
-        _cacheByPath[hierarchyPath] = go;
+        result = current.gameObject;
         return true;
     }
 

@@ -25,9 +25,10 @@ public class GoogleLogin : MonoBehaviour
 
     private FirebaseAuth auth;
     private GoogleSignInConfiguration configuration;
-    private bool isFirebaseReady = false;
 
     private const string WEB_CLIENT_ID = "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com";
+    private bool isFirebaseReady = false;
+    public bool IsFirebaseReady { get { if(isFirebaseReady) {} return isFirebaseReady; } }
 
     private void Awake()
     {

@@ -421,7 +421,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     private bool isDealingComplete = false;
     private int _cutsInMatch = 0;
     private bool cut1TrumpAlreadySet = false;
-    private static bool _resultPanelShown = false;
+private static bool _resultPanelShown = false;
     private readonly List<int> tableTurnOrder = new List<int>(4);
     private readonly List<GameObject> opponentBackCards = new List<GameObject>();
 
@@ -1396,11 +1396,15 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
         if (baseTarget == null) return null;
 
-        Transform logoTarget = baseTarget.Find("Profile_Logo");
-        if (logoTarget == null) logoTarget = baseTarget.Find("Avatar");
-        if (logoTarget == null) logoTarget = baseTarget.Find("Profile");
+        // More robust search for child targets (avatars, profiles, logos)
+        foreach (Transform child in baseTarget)
+        {
+            string ln = child.name.ToLower();
+            if (ln.Contains("avatar") || ln.Contains("logo") || ln.Contains("profile") || ln.Contains("face"))
+                return child;
+        }
 
-        return logoTarget != null ? logoTarget : baseTarget;
+        return baseTarget;
     }
 
     IEnumerator DealAnimationOnlyRoutine(int cardsInBatch)
