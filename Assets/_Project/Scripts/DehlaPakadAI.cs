@@ -7,11 +7,12 @@ public class DehlaPakadAI : MonoBehaviour
     public static DehlaPakadAI Instance;
 
     const int DehlaRank = (int)CardRank.Ten;
-    const float DehlaCaptureValue = 160f;
-    const float TrickWinValue = 20f;
-    const float LeadDehlaPenalty = 250f;
-    const float WasteHighCardPenalty = 30f;
-    const float WasteTrumpPenalty = 40f;
+    const float DehlaCaptureValue = 185f;
+    const float TrickWinValue = 42f;
+    const float LeadDehlaPenalty = 220f;
+    const float WasteHighCardPenalty = 22f;
+    const float WasteTrumpPenalty = 28f;
+    const float TakeTrickBonus = 78f;
 
     static readonly HashSet<long> PlayedCards = new HashSet<long>();
     static int LastTrackedTrickSize = -1;
@@ -45,9 +46,14 @@ public class DehlaPakadAI : MonoBehaviour
             return botHand[0];
 
         CardData best = PickBestMove(legalMoves, ctx);
+        if (!IsCardInList(botHand, best) && legalMoves.Count > 0)
+            best = legalMoves[0];
         RecordCard(best.cardSuit, Rank(best));
         return best;
     }
+
+    static bool IsCardInList(List<CardData> hand, CardData card) =>
+        hand.Exists(c => c.cardSuit == card.cardSuit && c.cardRank == card.cardRank);
 
     static CardData PickBestMove(List<CardData> legalMoves, HandContext ctx)
     {
@@ -56,6 +62,13 @@ public class DehlaPakadAI : MonoBehaviour
             CardData? minWinner = FindMinimumWinningCard(legalMoves, ctx);
             if (minWinner.HasValue)
                 return minWinner.Value;
+        }
+
+        if (!ctx.IsLeading && !ctx.PartnerWinning && legalMoves.Count > 1)
+        {
+            CardData? seizeTrick = FindBestLeadAfterPlayCard(legalMoves, ctx);
+            if (seizeTrick.HasValue && (ctx.DehlaOnTable || ctx.TableValue >= 7f))
+                return seizeTrick.Value;
         }
 
         CardData best = legalMoves[0];
@@ -68,6 +81,28 @@ public class DehlaPakadAI : MonoBehaviour
             {
                 bestScore = score;
                 best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    static CardData? FindBestLeadAfterPlayCard(List<CardData> legalMoves, HandContext ctx)
+    {
+        CardData? best = null;
+        float bestScore = float.MinValue;
+
+        foreach (CardData card in legalMoves)
+        {
+            CardSuit evalTrump = ResolveTrumpAfterPlay(card, ctx.LeadSuit, ctx.Trump, ctx.TrumpRevealed, ctx.Mode);
+            if (!WouldLeadAfterPlay(ctx.Trick, card, ctx.BotActor, evalTrump))
+                continue;
+
+            float score = ScoreMove(card, ctx) + TakeTrickBonus + ctx.TableValue;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = card;
             }
         }
 
@@ -130,7 +165,9 @@ public class DehlaPakadAI : MonoBehaviour
             int unplayedHigher = ctx.CountUnplayedHigherInSuit(card.cardSuit, rank);
 
             if (controlsSuit && rank >= (int)CardRank.King)
-                score += 35f + suitLen * 5f;
+                score += 48f + suitLen * 6f;
+            else if (controlsSuit && rank >= (int)CardRank.Ten)
+                score += 30f + suitLen * 4f;
             else if (suitLen == 1)
                 score += 38f - rank + ctx.VoidCount * 2f;
             else if (suitLen == 2 && rank <= (int)CardRank.Seven)
@@ -190,31 +227,32 @@ public class DehlaPakadAI : MonoBehaviour
         bool leadingAfterPlay = WouldLeadAfterPlay(ctx.Trick, card, ctx.BotActor, evalTrump);
         float tableValue = ctx.TableValue;
 
-        if (ctx.PartnerWinning && !ctx.DehlaOnTable)
+        if (ctx.PartnerWinning && !ctx.DehlaOnTable && tableValue < 14f)
             return DumpScore(card, ctx);
 
         if (ctx.DehlaOnTable)
         {
             if (winsIfLast)
                 return DehlaCaptureValue + TrickWinValue - rank;
-            if (leadingAfterPlay && !ctx.OpponentTrumpLikely)
-                return DehlaCaptureValue * 0.7f - rank * 0.4f;
-            return 22f - rank - (IsDehla(card) ? 50f : 0f);
+            if (leadingAfterPlay)
+                return DehlaCaptureValue * 0.92f + tableValue - rank * 0.35f;
+            return DumpScore(card, ctx) - (IsDehla(card) ? 50f : 0f);
         }
 
         if (winsIfLast)
-            return TrickWinValue + tableValue * 0.35f - rank - OverkillPenalty(card, ctx, evalTrump);
+            return TakeTrickBonus + 12f + tableValue - OverkillPenalty(card, ctx, evalTrump) - rank * 0.08f;
 
         if (leadingAfterPlay)
         {
-            if (ctx.OpponentTrumpLikely)
-                return 10f - rank;
-            return TrickWinValue * 0.35f + tableValue * 0.15f - rank;
+            if (ctx.OpponentTrumpLikely && tableValue < 8f)
+                return DumpScore(card, ctx) - 3f;
+
+            return TakeTrickBonus - 8f + tableValue - OverkillPenalty(card, ctx, evalTrump) - rank * 0.35f;
         }
 
         float dump = DumpScore(card, ctx);
         if (tableValue >= 18f && rank >= (int)CardRank.Queen)
-            dump -= 10f;
+            dump -= 20f;
         return dump;
     }
 
@@ -227,16 +265,16 @@ public class DehlaPakadAI : MonoBehaviour
         bool leadingAfterPlay = WouldLeadAfterPlay(ctx.Trick, card, ctx.BotActor, evalTrump);
         float tableValue = ctx.TableValue;
 
-        if (ctx.PartnerWinning && !ctx.DehlaOnTable)
+        if (ctx.PartnerWinning && !ctx.DehlaOnTable && tableValue < 14f)
             return DumpScore(card, ctx);
 
         if (ctx.DehlaOnTable)
         {
             if (winsIfLast)
-                return DehlaCaptureValue + TrickWinValue - rank - (isTrumpCard ? 8f : 0f);
+                return DehlaCaptureValue + TrickWinValue - rank - (isTrumpCard ? 5f : 0f);
 
             if (leadingAfterPlay && (isTrumpCard || IsCutTrumpMode(ctx.Mode)))
-                return DehlaCaptureValue * 0.6f - rank;
+                return DehlaCaptureValue * 0.75f + tableValue * 0.5f - rank;
 
             if (IsCutTrumpMode(ctx.Mode) && !isTrumpCard)
             {
@@ -248,11 +286,15 @@ public class DehlaPakadAI : MonoBehaviour
             return DumpScore(card, ctx);
         }
 
-        if (winsIfLast && (isTrumpCard || tableValue >= 16f))
-            return TrickWinValue + tableValue * 0.3f - rank - (isTrumpCard ? rank * 0.3f : 0f);
+        if (winsIfLast && (isTrumpCard || tableValue >= 8f))
+            return TakeTrickBonus + 10f + tableValue - rank - (isTrumpCard ? rank * 0.35f : 0f);
 
-        if (leadingAfterPlay && isTrumpCard && tableValue >= 14f)
-            return TrickWinValue * 0.3f - rank * 1.1f;
+        if (leadingAfterPlay && isTrumpCard)
+        {
+            if (tableValue >= 7f)
+                return TakeTrickBonus - 5f + tableValue - rank;
+            return DumpScore(card, ctx) - WasteTrumpPenalty * 0.6f;
+        }
 
         float dump = DumpScore(card, ctx);
 
@@ -378,6 +420,7 @@ public class DehlaPakadAI : MonoBehaviour
 
         int cardsPerSuit = isTwoTaash ? 26 : 13;
         int trumpOut = EstimateTrumpStillOut(hand, trump, cardsPerSuit);
+        float tableVal = isLeading ? 0f : TrickTableValue(trick);
 
         var ctx = new HandContext
         {
@@ -396,14 +439,14 @@ public class DehlaPakadAI : MonoBehaviour
             HasLeadSuit = hasLead,
             DehlaOnTable = dehlaOnTable,
             PartnerWinning = partnerWinning,
-            OpponentTrumpLikely = trumpRevealed && trumpOut >= 2 && trickCount <= 2,
+            OpponentTrumpLikely = trumpRevealed && trumpOut >= 1 && trickCount <= 2 && tableVal >= 6f,
             HandSize = hand.Count,
             TricksRemaining = hand.Count - 1,
             TrumpCount = hand.Count(c => c.cardSuit == trump),
             DehlasHeld = hand.Count(IsDehla),
             VoidCount = CountVoids(hand),
             LongestSuitLength = hand.GroupBy(c => c.cardSuit).Max(g => g.Count()),
-            TableValue = isLeading ? 0f : TrickTableValue(trick)
+            TableValue = tableVal
         };
         return ctx;
     }

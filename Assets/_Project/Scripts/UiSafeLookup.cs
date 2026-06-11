@@ -2,6 +2,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 /// <summary>Finds UI objects under an assigned root without GameObject.Find (avoids inactive-object assertions).</summary>
 public static class UiSafeLookup
 {
@@ -59,12 +63,12 @@ public static class UiSafeLookup
         var allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
         foreach (var obj in allObjects)
         {
-            if (obj.name == objectName && obj.hideFlags == HideFlags.None && !UnityEditor.EditorUtility.IsPersistent(obj))
-            {
-                go = obj;
-                _cacheByName[objectName] = go;
-                return true;
-            }
+            if (obj.hideFlags != HideFlags.None || obj.name != objectName) continue;
+            if (!IsRuntimeSceneObject(obj)) continue;
+
+            go = obj;
+            _cacheByName[objectName] = go;
+            return true;
         }
 
         return false;
@@ -160,5 +164,14 @@ public static class UiSafeLookup
     {
         if (_warnedKeys.Add(key))
             Debug.LogWarning($"[UI Lookup] {key} — {detail}");
+    }
+
+    static bool IsRuntimeSceneObject(GameObject obj)
+    {
+#if UNITY_EDITOR
+        return !EditorUtility.IsPersistent(obj);
+#else
+        return obj.scene.IsValid();
+#endif
     }
 }

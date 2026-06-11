@@ -147,7 +147,10 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     private int _lastProcessTurnTrickCount = -1;
     private readonly HashSet<int> actorsPlayedThisTrick = new HashSet<int>();
     private readonly HashSet<int> botActorsThinking = new HashSet<int>();
-    private readonly HashSet<long> botRetryKeys = new HashSet<long>();
+    private readonly Dictionary<long, int> botRetryCounts = new Dictionary<long, int>();
+    private Coroutine _botWatchdogCoroutine;
+    const int MaxBotPlayRetries = 8;
+    const float BotThinkDelay = 0.65f;
 
     static long BotRetryKey(int actorNumber, int trickCount) =>
         ((long)actorNumber << 32) | (uint)trickCount;
@@ -159,7 +162,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     {
         actorsPlayedThisTrick.Clear();
         botActorsThinking.Clear();
-        botRetryKeys.Clear();
+        botRetryCounts.Clear();
     }
 
     void ClearAllTableCardClones()
@@ -167,8 +170,9 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         Transform tableCenter = GetTableCenterTransform();
         if (tableCenter == null) return;
 
-        foreach (Transform child in tableCenter)
+        for (int i = tableCenter.childCount - 1; i >= 0; i--)
         {
+            Transform child = tableCenter.GetChild(i);
             if (_accumulatedPileRoot != null && child == _accumulatedPileRoot) continue;
             if (child.GetComponent<CardDisplay>() == null) continue;
             child.DOKill();
@@ -385,6 +389,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     {
         int seat = GetSeatIndex(senderActorNum);
         Transform center = GetTableCenterTransform();
+        
         GameObject cardObj = Object.Instantiate(cardUIPrefab, center);
         cardObj.GetComponent<CardDisplay>()?.SetCardData(new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex });
         cardObj.transform.position = GetPlayerPositionForSeat(seat);
@@ -486,7 +491,11 @@ private static bool _resultPanelShown = false;
     void ClearHandUI()
     {
         if (handAreaTransform == null) return;
-        foreach (Transform child in handAreaTransform) { child.DOKill(); Object.Destroy(child.gameObject); }
+        foreach (Transform child in handAreaTransform)
+        {
+            child.DOKill();
+            Object.Destroy(child.gameObject);
+        }
     }
 
     public void InitializeGameScene()
@@ -663,7 +672,8 @@ private static bool _resultPanelShown = false;
         tableTurnOrder.Clear();
         botActorsThinking.Clear();
         actorsPlayedThisTrick.Clear();
-        botRetryKeys.Clear();
+        botRetryCounts.Clear();
+        StopBotWatchdog();
         CardInteract.canPlayCards = false;
         CardInteract.isPlayingCard = false;
         if (_isDealAnimRunning)
@@ -879,9 +889,34 @@ private static bool _resultPanelShown = false;
         {
             if (PhotonNetwork.IsMasterClient)
             {
-                int nextActor = GetNextTurnActor(actorNumber);
-                currentTurnActor = nextActor;
-                ProcessTurn(nextActor);
+                int nextActor = actorNumber;
+                int safetyGuard = 0;
+
+                while ((ActorInCurrentTrick(nextActor) || actorsPlayedThisTrick.Contains(nextActor)) && safetyGuard < 5)
+                {
+                    int prevActor = nextActor;
+                    nextActor = GetNextTurnActor(nextActor);
+
+                    if (prevActor == nextActor) break;
+
+                    safetyGuard++;
+                }
+
+                if (safetyGuard < 5 && nextActor != actorNumber && !ActorInCurrentTrick(nextActor))
+                {
+                    currentTurnActor = nextActor;
+                    ProcessTurn(nextActor);
+                }
+                else
+                {
+                    Debug.LogError("[ProcessTurn] INFINITE LOOP BLOCKED! Zyadatar log patta daal chuke hain ya list empty hai.");
+
+                    if (trickCount > 0 && !_determineTrickRoutineRunning)
+                    {
+                        isResolvingTrick = true;
+                        _determineTrickCoroutine = StartCoroutine(DetermineTrickWinnerRoutine());
+                    }
+                }
             }
             return;
         }
@@ -938,30 +973,132 @@ private static bool _resultPanelShown = false;
         StartCoroutine(BotPlayRoutine(actorNumber));
     }
 
-    void PlayBotCard(int actorNumber, CardData card)
+    static bool IsCardInHand(List<CardData> hand, CardData card) =>
+        hand != null && hand.Exists(c => c.cardSuit == card.cardSuit && c.cardRank == card.cardRank);
+
+    static CardData SanitizeBotCardChoice(List<CardData> hand, List<TrickCard> trick, CardData choice)
     {
-        if (ActorInCurrentTrick(actorNumber)) return;
-        if (photonView == null) return;
+        bool isLeading = trick == null || trick.Count == 0;
+        List<CardData> legal = isLeading ? hand : GetValidCards(hand, trick);
+        if (legal.Count == 0) return hand[0];
+        if (IsCardInHand(legal, choice)) return choice;
+        return legal[0];
+    }
+
+    bool PlayBotCard(int actorNumber, CardData card)
+    {
+        if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber)) return false;
+        if (!CanAcceptCardPlay(actorNumber, (int)card.cardSuit, (int)card.cardRank))
+        {
+            Debug.LogWarning($"[Bot] Play rejected — actor={actorNumber} card={card.cardSuit}/{card.cardRank}");
+            return false;
+        }
+        if (photonView == null) return false;
         photonView.RPC("RPC_PlayCard", RpcTarget.All, actorNumber, (int)card.cardSuit, (int)card.cardRank);
+        return actorsPlayedThisTrick.Contains(actorNumber);
+    }
+
+    public void ForceBotPlayImmediate(int actorNumber)
+    {
+        if (!PhotonNetwork.IsMasterClient || !IsBotActor(actorNumber)) return;
+        if (IsTrickLocked || _determineTrickRoutineRunning) return;
+        if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber)) return;
+        if (actorNumber != GetAuthoritativeTurnActor()) return;
+        if (DeckManager.Instance == null || !DeckManager.Instance.botHands.TryGetValue(actorNumber, out List<CardData> hand)
+            || hand == null || hand.Count == 0)
+            return;
+
+        botActorsThinking.Remove(actorNumber);
+
+        bool isLeading = currentTrick == null || currentTrick.Count == 0;
+        List<CardData> legal = isLeading ? new List<CardData>(hand) : GetValidCards(hand, currentTrick);
+        if (legal.Count == 0) legal = new List<CardData>(hand);
+
+        CardData preferred = legal[0];
+        if (DehlaPakadAI.Instance != null)
+            preferred = SanitizeBotCardChoice(hand, currentTrick, DehlaPakadAI.Instance.ThinkAndSelectCard(
+                hand, currentTrick, currentTrumpSuit, isTrumpRevealed, actorNumber));
+
+        if (PlayBotCard(actorNumber, preferred)) return;
+
+        foreach (CardData fallback in legal)
+        {
+            if (PlayBotCard(actorNumber, fallback)) return;
+        }
+
+        Debug.LogError($"[Bot] Force play failed for actor {actorNumber} — hand={hand.Count} legal={legal.Count}");
+    }
+
+    void EnsureBotWatchdogRunning()
+    {
+        if (!PhotonNetwork.IsMasterClient || _botWatchdogCoroutine != null) return;
+        _botWatchdogCoroutine = StartCoroutine(BotTurnWatchdogRoutine());
+    }
+
+    void StopBotWatchdog()
+    {
+        if (_botWatchdogCoroutine == null) return;
+        StopCoroutine(_botWatchdogCoroutine);
+        _botWatchdogCoroutine = null;
+    }
+
+    IEnumerator BotTurnWatchdogRoutine()
+    {
+        var wait = new WaitForSeconds(2.5f);
+        while (true)
+        {
+            yield return wait;
+            if (!PhotonNetwork.IsMasterClient || !IsDealingReadyForPlay()) continue;
+            if (IsTrickLocked || _determineTrickRoutineRunning) continue;
+            if (GameFlowState.Current != GameFlowPhase.InGame) continue;
+
+            int actor = GetAuthoritativeTurnActor();
+            if (!IsBotActor(actor)) continue;
+            if (ActorInCurrentTrick(actor) || actorsPlayedThisTrick.Contains(actor)) continue;
+            if (botActorsThinking.Contains(actor)) continue;
+
+            Debug.LogWarning($"[BotWatchdog] Stuck turn detected — forcing actor {actor}");
+            ForceBotPlayImmediate(actor);
+        }
+    }
+
+    IEnumerator BotPlayRetryAfterDelay(int actorNumber, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (PhotonNetwork.IsMasterClient && IsBotActor(actorNumber)
+            && actorNumber == GetAuthoritativeTurnActor()
+            && !ActorInCurrentTrick(actorNumber) && !IsTrickLocked && !_determineTrickRoutineRunning)
+        {
+            TriggerBotTurnIfApplicable(actorNumber);
+        }
     }
 
     IEnumerator BotPlayRoutine(int actorNumber)
     {
-        yield return new WaitForSeconds(0.8f);
+        yield return new WaitForSeconds(BotThinkDelay);
 
         bool cardActuallyPlayed = false;
+        int trickCountAtStart = currentTrick?.Count ?? 0;
         try
         {
             if (actorNumber != GetAuthoritativeTurnActor() || IsTrickLocked || ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber))
                 yield break;
 
-            if (DehlaPakadAI.Instance == null || DeckManager.Instance == null) yield break;
+            if (DeckManager.Instance == null) yield break;
 
-            if (!DeckManager.Instance.botHands.TryGetValue(actorNumber, out List<CardData> hand) || hand == null || hand.Count == 0) yield break;
+            if (!DeckManager.Instance.botHands.TryGetValue(actorNumber, out List<CardData> hand) || hand == null || hand.Count == 0)
+            {
+                Debug.LogWarning($"[Bot] Empty hand for actor {actorNumber} — forcing sync");
+                DeckManager.Instance.EnsureHandCachedForBot(actorNumber);
+                if (!DeckManager.Instance.botHands.TryGetValue(actorNumber, out hand) || hand == null || hand.Count == 0)
+                    yield break;
+            }
 
-            CardData botCard = DehlaPakadAI.Instance.ThinkAndSelectCard(hand, currentTrick, currentTrumpSuit, isTrumpRevealed, actorNumber);
-            PlayBotCard(actorNumber, botCard);
-            cardActuallyPlayed = true;
+            CardData botCard = DehlaPakadAI.Instance != null
+                ? DehlaPakadAI.Instance.ThinkAndSelectCard(hand, currentTrick, currentTrumpSuit, isTrumpRevealed, actorNumber)
+                : hand[0];
+            botCard = SanitizeBotCardChoice(hand, currentTrick, botCard);
+            cardActuallyPlayed = PlayBotCard(actorNumber, botCard);
         }
         finally
         {
@@ -969,11 +1106,21 @@ private static bool _resultPanelShown = false;
 
             if (!cardActuallyPlayed && PhotonNetwork.IsMasterClient && IsBotActor(actorNumber)
                 && actorNumber == GetAuthoritativeTurnActor()
-                && !ActorInCurrentTrick(actorNumber) && !IsTrickLocked && !_determineTrickRoutineRunning)
+                && !ActorInCurrentTrick(actorNumber) && !IsTrickLocked && !_determineTrickRoutineRunning
+                && (currentTrick?.Count ?? 0) == trickCountAtStart)
             {
-                long retryKey = BotRetryKey(actorNumber, currentTrick?.Count ?? 0);
-                if (botRetryKeys.Add(retryKey))
-                    TriggerBotTurnIfApplicable(actorNumber);
+                long retryKey = BotRetryKey(actorNumber, trickCountAtStart);
+                botRetryCounts.TryGetValue(retryKey, out int tries);
+                if (tries < MaxBotPlayRetries)
+                {
+                    botRetryCounts[retryKey] = tries + 1;
+                    StartCoroutine(BotPlayRetryAfterDelay(actorNumber, 0.35f + tries * 0.2f));
+                }
+                else
+                {
+                    Debug.LogError($"[Bot] Max retries for actor {actorNumber} — force playing");
+                    ForceBotPlayImmediate(actorNumber);
+                }
             }
         }
     }
@@ -1186,6 +1333,7 @@ private static bool _resultPanelShown = false;
 
         int seat = GetSeatIndex(senderActorNum);
         Transform center = GetTableCenterTransform();
+        
         GameObject cardObj = Object.Instantiate(cardUIPrefab, center);
         cardObj.GetComponent<CardDisplay>()?.SetCardData(playedCard);
 
@@ -1612,7 +1760,11 @@ private static bool _resultPanelShown = false;
 
         GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
         BuildTableTurnOrder();
-        if (PhotonNetwork.IsMasterClient) currentTurnActor = starterActor;
+        if (PhotonNetwork.IsMasterClient)
+        {
+            currentTurnActor = starterActor;
+            EnsureBotWatchdogRunning();
+        }
         ProcessTurn(starterActor);
     }
 

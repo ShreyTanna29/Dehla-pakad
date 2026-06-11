@@ -1,23 +1,23 @@
 # ninja log v5
-176	888	8021164179809188	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	829f34b4c2ae49fe
-55	7067	8021164241614028	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	d13374e089ad7baa
-103	6743	8021164238389386	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	c8042f888784218
-161	6698	8021164237938480	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	9e2750062456b7e1
-889	1206	8021164182861392	C:/Users/Sahil Bhati/Desktop/Unity/Dehla Pakad/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1p5j6h1v/obj/arm64-v8a/libswappywrapper.so	38c32772e6795259
-111	6642	8021164237379989	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	b7c8ddcc49bb0f19
-79	6669	8021164237665179	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	4e896afd1584937c
-93	6694	8021164237855395	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	e9f1b2d5b0b4cc6f
-7067	7187	8021164242840947	C:/Users/Sahil Bhati/Desktop/Unity/Dehla Pakad/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1p5j6h1v/obj/arm64-v8a/libgame.so	d08f3fe649b057ae
-150	6992	8021164240853093	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	ca8fa4fa45c68419
-169	6991	8021164240869828	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	a05cf2078a668add
 120	770	8021863109970688	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	829f34b4c2ae49fe
+20	3350	8021863135856418	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	d13374e089ad7baa
 771	1372	8021863115848398	C:/Users/Sahil Bhati/Desktop/Unity/Dehla Pakad/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1p5j6h1v/obj/arm64-v8a/libswappywrapper.so	38c32772e6795259
+95	2959	8021863131903536	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	9e2750062456b7e1
+42	3042	8021863132761790	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	c8042f888784218
 73	2893	8021863131220188	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	b7c8ddcc49bb0f19
 62	2902	8021863131286730	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	4e896afd1584937c
 29	2952	8021863131848301	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	e9f1b2d5b0b4cc6f
-95	2959	8021863131903536	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	9e2750062456b7e1
-42	3042	8021863132761790	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	c8042f888784218
 84	3245	8021863134800350	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	ca8fa4fa45c68419
-20	3350	8021863135856418	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	d13374e089ad7baa
-106	3399	8021863136348202	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	a05cf2078a668add
 3400	3534	8021863137725064	C:/Users/Sahil Bhati/Desktop/Unity/Dehla Pakad/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1p5j6h1v/obj/arm64-v8a/libgame.so	d08f3fe649b057ae
+106	3399	8021863136348202	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	a05cf2078a668add
+106	762	8027931379270387	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	829f34b4c2ae49fe
+763	1644	8027931387332426	C:/Users/Sahil Bhati/Desktop/Unity/Dehla Pakad/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1p5j6h1v/obj/arm64-v8a/libswappywrapper.so	38c32772e6795259
+67	3209	8027931403593602	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	b7c8ddcc49bb0f19
+28	3223	8027931403793405	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	4e896afd1584937c
+20	3251	8027931404129534	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	e9f1b2d5b0b4cc6f
+81	3293	8027931404574736	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	9e2750062456b7e1
+45	3452	8027931406059747	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	c8042f888784218
+56	3996	8027931411310360	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	ca8fa4fa45c68419
+92	4226	8027931413672399	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	a05cf2078a668add
+36	4288	8027931413833809	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	d13374e089ad7baa
+4289	4611	8027931417675635	C:/Users/Sahil Bhati/Desktop/Unity/Dehla Pakad/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1p5j6h1v/obj/arm64-v8a/libgame.so	d08f3fe649b057ae

@@ -1,7 +1,9 @@
+using System.Collections;
 using UnityEngine;
 using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine.UI;
+using DG.Tweening;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 
 public class ModeManager : MonoBehaviourPunCallbacks
@@ -86,10 +88,51 @@ public class ModeManager : MonoBehaviourPunCallbacks
         RestoreSavedModes();
         SetupModeButtonHoverEffects();
         WirePlayFriendsButton();
-        WireCut2TrumpButton();
+        WireModeButtons(); // New wiring for all mode buttons
         UpdateFriendsOverlay();
         ApplyHomeScreenButtonColors();
         UpdateModeSelectionUIColors();
+    }
+
+    void WireModeButtons()
+    {
+        EnsureUiSearchRoot();
+        
+        // Trick Modes
+        WireButton("Button_Play1Taash", () => OnClick_TrickMode(1));
+        WireButton("Button_Play2Taash", () => OnClick_TrickMode(2));
+        
+        // Sar Modes
+        WireButton("Button_Play1Sar", () => OnClick_SarMode(1));
+        WireButton("Button_Play2Sar", () => OnClick_SarMode(2));
+        
+        // Trump Modes
+        WireButton("Button_PlayTrumpMode", () => OnClick_TrumpMode(1));
+        WireButton("Button_Play13CardMode", () => OnClick_TrumpMode(2));
+        WireButton("Button_PlayFirstCut", () => OnClick_TrumpMode(3));
+        WireButton("Button_PlayCut2Trump", () => OnClick_TrumpMode(4));
+        
+        // Logic Modes
+        WireButton("Button_LogicA", () => OnClick_LogicMode(1));
+        WireButton("Button_LogicB", () => OnClick_LogicMode(2));
+        WireButton("Button_LogicC", () => OnClick_LogicMode(3));
+
+        // Start button
+        WireButton("Play", OnClick_FindMatch);
+        WireButton("Button_BackToHome", OnClick_BackToHome);
+    }
+
+    void WireButton(string name, UnityEngine.Events.UnityAction action)
+    {
+        if (UiSafeLookup.TryGet(name, out GameObject go) && go != null)
+        {
+            Button btn = go.GetComponent<Button>();
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(action);
+            }
+        }
     }
 
     void WirePlayFriendsButton()
@@ -105,6 +148,27 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(OnClick_PlayFriends);
+    }
+
+    void ResetButtonScales()
+    {
+        EnsureUiSearchRoot();
+        string[] buttonNames =
+        {
+            "Button_PlayFriends", "Button_Play1Taash", "Button_Play2Taash",
+            "Button_PlayTrumpMode", "Button_Play13CardMode", "Button_PlayCut2Trump",
+            "Button_Play1Sar", "Button_Play2Sar", "Button_LogicA", "Button_LogicB",
+            "Button_LogicC", "Button_BackToHome", "Play", "Button_InviteFriends"
+        };
+
+        foreach (string name in buttonNames)
+        {
+            if (UiSafeLookup.TryGet(name, out GameObject go) && go != null)
+            {
+                go.transform.DOKill();
+                go.transform.localScale = Vector3.one;
+            }
+        }
     }
 
     void SetupModeButtonHoverEffects()
@@ -175,14 +239,46 @@ public class ModeManager : MonoBehaviourPunCallbacks
         }
     }
 
-    public void OpenModePanelFromHome()
+    public void OnClick_PlayBots_Home()
     {
-        Debug.Log("[UI] Button Clicked: Open Modes (no loading screen)");
+        Debug.Log("[UI] Button Clicked: Play With Bots");
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.isPlayBotsMode = true;
+        if (GameSettings.Instance != null)
+            GameSettings.Instance.currentMatchType = MatchType.OfflineBots;
+
+        OpenModePanelInternal();
+    }
+
+    public void OnClick_PlayOnline_Home()
+    {
+        if (!NetworkManager.IsPlayOnlineReady())
+        {
+            Debug.LogWarning("[UI] Play Online blocked — waiting for internet and Photon lobby.");
+            return;
+        }
+
+        Debug.Log("[UI] Button Clicked: Play Online");
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.isPlayBotsMode = false;
+        if (GameSettings.Instance != null)
+            GameSettings.Instance.currentMatchType = MatchType.OnlinePhoton;
+
+        OpenModePanelInternal();
+    }
+
+    public void OpenModePanelFromHome() => OnClick_PlayOnline_Home();
+
+    void OpenModePanelInternal()
+    {
         GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
-        isFriendsMatchMode = false; // Reset by default when opening from home
+        isFriendsMatchMode = false;
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
+
+        if (panelHomeScreen != null)
+            panelHomeScreen.SetActive(false);
 
         if (panelModes != null)
         {
@@ -190,24 +286,40 @@ public class ModeManager : MonoBehaviourPunCallbacks
             panelModes.transform.SetAsLastSibling();
         }
 
-        SetupModeButtonHoverEffects();
+        ResetButtonScales();
         WireCut2TrumpButton();
         UpdateModeSelectionUIColors();
+    }
+
+    void EnsureUiSearchRootForModes()
+    {
+        if (panelModes != null)
+            uiSearchRoot = panelModes.transform.root;
+        else if (panelHomeScreen != null)
+            uiSearchRoot = panelHomeScreen.transform.root;
+        else
+            uiSearchRoot = transform.root;
+
+        UiSafeLookup.SetSearchRoot(uiSearchRoot);
     }
 
     public void OnClick_BackToHome()
     {
         Debug.Log("[UI] Button Clicked: Back to Home");
         GameFlowState.SetPhase(GameFlowPhase.Home);
-        isFriendsMatchMode = false; // Reset when going back
+        isFriendsMatchMode = false;
         gameStartInProgress = false;
 
-        if (panelModes != null && panelModes.activeSelf) panelModes.SetActive(false);
-        if (panelHomeScreen != null && !panelHomeScreen.activeSelf) panelHomeScreen.SetActive(true);
+        if (panelModes != null && panelModes.activeSelf)
+            panelModes.SetActive(false);
+
+        if (panelHomeScreen != null && !panelHomeScreen.activeSelf)
+            panelHomeScreen.SetActive(true);
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.UpdateUIState(true);
 
+        ResetButtonScales();
         ApplyHomeScreenButtonColors();
     }
 
@@ -233,7 +345,6 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public void OnClick_TrickMode(int mode, bool broadcastToRoom = true)
     {
-        isFriendsMatchMode = false;
         currentTrickMode = mode;
         SaveSelectedModes();
         UpdateFriendsOverlay();
@@ -260,6 +371,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (GameSettings.Instance != null)
             GameSettings.Instance.currentMatchType = MatchType.PlayWithFriends;
         UpdateFriendsOverlay();
+        ResetButtonScales();
         ApplyHomeScreenButtonColors();
         UpdateModeSelectionUIColors();
 
@@ -271,6 +383,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         if (panelPlayWithFriends != null)
             panelPlayWithFriends.SetActive(false);
+
+        ResetButtonScales();
     }
 
     void UpdateFriendsOverlay()
@@ -312,7 +426,6 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public void ApplyRemoteTaashModeVisual(int mode)
     {
-        isFriendsMatchMode = false;
         currentTrickMode = mode;
         UpdateModeSelectionUIColors();
     }
@@ -350,11 +463,9 @@ public class ModeManager : MonoBehaviourPunCallbacks
             case 1: currentSarMode = 1; break;
             case 2: currentSarMode = 2; break;
             case 3:
-                isFriendsMatchMode = false;
                 currentTrickMode = 1;
                 break;
             case 4:
-                isFriendsMatchMode = false;
                 currentTrickMode = 2;
                 break;
             default:
@@ -390,40 +501,19 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     void ResolveModeButtonImages()
     {
-        EnsureUiSearchRoot();
+        EnsureUiSearchRootForModes();
 
-        if (btn1Taash == null)
-            UiSafeLookup.TryGetImage("Button_Play1Taash", out btn1Taash);
-
-        if (btn2Taash == null)
-            UiSafeLookup.TryGetImage("Button_Play2Taash", out btn2Taash);
-
-        if (btn1Sar == null)
-            UiSafeLookup.TryGetImage("Button_Play1Sar", out btn1Sar);
-
-        if (btn2Sar == null)
-            UiSafeLookup.TryGetImage("Button_Play2Sar", out btn2Sar);
-
-        if (btnPresetTrump == null)
-            UiSafeLookup.TryGetImage("Button_PlayTrumpMode", out btnPresetTrump);
-
-        if (btn13thCard == null)
-            UiSafeLookup.TryGetImage("Button_Play13CardMode", out btn13thCard);
-
-        if (btnFirstCut == null)
-            UiSafeLookup.TryGetImage("Button_PlayFirstCut", out btnFirstCut);
-
-        if (btnCut2Trump == null)
-            UiSafeLookup.TryGetImage("Button_PlayCut2Trump", out btnCut2Trump);
-
-        if (btnLogicA == null)
-            UiSafeLookup.TryGetImage("Button_LogicA", out btnLogicA);
-
-        if (btnLogicB == null)
-            UiSafeLookup.TryGetImage("Button_LogicB", out btnLogicB);
-
-        if (btnLogicC == null)
-            UiSafeLookup.TryGetImage("Button_LogicC", out btnLogicC);
+        UiSafeLookup.TryGetImage("Button_Play1Taash", out btn1Taash);
+        UiSafeLookup.TryGetImage("Button_Play2Taash", out btn2Taash);
+        UiSafeLookup.TryGetImage("Button_Play1Sar", out btn1Sar);
+        UiSafeLookup.TryGetImage("Button_Play2Sar", out btn2Sar);
+        UiSafeLookup.TryGetImage("Button_PlayTrumpMode", out btnPresetTrump);
+        UiSafeLookup.TryGetImage("Button_Play13CardMode", out btn13thCard);
+        UiSafeLookup.TryGetImage("Button_PlayFirstCut", out btnFirstCut);
+        UiSafeLookup.TryGetImage("Button_PlayCut2Trump", out btnCut2Trump);
+        UiSafeLookup.TryGetImage("Button_LogicA", out btnLogicA);
+        UiSafeLookup.TryGetImage("Button_LogicB", out btnLogicB);
+        UiSafeLookup.TryGetImage("Button_LogicC", out btnLogicC);
     }
 
     void UpdateModeSelectionUIColors()
@@ -434,10 +524,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
         Color unselectedColor = new Color(0.35f, 0.35f, 0.35f, 1f);
 
         if (btn1Taash != null)
-            btn1Taash.color = !isFriendsMatchMode && currentTrickMode == 1 ? selectedColor : unselectedColor;
+            btn1Taash.color = currentTrickMode == 1 ? selectedColor : unselectedColor;
 
         if (btn2Taash != null)
-            btn2Taash.color = !isFriendsMatchMode && currentTrickMode == 2 ? selectedColor : unselectedColor;
+            btn2Taash.color = currentTrickMode == 2 ? selectedColor : unselectedColor;
 
         if (btn1Sar != null && SarModeSelector.Instance == null)
             btn1Sar.color = currentSarMode == 1 ? selectedColor : unselectedColor;
@@ -466,7 +556,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (btnLogicC != null)
             btnLogicC.color = currentLogicMode == 3 ? selectedColor : unselectedColor;
 
-        Debug.Log($"[Mode UI] Trump Mode={currentTrumpMode} | Logic Mode={currentLogicMode} | Cut2Trump image assigned={btnCut2Trump != null}");
+        Debug.Log($"[Mode UI] Trick={currentTrickMode} | Trump={currentTrumpMode} | Sar={currentSarMode} | Logic={currentLogicMode}");
 
         if (SarModeSelector.Instance != null)
             SarModeSelector.Instance.UpdateButtonVisuals();
@@ -663,6 +753,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public override void OnJoinedLobby()
     {
         Debug.Log("[Photon] JoinedLobby (ModeManager)");
+
+        if (panelModes != null && panelModes.activeSelf)
+            UpdateModeSelectionUIColors();
+
         if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
         {
             Debug.Log("[Photon] JoinedLobby ignored because user cancelled matchmaking");

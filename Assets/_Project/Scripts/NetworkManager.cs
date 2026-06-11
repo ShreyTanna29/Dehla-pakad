@@ -55,16 +55,21 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     private GameObject reconnectionLostRoot;
     private static bool _connectionLostPanelWarned;
 
+    bool _showingNoInternetOverlay;
+    bool _pendingPhotonReconnectAfterAuth;
+    Coroutine _internetMonitorCoroutine;
+
     void Awake()
     {
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
 
+        GamePerformanceBootstrap.Apply();
+
         PhotonNetwork.KeepAliveInBackground = 300f;
         Application.runInBackground = true;
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
-        // Ensure we have a unique UserId for consistent rejoining
         if (string.IsNullOrEmpty(PhotonNetwork.AuthValues?.UserId))
         {
             string uid = PlayerPrefs.GetString("PhotonUserId", System.Guid.NewGuid().ToString());
@@ -72,6 +77,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             PhotonNetwork.AuthValues = new AuthenticationValues(uid);
             Debug.Log("[Photon] Assigned consistent UserId: " + uid);
         }
+
+        if (HasInternet())
+            ConnectToPhoton();
     }
 
     void Start()
@@ -81,11 +89,204 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         EnsureLoadingDoesNotBlockUI();
 
-        if (playOnlineButton != null) playOnlineButton.interactable = true;
         if (playBotsButton != null) playBotsButton.interactable = true;
 
         SetupButtonAnimations();
+        RefreshPlayOnlineButtonState();
         ResolveReconnectPanels();
+
+        _internetMonitorCoroutine = StartCoroutine(MonitorInternetRoutine());
+        StartCoroutine(EnsurePhotonReadyRoutine());
+
+        if (!IsPhotonConnectingOrConnected() && HasInternet())
+            ConnectToPhoton();
+    }
+
+    System.Collections.IEnumerator EnsurePhotonReadyRoutine()
+    {
+        var wait = new WaitForSecondsRealtime(1.5f);
+        while (true)
+        {
+            if (!PhotonNetwork.OfflineMode && HasInternet())
+            {
+                if (!PhotonNetwork.IsConnectedAndReady)
+                    ConnectToPhoton();
+                else
+                    EnsureJoinLobby();
+                RefreshPlayOnlineButtonState();
+            }
+            yield return wait;
+        }
+    }
+
+    public System.Collections.IEnumerator WaitForPhotonReadyRoutine(
+        float minDisplaySeconds,
+        float maxPhotonSeconds,
+        System.Action<string> onStatus = null)
+    {
+        float start = Time.unscaledTime;
+        onStatus?.Invoke("Connecting to server...");
+
+        while (Time.unscaledTime - start < minDisplaySeconds)
+            yield return null;
+
+        float photonStart = Time.unscaledTime;
+        while (!PhotonNetwork.IsConnectedAndReady && Time.unscaledTime - photonStart < maxPhotonSeconds)
+        {
+            onStatus?.Invoke("Connecting to Photon...");
+            if (!IsPhotonConnectingOrConnected() && HasInternet())
+                ConnectToPhoton();
+            yield return new WaitForSecondsRealtime(0.2f);
+        }
+
+        if (PhotonNetwork.IsConnectedAndReady
+            && !PhotonNetwork.InLobby
+            && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
+        {
+            PhotonNetwork.JoinLobby();
+        }
+
+        photonStart = Time.unscaledTime;
+        while (PhotonNetwork.IsConnectedAndReady
+            && !PhotonNetwork.InLobby
+            && Time.unscaledTime - photonStart < 4f)
+        {
+            onStatus?.Invoke("Joining lobby...");
+            yield return new WaitForSecondsRealtime(0.2f);
+        }
+
+        Debug.Log($"[Photon] Ready for home | Connected={PhotonNetwork.IsConnectedAndReady} | InLobby={PhotonNetwork.InLobby}");
+        RefreshPlayOnlineButtonState();
+    }
+
+    public static bool HasInternet()
+    {
+        return Application.internetReachability != NetworkReachability.NotReachable;
+    }
+
+    /// <summary>Play Online when internet is up and Photon master connection is ready.</summary>
+    public static bool IsPlayOnlineReady()
+    {
+        if (PhotonNetwork.OfflineMode) return false;
+        if (!HasInternet()) return false;
+        if (Instance != null && Instance._showingNoInternetOverlay) return false;
+
+        ClientState state = PhotonNetwork.NetworkClientState;
+        if (state == ClientState.ConnectingToNameServer
+            || state == ClientState.ConnectingToMasterServer
+            || state == ClientState.Authenticating)
+            return false;
+
+        return PhotonNetwork.IsConnectedAndReady;
+    }
+
+    public void EnsureJoinLobby()
+    {
+        if (PhotonNetwork.OfflineMode || !PhotonNetwork.IsConnectedAndReady) return;
+        if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
+            PhotonNetwork.JoinLobby();
+    }
+
+    void RefreshPlayOnlineButtonState()
+    {
+        if (playOnlineButton == null) return;
+        playOnlineButton.interactable = IsPlayOnlineReady();
+    }
+
+    public void TryConnectPhotonAtStartup()
+    {
+        if (PhotonNetwork.OfflineMode) return;
+
+        if (!HasInternet())
+        {
+            ShowNoInternetLoading();
+            return;
+        }
+
+        ConnectToPhoton();
+    }
+
+    public void ApplyPhotonAuthAndConnect(string userId)
+    {
+        if (string.IsNullOrEmpty(userId) || PhotonNetwork.OfflineMode) return;
+
+        PhotonNetwork.AuthValues = new AuthenticationValues(userId);
+        PlayerPrefs.SetString("PhotonUserId", userId);
+        PlayerPrefs.Save();
+        Debug.Log("[Photon] Auth updated — connecting as: " + userId);
+
+        if (IsPhotonConnectingOrConnected())
+        {
+            _pendingPhotonReconnectAfterAuth = true;
+            PhotonNetwork.Disconnect();
+            return;
+        }
+
+        ConnectToPhoton();
+    }
+
+    static bool IsPhotonConnectingOrConnected()
+    {
+        ClientState state = PhotonNetwork.NetworkClientState;
+        return PhotonNetwork.IsConnected
+            || state == ClientState.ConnectingToNameServer
+            || state == ClientState.ConnectingToMasterServer
+            || state == ClientState.Authenticating
+            || state == ClientState.JoiningLobby;
+    }
+
+    void ShowNoInternetLoading()
+    {
+        const string message = "Internet is not connected.\nPlease check your connection.";
+        _showingNoInternetOverlay = true;
+        if (loadingText != null) loadingText.text = message;
+        if (loadingCanvasGroup == null) return;
+
+        loadingCanvasGroup.gameObject.SetActive(true);
+        loadingCanvasGroup.DOKill();
+        loadingCanvasGroup.alpha = 1f;
+        loadingCanvasGroup.blocksRaycasts = true;
+        loadingCanvasGroup.interactable = true;
+        loadingCanvasGroup.transform.SetAsLastSibling();
+        lastStatusMessage = message;
+        RefreshPlayOnlineButtonState();
+    }
+
+    System.Collections.IEnumerator MonitorInternetRoutine()
+    {
+        var wait = new WaitForSeconds(1f);
+        while (true)
+        {
+            if (!HasInternet())
+            {
+                ShowNoInternetLoading();
+            }
+            else
+            {
+                if (_showingNoInternetOverlay)
+                {
+                    _showingNoInternetOverlay = false;
+                    if (loadingCanvasGroup != null)
+                    {
+                        loadingCanvasGroup.DOKill();
+                        loadingCanvasGroup.alpha = 0f;
+                        loadingCanvasGroup.blocksRaycasts = false;
+                        loadingCanvasGroup.interactable = false;
+                        loadingCanvasGroup.gameObject.SetActive(false);
+                    }
+                }
+
+                if (!PhotonNetwork.OfflineMode
+                    && PhotonNetwork.NetworkClientState == ClientState.Disconnected
+                    && !_pendingPhotonReconnectAfterAuth)
+                {
+                    ConnectToPhoton();
+                }
+            }
+
+            RefreshPlayOnlineButtonState();
+            yield return wait;
+        }
     }
 
     static bool IsUiObjectAlive(GameObject go)
@@ -344,17 +545,43 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void ConnectToPhoton()
     {
-        if (PhotonNetwork.IsConnected || PhotonNetwork.NetworkClientState == ClientState.ConnectingToNameServer || PhotonNetwork.NetworkClientState == ClientState.ConnectingToMasterServer)
+        if (PhotonNetwork.OfflineMode) return;
+
+        string authUserId = PlayerPrefs.GetString("PhotonUserId", "");
+        if (string.IsNullOrEmpty(authUserId) && PhotonNetwork.AuthValues != null)
+            authUserId = PhotonNetwork.AuthValues.UserId;
+
+        if (!string.IsNullOrEmpty(authUserId))
         {
-            Debug.Log($"[Photon] Already connected or connecting ({PhotonNetwork.NetworkClientState}).");
+            if (PhotonNetwork.AuthValues == null)
+                PhotonNetwork.AuthValues = new AuthenticationValues(authUserId);
+            else
+                PhotonNetwork.AuthValues.UserId = authUserId;
+        }
+
+        ClientState state = PhotonNetwork.NetworkClientState;
+        if (state == ClientState.ConnectingToNameServer
+            || state == ClientState.ConnectingToMasterServer
+            || state == ClientState.Authenticating)
+        {
+            Debug.Log($"[Photon] Already connecting ({state}).");
             return;
         }
 
-        // ShowLoading removed per user request - transition to Modes should be direct
-        Debug.Log("[Photon] ConnectUsingSettings triggered by User Flow (Background)");
-        Debug.Log("[PhotonFlow] Connecting");
+        if (PhotonNetwork.IsConnectedAndReady)
+        {
+            EnsureJoinLobby();
+            RefreshPlayOnlineButtonState();
+            return;
+        }
 
-        if (playOnlineButton != null) playOnlineButton.interactable = false;
+        if (PhotonNetwork.IsConnected)
+        {
+            Debug.Log($"[Photon] Connected but not ready yet ({state}).");
+            return;
+        }
+
+        Debug.Log("[Photon] ConnectUsingSettings triggered");
         PhotonNetwork.ConnectUsingSettings();
     }
 
@@ -367,6 +594,17 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         homeCanvasGroup.interactable = false;
         homeCanvasGroup.blocksRaycasts = false;
         homeCanvasGroup.gameObject.SetActive(false);
+    }
+
+    public void EnsureHomeCanvasForModePanel()
+    {
+        if (homeCanvasGroup == null) return;
+
+        homeCanvasGroup.gameObject.SetActive(true);
+        homeCanvasGroup.DOKill();
+        homeCanvasGroup.alpha = 1f;
+        homeCanvasGroup.interactable = true;
+        homeCanvasGroup.blocksRaycasts = true;
     }
 
     public void UpdateUIState(bool isHome)
@@ -494,7 +732,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             if (!homeCanvasGroup.gameObject.activeSelf)
                 homeCanvasGroup.gameObject.SetActive(true);
             homeCanvasGroup.DOKill();
-            homeCanvasGroup.DOFade(1, transitionTime).SetUpdate(true);
+            homeCanvasGroup.DOFade(1, GamePerformanceBootstrap.UiDuration(transitionTime)).SetUpdate(true);
             homeCanvasGroup.interactable = true;
             homeCanvasGroup.blocksRaycasts = true;
         }
@@ -543,6 +781,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 ModeManager.Instance.panelHomeScreen.SetActive(true);
             ModeManager.Instance.ApplyHomeScreenButtonColors();
         }
+
+        if (!PhotonNetwork.OfflineMode && HasInternet() && !IsPhotonConnectingOrConnected())
+            ConnectToPhoton();
+
+        RefreshPlayOnlineButtonState();
     }
 
     public void StartOfflineMatchRequest()
@@ -606,6 +849,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (loadingText != null) loadingText.text = message;
         if (loadingCanvasGroup == null) return;
 
+        loadingCanvasGroup.gameObject.SetActive(true);
+        loadingCanvasGroup.DOKill();
         loadingCanvasGroup.alpha = 1;
         loadingCanvasGroup.interactable = false;
         loadingCanvasGroup.blocksRaycasts = false;
@@ -615,6 +860,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void HideLoading()
     {
+        if (_showingNoInternetOverlay && !HasInternet()) return;
+
+        _showingNoInternetOverlay = false;
         if (loadingCanvasGroup == null) return;
 
         loadingCanvasGroup.DOKill();
@@ -671,11 +919,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
-        {
-            Debug.Log("[Photon] JoinLobby");
-            PhotonNetwork.JoinLobby();
-        }
+        EnsureJoinLobby();
+        RefreshPlayOnlineButtonState();
     }
 
     void OnApplicationPause(bool paused)
@@ -718,10 +963,23 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         Debug.Log($"[Photon] Disconnected! Cause: {cause}");
         lastErrorMessage = cause.ToString();
-        HideLoading();
 
-        // 🚀 UI FIX: Re-enable buttons if connection failed
-        if (playOnlineButton != null) playOnlineButton.interactable = true;
+        if (_pendingPhotonReconnectAfterAuth)
+        {
+            _pendingPhotonReconnectAfterAuth = false;
+            if (HasInternet())
+                ConnectToPhoton();
+            else
+                ShowNoInternetLoading();
+            RefreshPlayOnlineButtonState();
+            return;
+        }
+
+        if (!_showingNoInternetOverlay)
+            HideLoading();
+
+        if (!HasInternet())
+            ShowNoInternetLoading();
 
         if (pendingOfflineMatch)
         {
@@ -746,6 +1004,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 BeginInMatchDisconnectFlow();
             }
         }
+
+        RefreshPlayOnlineButtonState();
     }
 
     System.Collections.IEnumerator ReconnectForMatchmakingRoutine()
@@ -777,14 +1037,24 @@ yield return new WaitForSeconds(1f);
         Debug.Log("[PhotonFlow] Joined Lobby");
         lastStatusMessage = "Joined lobby";
         GameFlowState.SetPhase(GameFlowPhase.Home);
-        
-        if (playOnlineButton != null) playOnlineButton.interactable = true;
-        HideLoading();
+
+        if (!_showingNoInternetOverlay)
+            HideLoading();
+
+        if (PlayWithFriendsManager.Instance != null)
+        {
+            PlayWithFriendsManager.Instance.DisplayMyID();
+            PlayWithFriendsManager.Instance.CheckFriendsOnlineStatus();
+            PlayWithFriendsManager.Instance.StartInviteListener();
+        }
+
+        RefreshPlayOnlineButtonState();
     }
 
     public override void OnLeftLobby()
     {
         Debug.Log("[Photon] LeftLobby triggered.");
+        RefreshPlayOnlineButtonState();
     }
 
     public override void OnCreatedRoom()
@@ -1023,40 +1293,53 @@ yield return new WaitForSeconds(1f);
     {
         if (btn == null) return;
 
-        btn.interactable = true;
+        if (isBots)
+            btn.interactable = true;
+        else
+            btn.interactable = IsPlayOnlineReady();
+
         UIButtonHoverUtility.SetupHoverScale(btn);
 
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(() => {
+            if (!isBots && !IsPlayOnlineReady())
+            {
+                Debug.LogWarning("[UI] Play Online blocked — Photon not ready or no internet.");
+                return;
+            }
+
             Debug.Log($"[UI] Button Clicked: {(isBots ? "Play Bots" : "Play Online")}");
             btn.transform.DOPunchScale(new Vector3(-0.1f, -0.1f, 0f), 0.15f, 1, 0.5f).SetUpdate(true);
             isPlayBotsMode = isBots;
 
-            if (!isBots)
+            if (ModeManager.Instance == null)
             {
-                ConnectToPhoton();
+                Debug.LogError("[UI] ModeManager.Instance is null!");
+                return;
             }
 
-            if (ModeManager.Instance != null)
-                ModeManager.Instance.OpenModePanelFromHome();
+            if (isBots)
+                ModeManager.Instance.OnClick_PlayBots_Home();
             else
-                Debug.LogError("[UI] ModeManager.Instance is null!");
+                ModeManager.Instance.OnClick_PlayOnline_Home();
         });
     }
 }
 
-public class ButtonEventHelper : MonoBehaviour, UnityEngine.EventSystems.IPointerEnterHandler, UnityEngine.EventSystems.IPointerExitHandler
+public class ButtonEventHelper : MonoBehaviour,
+    UnityEngine.EventSystems.IPointerEnterHandler,
+    UnityEngine.EventSystems.IPointerExitHandler
 {
     public System.Action OnPointerEnterAction;
     public System.Action OnPointerExitAction;
-    
-    public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData eventData) 
-    { 
-        OnPointerEnterAction?.Invoke(); 
+
+    public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData eventData)
+    {
+        OnPointerEnterAction?.Invoke();
     }
-    
-    public void OnPointerExit(UnityEngine.EventSystems.PointerEventData eventData) 
-    { 
-        OnPointerExitAction?.Invoke(); 
+
+    public void OnPointerExit(UnityEngine.EventSystems.PointerEventData eventData)
+    {
+        OnPointerExitAction?.Invoke();
     }
 }

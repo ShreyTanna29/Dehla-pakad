@@ -165,43 +165,89 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
 
     public void ResetNeutralVisual() => ApplyNotMyTurnVisual();
 
+    public void ResetForPool()
+    {
+        isPlayed = false;
+        isValidToPlay = false;
+        isSelected = false;
+        isDragging = false;
+        isAutoRaised = false;
+        if (visualRect != null)
+        {
+            visualRect.DOKill();
+            visualRect.localScale = Vector3.one;
+            visualRect.localRotation = Quaternion.identity;
+        }
+        if (cardCanvasGroup != null)
+        {
+            cardCanvasGroup.alpha = 1f;
+            cardCanvasGroup.interactable = true;
+            cardCanvasGroup.blocksRaycasts = true;
+        }
+        if (blockedOverlay != null) blockedOverlay.enabled = false;
+        if (lockIndicator != null) lockIndicator.enabled = false;
+        
+        if (myDisplay != null && myDisplay.cardBackgroundImage != null)
+            myDisplay.cardBackgroundImage.color = defaultBgColor;
+            
+        if (currentSelected == this) currentSelected = null;
+    }
+
     void EnsureBlockedVisuals()
     {
         if (blockedVisualsCreated) return;
-        blockedVisualsCreated = true;
+        
+        // Try to find existing ones first (if they were already part of the prefab)
+        Transform overlayT = transform.Find("BlockedOverlay");
+        if (overlayT != null)
+        {
+            blockedOverlay = overlayT.GetComponent<Image>();
+        }
+        else
+        {
+            GameObject overlayGo = new GameObject("BlockedOverlay", typeof(RectTransform), typeof(Image));
+            overlayGo.transform.SetParent(transform, false);
+            RectTransform overlayRt = overlayGo.GetComponent<RectTransform>();
+            overlayRt.anchorMin = Vector2.zero;
+            overlayRt.anchorMax = Vector2.one;
+            overlayRt.offsetMin = Vector2.zero;
+            overlayRt.offsetMax = Vector2.zero;
+            overlayRt.SetAsLastSibling();
 
-        GameObject overlayGo = new GameObject("BlockedOverlay", typeof(RectTransform), typeof(Image));
-        overlayGo.transform.SetParent(transform, false);
-        RectTransform overlayRt = overlayGo.GetComponent<RectTransform>();
-        overlayRt.anchorMin = Vector2.zero;
-        overlayRt.anchorMax = Vector2.one;
-        overlayRt.offsetMin = Vector2.zero;
-        overlayRt.offsetMax = Vector2.zero;
-        overlayRt.SetAsLastSibling();
-
-        blockedOverlay = overlayGo.GetComponent<Image>();
-        blockedOverlay.color = new Color(0f, 0f, 0f, 0.08f);
-        blockedOverlay.raycastTarget = false;
+            blockedOverlay = overlayGo.GetComponent<Image>();
+            blockedOverlay.color = new Color(0f, 0f, 0f, 0.08f);
+            blockedOverlay.raycastTarget = false;
+        }
         blockedOverlay.enabled = false;
 
-        GameObject lockGo = new GameObject("LockIndicator", typeof(RectTransform), typeof(Text));
-        lockGo.transform.SetParent(transform, false);
-        RectTransform lockRt = lockGo.GetComponent<RectTransform>();
-        lockRt.anchorMin = new Vector2(1f, 1f);
-        lockRt.anchorMax = new Vector2(1f, 1f);
-        lockRt.pivot = new Vector2(1f, 1f);
-        lockRt.anchoredPosition = new Vector2(-6f, -6f);
-        lockRt.sizeDelta = new Vector2(22f, 22f);
+        Transform lockT = transform.Find("LockIndicator");
+        if (lockT != null)
+        {
+            lockIndicator = lockT.GetComponent<Text>();
+        }
+        else
+        {
+            GameObject lockGo = new GameObject("LockIndicator", typeof(RectTransform), typeof(Text));
+            lockGo.transform.SetParent(transform, false);
+            RectTransform lockRt = lockGo.GetComponent<RectTransform>();
+            lockRt.anchorMin = new Vector2(1f, 1f);
+            lockRt.anchorMax = new Vector2(1f, 1f);
+            lockRt.pivot = new Vector2(1f, 1f);
+            lockRt.anchoredPosition = new Vector2(-6f, -6f);
+            lockRt.sizeDelta = new Vector2(22f, 22f);
 
-        lockIndicator = lockGo.GetComponent<Text>();
-        lockIndicator.text = "\u00D7";
-        lockIndicator.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        lockIndicator.fontSize = 18;
-        lockIndicator.fontStyle = FontStyle.Bold;
-        lockIndicator.alignment = TextAnchor.MiddleCenter;
-        lockIndicator.color = new Color(0.35f, 0.35f, 0.38f, 0.9f);
-        lockIndicator.raycastTarget = false;
+            lockIndicator = lockGo.GetComponent<Text>();
+            lockIndicator.text = "\u00D7";
+            lockIndicator.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            lockIndicator.fontSize = 18;
+            lockIndicator.fontStyle = FontStyle.Bold;
+            lockIndicator.alignment = TextAnchor.MiddleCenter;
+            lockIndicator.color = new Color(0.35f, 0.35f, 0.38f, 0.9f);
+            lockIndicator.raycastTarget = false;
+        }
         lockIndicator.enabled = false;
+        
+        blockedVisualsCreated = true;
     }
 
     void SetRaycastTargets(bool enabled)

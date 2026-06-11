@@ -1,9 +1,12 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using Photon.Pun;
 using Photon.Realtime;
 using TMPro;
 using System.Collections.Generic;
+using Firebase.Database;
+using Firebase.Extensions;
 
 public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 {
@@ -32,10 +35,24 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public GameObject homeMenuPanel;
     public GameObject gameTablePanel;
 
+    [Header("Friends UI Slots")]
+    public TMP_Text myUserIdText;
+    public TMP_InputField addFriendInput;
+    public Transform friendsListContainer;
+    public GameObject friendUIPrefab;
+
     [Header("Friends List Storage")]
     private const string FriendsPrefsKey = "SavedFriendsList";
+    private const string FriendNamesPrefsKey = "SavedFriendsNames";
+    private const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
     public List<string> myFriends = new List<string>();
+    readonly Dictionary<string, string> friendDisplayNames = new Dictionary<string, string>();
+    readonly Dictionary<string, FriendInfo> friendPhotonStatus = new Dictionary<string, FriendInfo>();
     PhotonView _photonView;
+    DatabaseReference inviteDbRef;
+    string _pendingInviteFriendId;
+    string _pendingInviteFriendName;
+    bool _inviteListenerStarted;
 
     void Awake()
     {
@@ -92,6 +109,10 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (clientWaitingText != null) clientWaitingText.gameObject.SetActive(false);
         if (includeBotsButton != null) includeBotsButton.SetActive(false);
         ClearPlayerListUI();
+        DisplayMyID();
+        RefreshFriendsListUI();
+        CheckFriendsOnlineStatus();
+        StartInviteListener();
     }
 
     void EnsurePhotonUserId()
@@ -184,6 +205,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             if (NetworkManager.Instance != null)
                 NetworkManager.Instance.StayInPrivateLobbyUI();
             ShowPrivateRoomLobbyUI();
+            TrySendPendingInvite();
             return;
         }
     }
@@ -643,13 +665,51 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     // 6. FRIENDS LIST LOGIC
     // ==========================================
 
-    public void AddFriend(string friendUserId)
+    public void DisplayMyID()
     {
-        if (string.IsNullOrEmpty(friendUserId) || myFriends.Contains(friendUserId)) return;
+        if (myUserIdText == null) return;
+        string id = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
+        myUserIdText.text = "My ID: " + id;
+    }
+
+    public void UI_AddFriendBtnClicked()
+    {
+        if (addFriendInput == null) return;
+
+        string newFriendId = addFriendInput.text.Trim();
+        if (string.IsNullOrEmpty(newFriendId)) return;
+
+        AddFriend(newFriendId);
+        addFriendInput.text = "";
+    }
+
+    public void AddFriend(string friendUserId, string displayName = null)
+    {
+        if (string.IsNullOrEmpty(friendUserId)) return;
+
+        string myId = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
+        if (!string.IsNullOrEmpty(myId) && friendUserId == myId)
+        {
+            ShowUIError("You cannot add yourself!");
+            return;
+        }
+
+        if (myFriends.Contains(friendUserId))
+        {
+            ShowUIError("Already in friends list.");
+            return;
+        }
 
         myFriends.Add(friendUserId);
+        if (!string.IsNullOrEmpty(displayName))
+            friendDisplayNames[friendUserId] = displayName;
+        else if (!friendDisplayNames.ContainsKey(friendUserId))
+            friendDisplayNames[friendUserId] = friendUserId;
+
         SaveFriends();
-        Debug.Log(friendUserId + " added to friends!");
+        RefreshFriendsListUI();
+        CheckFriendsOnlineStatus();
+        Debug.Log($"[Friends] Added {friendDisplayNames[friendUserId]} ({friendUserId})");
     }
 
     public void CheckFriendsOnlineStatus()
@@ -661,23 +721,220 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public override void OnFriendListUpdate(List<FriendInfo> friendList)
     {
+        friendPhotonStatus.Clear();
         foreach (FriendInfo friend in friendList)
+            friendPhotonStatus[friend.UserId] = friend;
+
+        RefreshFriendsListUI();
+    }
+
+    public void RefreshFriendsListUI()
+    {
+        if (friendsListContainer == null || friendUIPrefab == null) return;
+
+        foreach (Transform child in friendsListContainer)
+            Destroy(child.gameObject);
+
+        foreach (string friendId in myFriends)
         {
-            Debug.Log($"Friend: {friend.UserId} | Online: {friend.IsOnline} | Room: {friend.Room}");
+            if (string.IsNullOrEmpty(friendId)) continue;
+            friendPhotonStatus.TryGetValue(friendId, out FriendInfo photonInfo);
+            SpawnFriendRow(friendId, GetFriendDisplayName(friendId), photonInfo);
         }
+    }
+
+    string GetFriendDisplayName(string friendId)
+    {
+        if (friendDisplayNames.TryGetValue(friendId, out string name) && !string.IsNullOrEmpty(name))
+            return name;
+        return friendId;
+    }
+
+    void SpawnFriendRow(string friendId, string displayName, FriendInfo photonInfo)
+    {
+        GameObject row = Instantiate(friendUIPrefab, friendsListContainer);
+
+        TMP_Text friendText = row.GetComponentInChildren<TMP_Text>();
+        string status = "🔴 Offline";
+        if (photonInfo != null)
+            status = photonInfo.IsOnline ? (photonInfo.IsInRoom ? "🎮 In Game" : "🟢 Online") : "🔴 Offline";
+
+        if (friendText != null)
+        {
+            friendText.text = $"{displayName}\n{status}";
+            friendText.color = photonInfo != null && photonInfo.IsOnline ? Color.green : Color.gray;
+        }
+
+        Button inviteBtn = FindChildButton(row.transform, "InviteButton");
+        if (inviteBtn == null)
+        {
+            Button[] buttons = row.GetComponentsInChildren<Button>(true);
+            inviteBtn = buttons.Length > 0 ? buttons[buttons.Length - 1] : null;
+        }
+
+        if (inviteBtn != null)
+        {
+            inviteBtn.onClick.RemoveAllListeners();
+            inviteBtn.onClick.AddListener(() => InviteFriendToGame(friendId, displayName));
+            TMP_Text inviteLabel = inviteBtn.GetComponentInChildren<TMP_Text>();
+            if (inviteLabel != null) inviteLabel.text = "Invite";
+        }
+    }
+
+    static Button FindChildButton(Transform root, string childName)
+    {
+        Transform t = root.Find(childName);
+        return t != null ? t.GetComponent<Button>() : null;
+    }
+
+    public void InviteFriendToGame(string friendUserId, string friendDisplayName = null)
+    {
+        if (string.IsNullOrEmpty(friendUserId)) return;
+        if (!PhotonNetwork.IsConnectedAndReady)
+        {
+            ShowUIError("Server not ready. Wait for connection...");
+            return;
+        }
+
+        _pendingInviteFriendId = friendUserId;
+        _pendingInviteFriendName = string.IsNullOrEmpty(friendDisplayName) ? GetFriendDisplayName(friendUserId) : friendDisplayName;
+
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+        {
+            TrySendPendingInvite();
+            return;
+        }
+
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.LeaveRoom();
+
+        CreatePrivateRoom();
+        ShowUIError("Creating room for invite...");
+    }
+
+    void TrySendPendingInvite()
+    {
+        if (string.IsNullOrEmpty(_pendingInviteFriendId)) return;
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null || PhotonNetwork.CurrentRoom.IsVisible) return;
+
+        SendFirebaseInvite(_pendingInviteFriendId, PhotonNetwork.CurrentRoom.Name, _pendingInviteFriendName);
+        _pendingInviteFriendId = null;
+        _pendingInviteFriendName = null;
+    }
+
+    void SendFirebaseInvite(string targetUserId, string roomPin, string friendName)
+    {
+        if (string.IsNullOrEmpty(targetUserId) || string.IsNullOrEmpty(roomPin)) return;
+
+        string fromId = PhotonNetwork.AuthValues?.UserId ?? "";
+        string fromName = PhotonNetwork.NickName ?? "Friend";
+
+        var inviteData = new Dictionary<string, object>
+        {
+            { "roomPin", roomPin },
+            { "fromUserId", fromId },
+            { "fromName", fromName },
+            { "createdAt", System.DateTime.UtcNow.Ticks }
+        };
+
+        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("invites").Child(targetUserId).Child(roomPin)
+            .SetValueAsync(inviteData).ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted)
+                {
+                    Debug.LogError("[Invite] Firebase send failed: " + task.Exception);
+                    ShowUIError("Invite failed. Try again.");
+                    return;
+                }
+
+                ShowUIError($"Invite sent to {friendName}!");
+                Debug.Log($"[Invite] Sent room {roomPin} to {targetUserId}");
+            });
+    }
+
+    public void StartInviteListener()
+    {
+        if (_inviteListenerStarted) return;
+
+        string myId = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
+        if (string.IsNullOrEmpty(myId)) return;
+
+        inviteDbRef = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference.Child("invites").Child(myId);
+        inviteDbRef.ChildAdded += OnIncomingInviteAdded;
+        _inviteListenerStarted = true;
+        Debug.Log("[Invite] Listening for invites on " + myId);
+    }
+
+    void OnIncomingInviteAdded(object sender, ChildChangedEventArgs args)
+    {
+        if (args.DatabaseError != null || args.Snapshot == null || !args.Snapshot.Exists) return;
+
+        string roomPin = args.Snapshot.Child("roomPin").Value?.ToString();
+        string fromName = args.Snapshot.Child("fromName").Value?.ToString() ?? "Friend";
+        if (string.IsNullOrEmpty(roomPin)) return;
+
+        ShowIncomingInvite(fromName, roomPin);
+        args.Snapshot.Reference.RemoveValueAsync();
+    }
+
+    void ShowIncomingInvite(string fromName, string roomPin)
+    {
+        if (pinInputField != null)
+            pinInputField.text = roomPin;
+
+        if (errorText != null)
+        {
+            errorText.text = $"{fromName} invited you! PIN: {roomPin}";
+            errorText.gameObject.SetActive(true);
+        }
+
+        if (FriendsDrawerController.Instance != null)
+            FriendsDrawerController.Instance.OpenDrawer();
+
+        Debug.Log($"[Invite] Incoming from {fromName} — room {roomPin}");
     }
 
     void SaveFriends()
     {
-        string data = string.Join(",", myFriends);
-        PlayerPrefs.SetString(FriendsPrefsKey, data);
+        PlayerPrefs.SetString(FriendsPrefsKey, string.Join(",", myFriends));
+
+        var namePairs = new List<string>();
+        foreach (string id in myFriends)
+        {
+            if (friendDisplayNames.TryGetValue(id, out string name))
+                namePairs.Add(id + "|" + name);
+        }
+        PlayerPrefs.SetString(FriendNamesPrefsKey, string.Join(",", namePairs));
         PlayerPrefs.Save();
     }
 
     void LoadFriends()
     {
         string data = PlayerPrefs.GetString(FriendsPrefsKey, "");
+        myFriends.Clear();
         if (!string.IsNullOrEmpty(data))
-            myFriends = new List<string>(data.Split(','));
+        {
+            foreach (string id in data.Split(','))
+            {
+                if (!string.IsNullOrEmpty(id) && !myFriends.Contains(id))
+                    myFriends.Add(id);
+            }
+        }
+
+        friendDisplayNames.Clear();
+        string namesData = PlayerPrefs.GetString(FriendNamesPrefsKey, "");
+        if (!string.IsNullOrEmpty(namesData))
+        {
+            foreach (string pair in namesData.Split(','))
+            {
+                int sep = pair.IndexOf('|');
+                if (sep <= 0) continue;
+                string id = pair.Substring(0, sep);
+                string name = pair.Substring(sep + 1);
+                if (!string.IsNullOrEmpty(id))
+                    friendDisplayNames[id] = name;
+            }
+        }
     }
 }

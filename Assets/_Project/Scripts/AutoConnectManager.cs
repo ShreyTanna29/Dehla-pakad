@@ -5,17 +5,11 @@ public class AutoConnectManager : MonoBehaviourPunCallbacks
 {
     void Start()
     {
+        // Photon connect is started by NetworkManager.TryConnectPhotonAtStartup().
         if (PhotonNetwork.OfflineMode) return;
 
-        if (!PhotonNetwork.IsConnected)
-        {
-            Debug.Log("Auto-Connecting to Photon Master Server...");
-            PhotonNetwork.ConnectUsingSettings();
-        }
-        else if (PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.InLobby)
-        {
+        if (PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.InLobby)
             PhotonNetwork.JoinLobby();
-        }
     }
 
     public override void OnConnectedToMaster()

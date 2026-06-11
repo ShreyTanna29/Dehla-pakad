@@ -375,6 +375,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
     }
 
+    public void EnsureHandCachedForBot(int actorNumber)
+    {
+        if (!PhotonNetwork.IsMasterClient) return;
+        EnsureHandCachedForActor(actorNumber);
+    }
+
     void EnsureHandCachedForActor(int actorNumber)
     {
         if (humanHandsOnMaster.ContainsKey(actorNumber) && humanHandsOnMaster[actorNumber].Count > 0) return;

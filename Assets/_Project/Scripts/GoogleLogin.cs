@@ -1,10 +1,13 @@
+using System.Collections;
 using UnityEngine;
 using Firebase;
 using Firebase.Auth;
+using Firebase.Database;
 using Firebase.Extensions;
 using Google;
 using System.Threading.Tasks;
 using Photon.Pun;
+using Photon.Realtime;
 using System.Collections.Generic;
 
 /// <summary>
@@ -23,10 +26,17 @@ public class GoogleLogin : MonoBehaviour
     public UnityEngine.UI.Button googleSignInButton;
     public TMPro.TMP_Text statusText;
 
+    [Header("Profile UI Elements")]
+    public TMPro.TMP_Text profileNameText;
+
     private FirebaseAuth auth;
     private GoogleSignInConfiguration configuration;
 
     private const string WEB_CLIENT_ID = "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com";
+    private const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
+    private const float SimulatedLoginMinWait = 3.5f;
+    private const float RealLoginMinWait = 2.5f;
+    private const float PhotonReadyMaxWait = 12f;
     private bool isFirebaseReady = false;
     public bool IsFirebaseReady { get { if(isFirebaseReady) {} return isFirebaseReady; } }
 
@@ -75,17 +85,24 @@ public class GoogleLogin : MonoBehaviour
                 if (googleSignInButton != null)
                     googleSignInButton.interactable = true;
 
-                FirebaseUser currentUser = auth.CurrentUser;
-                if (currentUser != null)
+                if (auth.CurrentUser != null)
                 {
-                    OnFirebaseLoginFinished(Task.FromResult(currentUser));
+                    Debug.Log("[Login] Persistent User Found! Auto-login bypass...");
+                    CompleteLogin(auth.CurrentUser);
                 }
                 else
                 {
                     ShowLoginPanel();
-                    if (GoogleSignIn.DefaultInstance != null)
-                        GoogleSignIn.DefaultInstance.SignOut();
                     UpdateStatus("Ready to Login");
+
+                    GoogleSignIn.DefaultInstance.SignInSilently().ContinueWithOnMainThread(silentTask =>
+                    {
+                        if (!silentTask.IsFaulted && !silentTask.IsCanceled && silentTask.Result != null)
+                        {
+                            Credential credential = GoogleAuthProvider.GetCredential(silentTask.Result.IdToken, null);
+                            auth.SignInWithCredentialAsync(credential).ContinueWithOnMainThread(OnFirebaseLoginFinished);
+                        }
+                    });
                 }
             }
             else
@@ -97,8 +114,12 @@ public class GoogleLogin : MonoBehaviour
         });
     }
 
-    public void SignInWithGoogle()
+    public void SignInWithGoogle() => OnGoogleLoginButtonClick();
+
+    public void OnGoogleLoginButtonClick()
     {
+        Debug.Log("Google Login Button Clicked! Starting explicit sign-in.");
+
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
             UpdateStatus("No Internet Connection!");
@@ -106,27 +127,26 @@ public class GoogleLogin : MonoBehaviour
         }
 
 #if UNITY_EDITOR
-        Debug.LogWarning("⚠️ Editor Mode: Simulating Login...");
+        Debug.LogWarning("Editor Mode: Simulating Login...");
         SimulateLogin();
 #else
         if (!isFirebaseReady)
         {
             UpdateStatus("Firebase Initializing...");
-            InitializeFirebase(); // Attempt re-init
+            InitializeFirebase();
             return;
         }
 
         UpdateStatus("Signing in with Google...");
-        Debug.Log("[Google] Starting Sign-In...");
-
-        GoogleSignIn.DefaultInstance.SignIn().ContinueWithOnMainThread(OnGoogleLoginFinished);
+        GoogleSignIn.DefaultInstance.SignIn().ContinueWithOnMainThread(OnAuthenticationFinished);
 #endif
     }
 
-    private void OnGoogleLoginFinished(Task<GoogleSignInUser> task)
+    private void OnAuthenticationFinished(Task<GoogleSignInUser> task)
     {
         if (task.IsFaulted)
         {
+            Debug.LogError("Google Login Faulted.");
             string errorMessage = "Google Login Failed";
             if (task.Exception != null)
             {
@@ -137,12 +157,8 @@ public class GoogleLogin : MonoBehaviour
                     {
                         errorMessage = $"Error {gEx.Status}: {gEx.Message}";
                         Debug.LogError($"[Google Error] Code {gEx.Status}: {gEx.Message}");
-                        
-                        // Error 10 Help
-                        if ((int)gEx.Status == 10) 
-                        {
+                        if ((int)gEx.Status == 10)
                             Debug.LogError("TIP: Error 10 usually means WebClientId is wrong OR SHA-1 is missing in Firebase Console.");
-                        }
                     }
                 }
             }
@@ -152,23 +168,69 @@ public class GoogleLogin : MonoBehaviour
 
         if (task.IsCanceled)
         {
+            Debug.LogWarning("Google Login Canceled.");
             UpdateStatus("Login Canceled");
-            Debug.LogWarning("[Google] Sign-In Canceled");
             return;
         }
 
-        if (task.Result == null || string.IsNullOrEmpty(task.Result.IdToken))
+        GoogleSignInUser googleUser = task.Result;
+        if (googleUser == null || string.IsNullOrEmpty(googleUser.IdToken))
         {
             UpdateStatus("Auth Token Missing!");
-            Debug.LogError("❌ Google Result is null or IdToken is empty.");
+            Debug.LogError("Google Result is null or IdToken is empty.");
             return;
         }
 
-        Debug.Log("✅ Google Login Success. Authenticating with Firebase...");
+        string googleAccountName = googleUser.DisplayName;
+        if (!string.IsNullOrEmpty(googleAccountName))
+            ApplyProfileName(googleAccountName);
+
+        Debug.Log("Google Login Success. Authenticating with Firebase...");
         UpdateStatus("Firebase Auth...");
-        
-        Credential credential = GoogleAuthProvider.GetCredential(task.Result.IdToken, null);
+
+        Credential credential = GoogleAuthProvider.GetCredential(googleUser.IdToken, null);
         auth.SignInWithCredentialAsync(credential).ContinueWithOnMainThread(OnFirebaseLoginFinished);
+    }
+
+    void ApplyProfileName(string displayName)
+    {
+        if (string.IsNullOrEmpty(displayName)) return;
+
+        PhotonNetwork.NickName = displayName;
+
+        if (profileNameText != null)
+        {
+            profileNameText.text = displayName;
+            Debug.Log($"[Profile] Name updated to: {displayName}");
+        }
+    }
+
+    void SaveUserProfileToDatabase(string userId, string displayName)
+    {
+        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(displayName)) return;
+
+        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("users").Child(userId).Child("username").SetValueAsync(displayName)
+            .ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted)
+                    Debug.LogError("[Firebase DB] Username save failed: " + task.Exception);
+                else
+                    Debug.Log("[Firebase DB] Username saved for: " + userId);
+            });
+    }
+
+    void ConnectPhotonAfterLogin(string photonUserId)
+    {
+        if (string.IsNullOrEmpty(photonUserId)) return;
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ApplyPhotonAuthAndConnect(photonUserId);
+        else if (NetworkManager.HasInternet())
+        {
+            PhotonNetwork.AuthValues = new AuthenticationValues(photonUserId);
+            PhotonNetwork.ConnectUsingSettings();
+        }
     }
 
     private void OnFirebaseLoginFinished(Task<FirebaseUser> task)
@@ -203,24 +265,15 @@ public class GoogleLogin : MonoBehaviour
         Debug.Log("✅ Authenticated: " + user.DisplayName);
         UpdateStatus("Welcome, " + user.DisplayName);
 
-        // Set Nickname for Photon
-        string nick = !string.IsNullOrEmpty(user.DisplayName) ? user.DisplayName : 
+        string nick = !string.IsNullOrEmpty(user.DisplayName) ? user.DisplayName :
                      (!string.IsNullOrEmpty(user.Email) ? user.Email.Split('@')[0] : "Player_" + Random.Range(1000, 9999));
-        
-        PhotonNetwork.NickName = nick;
 
-        // Show Loading (GAME_LOGO) and then transition to home
-        if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.ShowLoading("Loading Player Profile...");
-            
-            // Artificial delay to show logo as per user request
-            Invoke(nameof(TransitionToHome), 1.5f);
-        }
-        else
-        {
-            TransitionToHome();
-        }
+        string photonUserId = user.UserId;
+        ApplyProfileName(nick);
+        ConnectPhotonAfterLogin(photonUserId);
+        SaveUserProfileToDatabase(photonUserId, nick);
+
+        BeginHomeWhenReady("Loading Player Profile...", RealLoginMinWait);
     }
 
     void ShowLoginPanel()
@@ -239,6 +292,33 @@ public class GoogleLogin : MonoBehaviour
             NetworkManager.Instance.UpdateUIState(true);
     }
 
+    void BeginHomeWhenReady(string loadingMessage, float minWaitSeconds)
+    {
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.ShowLoading(loadingMessage);
+            StartCoroutine(BeginHomeWhenReadyRoutine(minWaitSeconds));
+        }
+        else
+        {
+            TransitionToHome();
+        }
+    }
+
+    IEnumerator BeginHomeWhenReadyRoutine(float minWaitSeconds)
+    {
+        yield return NetworkManager.Instance.WaitForPhotonReadyRoutine(
+            minWaitSeconds,
+            PhotonReadyMaxWait,
+            msg =>
+            {
+                if (NetworkManager.Instance != null && NetworkManager.Instance.loadingText != null)
+                    NetworkManager.Instance.loadingText.text = msg;
+            });
+
+        TransitionToHome();
+    }
+
     private void TransitionToHome()
     {
         ShowHomePanel();
@@ -248,41 +328,29 @@ public class GoogleLogin : MonoBehaviour
 
         if (PlayerProfileSync.Instance != null)
             PlayerProfileSync.Instance.UpdateAllNames();
-            
-        Debug.Log("🚀 Login Flow Complete. Nickname: " + PhotonNetwork.NickName);
+
+        Debug.Log("Login Flow Complete. Nickname: " + PhotonNetwork.NickName
+            + $" | PhotonReady={PhotonNetwork.IsConnectedAndReady} | InLobby={PhotonNetwork.InLobby}");
     }
+
+    const string SimulatedPhotonUserId = "simulate_roman_bhati_uid";
 
     private void SimulateLogin()
     {
-        PhotonNetwork.NickName = "Roman Bhati"; 
-        
-        // Show Loading (GAME_LOGO) and then transition to home
-        if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.ShowLoading("Simulating Login...");
-            Invoke(nameof(TransitionToHome), 1.5f);
-        }
-        else
-        {
-            TransitionToHome();
-        }
+        ApplyProfileName("Roman Bhati");
+        ConnectPhotonAfterLogin(SimulatedPhotonUserId);
+        SaveUserProfileToDatabase(SimulatedPhotonUserId, "Roman Bhati");
         UpdateStatus("Simulated Login Success");
+        BeginHomeWhenReady("Simulating Login...\nConnecting to server...", SimulatedLoginMinWait);
     }
 
     public void SimulateLoginME()
     {
-        PhotonNetwork.NickName = "Roman Bhati"; 
-        
-        if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.ShowLoading("Simulating Login...");
-            Invoke(nameof(TransitionToHome), 1.5f);
-        }
-        else
-        {
-            TransitionToHome();
-        }
+        ApplyProfileName("Roman Bhati");
+        ConnectPhotonAfterLogin(SimulatedPhotonUserId);
+        SaveUserProfileToDatabase(SimulatedPhotonUserId, "Roman Bhati");
         UpdateStatus("Simulated Login Success");
+        BeginHomeWhenReady("Simulating Login...\nConnecting to server...", SimulatedLoginMinWait);
     }
 
     private void UpdateStatus(string message)

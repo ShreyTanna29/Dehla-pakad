@@ -114,8 +114,18 @@ public class TurnManager : MonoBehaviourPunCallbacks
 
         if (currentTime <= 0)
         {
-            if (!PlayerHand.IsTrickLocked)
+            if (PlayerHand.IsTrickLocked) yield break;
+
+            if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null
+                && DeckManager.Instance.IsActorBotControlled(currentActorTurn)
+                && PlayerHand.LocalInstance != null)
+            {
+                PlayerHand.LocalInstance.ForceBotPlayImmediate(currentActorTurn);
+            }
+            else if (!PlayerHand.IsTrickLocked)
+            {
                 photonView.RPC("RPC_TimeUpAutoPlay", RpcTarget.All, currentActorTurn);
+            }
         }
     }
 

@@ -3,7 +3,7 @@ using UnityEngine.UI;
 using DG.Tweening;
 
 /// <summary>
-/// Shared hover scale feedback (matches Play Online button).
+/// Shared hover scale feedback (home + general UI). Mode panel uses ResetHoverScalesInChildren on close only.
 /// </summary>
 public static class UIButtonHoverUtility
 {
@@ -30,5 +30,18 @@ public static class UIButtonHoverUtility
         {
             btn.transform.DOScale(originalScale, HoverTweenDuration).SetUpdate(true);
         };
+    }
+
+    public static void ResetHoverScalesInChildren(Transform root)
+    {
+        if (root == null) return;
+
+        Button[] buttons = root.GetComponentsInChildren<Button>(true);
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            Button btn = buttons[i];
+            if (btn == null) continue;
+            btn.transform.DOKill();
+        }
     }
 }
