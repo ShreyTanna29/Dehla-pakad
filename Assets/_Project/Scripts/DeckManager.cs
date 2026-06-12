@@ -17,7 +17,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
     private const int PhantomBotActorBase = 100;
 
     public static bool IsPrivateFriendsRoom() =>
-        PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible;
+        PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode;
 
     [Header("Bot Tracking")]
     public static List<int> botActorNumbers = new List<int>();
@@ -74,6 +74,11 @@ public class DeckManager : MonoBehaviourPunCallbacks
         else Destroy(gameObject);
         masterTrackingCounts.Clear();
         humanHandsOnMaster.Clear();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     public bool IsActorBotControlled(int actorNumber) => botActorNumbers.Contains(actorNumber);
@@ -481,6 +486,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
 
         IsDealingComplete = false;
+        gameStarted = false;
         deckIndex = 0;
         currentDealBatch = 0;
         
@@ -670,6 +676,11 @@ public class DeckManager : MonoBehaviourPunCallbacks
             if (IsDealingComplete && TurnManager.Instance != null && PlayerHand.LocalInstance != null)
             {
                 int currentTurn = PlayerHand.LocalInstance.currentTurnActor;
+
+                // The new master inherits bot control — make sure the safety-net watchdog
+                // is running here, otherwise a stuck bot turn would never recover after a switch.
+                PlayerHand.LocalInstance.EnsureBotWatchdogRunning();
+
                 TurnManager.Instance.StartTurn(currentTurn);
 
                 if (IsActorBotControlled(currentTurn))
@@ -840,6 +851,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
     }
 
     [PunRPC]
+    void RPC_SetHiddenTrumpInfo(int ownerActor, int suit, int rank)
+    {
+        PlayerHand.ApplyHiddenTrumpInfo(ownerActor, suit, rank);
+    }
+
+    [PunRPC]
     void RPC_SyncBotsOnly(int[] bots)
     {
         ApplySyncedBotActorList(bots);
@@ -899,27 +916,36 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public void StartFullDealingSequence()
     {
-        Debug.Log($"[GameStart] StartFullDealingSequence request. Master: {PhotonNetwork.IsMasterClient}, Running: {isDealCoroutineRunning}, Complete: {IsDealingComplete}");
+        if (!PhotonNetwork.IsMasterClient) return;
+        if (isDealCoroutineRunning || IsDealingComplete) return;
 
-        if (!PhotonNetwork.IsMasterClient)
+        if (NetworkManager.Instance != null)
         {
-            Debug.Log("[GameStart] StartFullDealingSequence ignored — not master client.");
-            return;
+            NetworkManager.Instance.HideLoading();
+            NetworkManager.Instance.ShowGameScene();
         }
 
-        if (isDealCoroutineRunning || IsDealingComplete)
+        StartCoroutine(WaitAndStartDealing());
+    }
+
+    IEnumerator WaitAndStartDealing()
+    {
+        float timeout = 1.5f;
+
+        while (PlayerHand.LocalInstance == null && timeout > 0)
         {
-            Debug.Log("[GameStart] Duplicate start blocked");
-            return;
+            PlayerHand.ResolveLocalHand();
+            yield return null;
+            timeout -= Time.deltaTime;
         }
 
         if (PlayerHand.LocalInstance == null)
-            Debug.LogError("[GameStart ERROR] Missing PlayerHand");
+        {
+            Debug.LogError("[GameStart ERROR] Missing PlayerHand even after waiting!");
+            yield break;
+        }
 
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowGameScene();
-
-        Debug.Log("[GameStart] StartFullDealingSequence");
+        Debug.Log("[GameStart] PlayerHand found! StartFullDealingSequence Started");
         StartCoroutine(FullDealingSequenceRoutine());
     }
 
@@ -1012,6 +1038,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
         
         bool isThirteenthMode = GameSettings.Instance != null && GameSettings.Instance.currentMode == GameModeType.ThirteenthCardTrump;
+        bool isHiddenMode = GameSettings.Instance != null && GameSettings.Instance.currentMode == GameModeType.HiddenTrump;
         CardSuit thirteenthTrump = CardSuit.Spades;
 
         int playerIdx = 0;
@@ -1024,6 +1051,19 @@ public class DeckManager : MonoBehaviourPunCallbacks
             {
                 thirteenthTrump = hand[cardsPerPlayer - 1].cardSuit;
                 Debug.Log($"[Mode 2] 13th Card is {hand[cardsPerPlayer - 1].cardRank} of {thirteenthTrump}. Setting as Trump.");
+            }
+            else if (isHiddenMode && playerIdx == 0)
+            {
+                CardData hiddenCard = hand[cardsPerPlayer - 1];
+                if (photonView != null)
+                {
+                    photonView.RPC(nameof(RPC_SetHiddenTrumpInfo), RpcTarget.All,
+                        seatActor, (int)hiddenCard.cardSuit, (int)hiddenCard.cardRank);
+                }
+                else
+                {
+                    PlayerHand.ApplyHiddenTrumpInfo(seatActor, (int)hiddenCard.cardSuit, (int)hiddenCard.cardRank);
+                }
             }
 
             if (IsActorBotControlled(seatActor))
@@ -1048,6 +1088,10 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (isThirteenthMode && TrumpManager.Instance != null)
         {
             TrumpManager.Instance.SyncTrumpSuit(thirteenthTrump, true);
+        }
+        else if (isHiddenMode && TrumpManager.Instance != null)
+        {
+            TrumpManager.Instance.SyncTrumpSuit(CardSuit.Spades, false, false);
         }
     }
 

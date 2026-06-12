@@ -64,7 +64,9 @@ public class FriendsDrawerController : MonoBehaviour
             isOpen = true;
             Debug.Log("[Drawer] Friendlist opened. Refreshing status...");
 
-            if (PlayWithFriendsManager.Instance != null)
+            if (FriendsPanelUIController.Instance != null)
+                FriendsPanelUIController.Instance.RefreshAll();
+            else if (PlayWithFriendsManager.Instance != null)
             {
                 PlayWithFriendsManager.Instance.RefreshFriendsListUI();
                 PlayWithFriendsManager.Instance.CheckFriendsOnlineStatus();

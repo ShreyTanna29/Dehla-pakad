@@ -23,6 +23,12 @@ public class FirebaseSearchManager : MonoBehaviour
 
     public void UI_SearchPlayersByName()
     {
+        if (FriendsPanelUIController.Instance != null)
+        {
+            FriendsPanelUIController.Instance.SearchPlayersByName();
+            return;
+        }
+
         if (searchInputField == null || searchResultsContainer == null) return;
 
         string searchText = searchInputField.text.Trim();
@@ -83,10 +89,13 @@ public class FirebaseSearchManager : MonoBehaviour
             {
                 if (PlayWithFriendsManager.Instance != null)
                 {
-                    PlayWithFriendsManager.Instance.AddFriend(id, name);
-                    Debug.Log($"[Friend System] Added {name} to friend list!");
-                    Destroy(row);
-                    PlayWithFriendsManager.Instance.CheckFriendsOnlineStatus();
+                    PlayWithFriendsManager.Instance.SendFriendRequest(id, name);
+                    Debug.Log($"[Friend System] Friend request sent to {name}!");
+
+                    // Give immediate feedback on the row instead of removing it.
+                    TMP_Text label = addBtn.GetComponentInChildren<TMP_Text>();
+                    if (label != null) label.text = "Sent";
+                    addBtn.interactable = false;
                 }
             });
         }

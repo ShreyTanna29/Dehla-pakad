@@ -1,0 +1,38 @@
+{
+    "asset": "cd918d28f47bc2543880cf2b88b41aa1",
+    "fileName": "019eb6e2-54c1-772c-9126-eab83febef38.png",
+    "prompt": "Keep the wooden plaque shape, size, wood texture, lighting, beveled edges, wide horizontal proportions and transparent background EXACTLY the same. Only change the engraved content: set the Hindi Devanagari title to exactly \"काट/रंग कटाई पर\", set the central icon to a cream-colored ornate playing card with a bold diagonal cut line and small scissors symbolizing cutting to decide trump, and set the bottom English subtitle to exactly \"(Cut to Trump)\". Same cream/beige engraved emboss text style. Transparent background outside the plaque.",
+    "negativePrompt": "",
+    "model": "gemini-3.0-pro",
+    "modelName": "Gemini 3.0 Pro",
+    "customSeed": -1,
+    "w3CTraceId": "",
+    "feedback": 0,
+    "refinementMode": "Generation",
+    "pixelateTargetSize": 0,
+    "pixelateKeepImageSize": false,
+    "pixelatePixelBlockSize": 0,
+    "pixelatePixelGridSize": 0,
+    "pixelateMode": 0,
+    "pixelateOutlineThickness": 0,
+    "doodles": {
+        "m_Items": [
+            {
+                "doodleReferenceType": 7,
+                "doodle": [],
+                "label": "Image",
+                "strength": 0.25,
+                "invertStrength": false,
+                "assetReferenceGuid": "cd918d28f47bc2543880cf2b88b41aa1",
+                "unlabeledIndex": -1
+            }
+        ]
+    },
+    "upscaleFactor": 0,
+    "dimensions": {
+        "width": 1024,
+        "height": 1024
+    },
+    "spriteSheet": false,
+    "duration": 0.0
+}

@@ -5,7 +5,8 @@ public enum GameModeType
     TrumpSpades,
     ThirteenthCardTrump,
     Cut1Trump,
-    Cut2Trump
+    Cut2Trump,
+    HiddenTrump
 }
 
 public enum SarModeType

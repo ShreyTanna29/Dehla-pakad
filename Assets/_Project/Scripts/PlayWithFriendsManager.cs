@@ -41,6 +41,17 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public Transform friendsListContainer;
     public GameObject friendUIPrefab;
 
+    [Header("Friend Requests UI")]
+    [Tooltip("Prefab for an incoming friend request row (must contain AcceptButton and DeclineButton).")]
+    public GameObject friendRequestRowPrefab;
+
+    // Incoming friend requests: fromUserId -> fromName
+    readonly Dictionary<string, string> incomingRequests = new Dictionary<string, string>();
+    DatabaseReference requestDbRef;
+    DatabaseReference acceptDbRef;
+    bool _requestListenerStarted;
+    bool _acceptListenerStarted;
+
     [Header("Friends List Storage")]
     private const string FriendsPrefsKey = "SavedFriendsList";
     private const string FriendNamesPrefsKey = "SavedFriendsNames";
@@ -53,6 +64,25 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     string _pendingInviteFriendId;
     string _pendingInviteFriendName;
     bool _inviteListenerStarted;
+    string _listenersBoundUserId;
+    readonly HashSet<string> _gameInvitesSent = new HashSet<string>();
+
+    public IReadOnlyList<string> MyFriends => myFriends;
+    public IReadOnlyDictionary<string, string> IncomingRequests => incomingRequests;
+
+    public string GetFriendDisplayName(string friendId) => GetFriendDisplayNameInternal(friendId);
+
+    public FriendInfo GetFriendPhotonInfo(string friendId) =>
+        friendPhotonStatus.TryGetValue(friendId, out FriendInfo info) ? info : null;
+
+    public void MarkGameInviteSent(string friendUserId)
+    {
+        if (string.IsNullOrEmpty(friendUserId)) return;
+        _gameInvitesSent.Add(friendUserId);
+    }
+
+    public bool IsGameInviteSent(string friendUserId) =>
+        !string.IsNullOrEmpty(friendUserId) && _gameInvitesSent.Contains(friendUserId);
 
     void Awake()
     {
@@ -99,6 +129,17 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     void OnDestroy()
     {
         PhotonNetwork.RemoveCallbackTarget(this);
+
+        if (requestDbRef != null)
+        {
+            requestDbRef.ChildAdded -= OnFriendRequestAdded;
+            requestDbRef.ChildRemoved -= OnFriendRequestRemoved;
+        }
+        if (acceptDbRef != null)
+            acceptDbRef.ChildAdded -= OnFriendAcceptAdded;
+        if (inviteDbRef != null)
+            inviteDbRef.ChildAdded -= OnIncomingInviteAdded;
+
         if (Instance == this) Instance = null;
     }
 
@@ -109,10 +150,52 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (clientWaitingText != null) clientWaitingText.gameObject.SetActive(false);
         if (includeBotsButton != null) includeBotsButton.SetActive(false);
         ClearPlayerListUI();
+        EnsureFriendServicesStarted();
+    }
+
+    /// <summary>Call after login / Photon ready so Firebase listeners use the real user id.</summary>
+    public void EnsureFriendServicesStarted()
+    {
+        string myId = MyUserId;
+        if (string.IsNullOrEmpty(myId)) return;
+
+        if (_listenersBoundUserId != myId)
+        {
+            StopFriendListeners();
+            _listenersBoundUserId = myId;
+        }
+
         DisplayMyID();
+        StartFriendRequestListener();
+        StartFriendAcceptListener();
+        StartInviteListener();
         RefreshFriendsListUI();
         CheckFriendsOnlineStatus();
-        StartInviteListener();
+    }
+
+    void StopFriendListeners()
+    {
+        if (requestDbRef != null)
+        {
+            requestDbRef.ChildAdded -= OnFriendRequestAdded;
+            requestDbRef.ChildRemoved -= OnFriendRequestRemoved;
+            requestDbRef = null;
+        }
+        if (acceptDbRef != null)
+        {
+            acceptDbRef.ChildAdded -= OnFriendAcceptAdded;
+            acceptDbRef = null;
+        }
+        if (inviteDbRef != null)
+        {
+            inviteDbRef.ChildAdded -= OnIncomingInviteAdded;
+            inviteDbRef = null;
+        }
+
+        _requestListenerStarted = false;
+        _acceptListenerStarted = false;
+        _inviteListenerStarted = false;
+        incomingRequests.Clear();
     }
 
     void EnsurePhotonUserId()
@@ -178,6 +261,29 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         PhotonNetwork.JoinRoom(pinInputField.text.Trim());
     }
 
+    /// <summary>
+    /// Joins a private room using a PIN supplied directly (used by the in-Modes JOIN TABLE panel,
+    /// which has its own input field separate from the Play-with-Friends panel).
+    /// </summary>
+    public void JoinRoomWithPINText(string pin)
+    {
+        if (errorText != null) errorText.gameObject.SetActive(false);
+
+        if (string.IsNullOrEmpty(pin) || string.IsNullOrWhiteSpace(pin))
+        {
+            ShowUIError("Enter valid PIN!");
+            return;
+        }
+
+        if (!PhotonNetwork.IsConnectedAndReady)
+        {
+            ShowUIError("Server not ready. Wait a moment...");
+            return;
+        }
+
+        PhotonNetwork.JoinRoom(pin.Trim());
+    }
+
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
         Debug.LogError("Room Join Failed: " + message);
@@ -199,7 +305,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.CurrentRoom == null) return;
 
-        if (!PhotonNetwork.CurrentRoom.IsVisible)
+        if (!PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
             Debug.Log("Private Room Joined. Waiting in Lobby...");
             if (NetworkManager.Instance != null)
@@ -335,7 +441,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
     {
-        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
             UpdatePlayerListUI();
             CheckPlayerCountAndToggleStart();
@@ -679,7 +785,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         string newFriendId = addFriendInput.text.Trim();
         if (string.IsNullOrEmpty(newFriendId)) return;
 
-        AddFriend(newFriendId);
+        SendFriendRequest(newFriendId, null);
         addFriendInput.text = "";
     }
 
@@ -719,6 +825,210 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             PhotonNetwork.FindFriends(myFriends.ToArray());
     }
 
+    // ==========================================
+    // FRIEND REQUEST SYSTEM (Accept / Decline)
+    // ==========================================
+
+    string MyUserId => PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
+    string MyDisplayName => string.IsNullOrEmpty(PhotonNetwork.NickName) ? "Player" : PhotonNetwork.NickName;
+
+    /// <summary>Sends a friend request to the target user (they get Accept/Decline).</summary>
+    public void SendFriendRequest(string targetUserId, string targetName)
+    {
+        if (string.IsNullOrEmpty(targetUserId)) return;
+
+        string myId = MyUserId;
+        if (!string.IsNullOrEmpty(myId) && targetUserId == myId)
+        {
+            ShowUIError("You cannot add yourself!");
+            return;
+        }
+
+        if (myFriends.Contains(targetUserId))
+        {
+            ShowUIError("Already in your friends list.");
+            return;
+        }
+
+        if (incomingRequests.ContainsKey(targetUserId))
+        {
+            AcceptFriendRequest(targetUserId, incomingRequests[targetUserId]);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(myId))
+        {
+            ShowUIError("Not connected yet. Try again.");
+            return;
+        }
+
+        // Remember name locally so it shows correctly once accepted.
+        if (!string.IsNullOrEmpty(targetName))
+            friendDisplayNames[targetUserId] = targetName;
+
+        var requestData = new Dictionary<string, object>
+        {
+            { "fromName", MyDisplayName },
+            { "createdAt", System.DateTime.UtcNow.Ticks }
+        };
+
+        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("friend_requests").Child(targetUserId).Child(myId)
+            .SetValueAsync(requestData).ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted)
+                {
+                    Debug.LogError("[FriendReq] Send failed: " + task.Exception);
+                    ShowUIError("Request failed. Try again.");
+                    return;
+                }
+                ShowUIError(string.IsNullOrEmpty(targetName) ? "Friend request sent!" : $"Request sent to {targetName}!");
+                Debug.Log($"[FriendReq] Sent request to {targetUserId}");
+            });
+    }
+
+    public void StartFriendRequestListener()
+    {
+        if (_requestListenerStarted) return;
+        string myId = MyUserId;
+        if (string.IsNullOrEmpty(myId)) return;
+
+        requestDbRef = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("friend_requests").Child(myId);
+        requestDbRef.ChildAdded += OnFriendRequestAdded;
+        requestDbRef.ChildRemoved += OnFriendRequestRemoved;
+        _requestListenerStarted = true;
+        Debug.Log("[FriendReq] Listening for friend requests on " + myId);
+
+        requestDbRef.GetValueAsync().ContinueWithOnMainThread(task =>
+        {
+            if (task.IsFaulted || task.IsCanceled || task.Result == null || !task.Result.Exists) return;
+
+            foreach (DataSnapshot child in task.Result.Children)
+            {
+                string fromId = child.Key;
+                if (string.IsNullOrEmpty(fromId) || myFriends.Contains(fromId)) continue;
+                string fromName = child.Child("fromName").Value?.ToString() ?? fromId;
+                incomingRequests[fromId] = fromName;
+            }
+
+            RefreshFriendsListUI();
+        });
+    }
+
+    void OnFriendRequestAdded(object sender, ChildChangedEventArgs args)
+    {
+        if (args.DatabaseError != null || args.Snapshot == null || !args.Snapshot.Exists) return;
+
+        string fromId = args.Snapshot.Key;
+        if (string.IsNullOrEmpty(fromId) || myFriends.Contains(fromId)) return;
+
+        string fromName = args.Snapshot.Child("fromName").Value?.ToString() ?? fromId;
+        incomingRequests[fromId] = fromName;
+        Debug.Log($"[FriendReq] Incoming request from {fromName} ({fromId})");
+        RefreshFriendsListUI();
+    }
+
+    void OnFriendRequestRemoved(object sender, ChildChangedEventArgs args)
+    {
+        if (args.Snapshot == null) return;
+        string fromId = args.Snapshot.Key;
+        if (!string.IsNullOrEmpty(fromId) && incomingRequests.Remove(fromId))
+            RefreshFriendsListUI();
+    }
+
+    public void AcceptFriendRequest(string fromUserId, string fromName)
+    {
+        if (string.IsNullOrEmpty(fromUserId)) return;
+
+        // Add them to MY friends list locally.
+        AddFriend(fromUserId, fromName);
+
+        // Tell the requester that I accepted so they add me back.
+        string myId = MyUserId;
+        if (!string.IsNullOrEmpty(myId))
+        {
+            var acceptData = new Dictionary<string, object>
+            {
+                { "name", MyDisplayName },
+                { "createdAt", System.DateTime.UtcNow.Ticks }
+            };
+            FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+                .Child("friend_accepts").Child(fromUserId).Child(myId)
+                .SetValueAsync(acceptData);
+
+            // Remove the pending request from my inbox.
+            FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+                .Child("friend_requests").Child(myId).Child(fromUserId)
+                .RemoveValueAsync();
+        }
+
+        incomingRequests.Remove(fromUserId);
+        ShowUIError($"You and {fromName} are now friends!");
+        RefreshFriendsListUI();
+    }
+
+    public void DeclineFriendRequest(string fromUserId)
+    {
+        if (string.IsNullOrEmpty(fromUserId)) return;
+
+        string myId = MyUserId;
+        if (!string.IsNullOrEmpty(myId))
+        {
+            FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+                .Child("friend_requests").Child(myId).Child(fromUserId)
+                .RemoveValueAsync();
+        }
+
+        incomingRequests.Remove(fromUserId);
+        RefreshFriendsListUI();
+    }
+
+    public void StartFriendAcceptListener()
+    {
+        if (_acceptListenerStarted) return;
+        string myId = MyUserId;
+        if (string.IsNullOrEmpty(myId)) return;
+
+        acceptDbRef = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("friend_accepts").Child(myId);
+        acceptDbRef.ChildAdded += OnFriendAcceptAdded;
+        _acceptListenerStarted = true;
+        Debug.Log("[FriendReq] Listening for friend acceptances on " + myId);
+
+        acceptDbRef.GetValueAsync().ContinueWithOnMainThread(task =>
+        {
+            if (task.IsFaulted || task.IsCanceled || task.Result == null || !task.Result.Exists) return;
+
+            foreach (DataSnapshot child in task.Result.Children)
+            {
+                if (!child.Exists) continue;
+                string accepterId = child.Key;
+                string accepterName = child.Child("name").Value?.ToString() ?? accepterId;
+                if (!string.IsNullOrEmpty(accepterId) && !myFriends.Contains(accepterId))
+                    AddFriend(accepterId, accepterName);
+                child.Reference.RemoveValueAsync();
+            }
+
+            RefreshFriendsListUI();
+        });
+    }
+
+    void OnFriendAcceptAdded(object sender, ChildChangedEventArgs args)
+    {
+        if (args.DatabaseError != null || args.Snapshot == null || !args.Snapshot.Exists) return;
+
+        string accepterId = args.Snapshot.Key;
+        if (string.IsNullOrEmpty(accepterId)) return;
+
+        string accepterName = args.Snapshot.Child("name").Value?.ToString() ?? accepterId;
+        AddFriend(accepterId, accepterName);
+        ShowUIError($"{accepterName} accepted your request!");
+
+        // Consume the acceptance notice.
+        args.Snapshot.Reference.RemoveValueAsync();
+    }
+
     public override void OnFriendListUpdate(List<FriendInfo> friendList)
     {
         friendPhotonStatus.Clear();
@@ -730,20 +1040,75 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public void RefreshFriendsListUI()
     {
+        if (FriendsPanelUIController.Instance != null)
+        {
+            FriendsPanelUIController.Instance.RefreshAll();
+            return;
+        }
+
+        RefreshFriendsListLegacy();
+    }
+
+    void RefreshFriendsListLegacy()
+    {
         if (friendsListContainer == null || friendUIPrefab == null) return;
 
         foreach (Transform child in friendsListContainer)
             Destroy(child.gameObject);
 
+        foreach (var kvp in incomingRequests)
+        {
+            if (string.IsNullOrEmpty(kvp.Key)) continue;
+            SpawnRequestRow(kvp.Key, kvp.Value);
+        }
+
+        // 2) Then the accepted friends (with status + Invite).
         foreach (string friendId in myFriends)
         {
             if (string.IsNullOrEmpty(friendId)) continue;
             friendPhotonStatus.TryGetValue(friendId, out FriendInfo photonInfo);
-            SpawnFriendRow(friendId, GetFriendDisplayName(friendId), photonInfo);
+            SpawnFriendRow(friendId, GetFriendDisplayNameInternal(friendId), photonInfo);
         }
     }
 
-    string GetFriendDisplayName(string friendId)
+    void SpawnRequestRow(string fromId, string fromName)
+    {
+        GameObject prefab = friendRequestRowPrefab != null ? friendRequestRowPrefab : friendUIPrefab;
+        if (prefab == null || friendsListContainer == null) return;
+
+        GameObject row = Instantiate(prefab, friendsListContainer);
+
+        TMP_Text infoText = FindPrimaryLabel(row.transform);
+        if (infoText != null)
+            infoText.text = $"{fromName}\n<size=18><color=#FFD479>wants to be friends</color></size>";
+
+        Button acceptBtn = FindChildButton(row.transform, "AcceptButton");
+        Button declineBtn = FindChildButton(row.transform, "DeclineButton");
+
+        // Fallback: if named buttons not found, assume first=accept, second=decline.
+        if (acceptBtn == null || declineBtn == null)
+        {
+            Button[] buttons = row.GetComponentsInChildren<Button>(true);
+            if (buttons.Length >= 2)
+            {
+                acceptBtn = acceptBtn ?? buttons[0];
+                declineBtn = declineBtn ?? buttons[1];
+            }
+        }
+
+        if (acceptBtn != null)
+        {
+            acceptBtn.onClick.RemoveAllListeners();
+            acceptBtn.onClick.AddListener(() => AcceptFriendRequest(fromId, fromName));
+        }
+        if (declineBtn != null)
+        {
+            declineBtn.onClick.RemoveAllListeners();
+            declineBtn.onClick.AddListener(() => DeclineFriendRequest(fromId));
+        }
+    }
+
+    string GetFriendDisplayNameInternal(string friendId)
     {
         if (friendDisplayNames.TryGetValue(friendId, out string name) && !string.IsNullOrEmpty(name))
             return name;
@@ -754,7 +1119,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         GameObject row = Instantiate(friendUIPrefab, friendsListContainer);
 
-        TMP_Text friendText = row.GetComponentInChildren<TMP_Text>();
+        TMP_Text friendText = FindPrimaryLabel(row.transform);
         string status = "🔴 Offline";
         if (photonInfo != null)
             status = photonInfo.IsOnline ? (photonInfo.IsInRoom ? "🎮 In Game" : "🟢 Online") : "🔴 Offline";
@@ -781,10 +1146,25 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
     }
 
+    static TMP_Text FindPrimaryLabel(Transform root)
+    {
+        TMP_Text[] labels = root.GetComponentsInChildren<TMP_Text>(true);
+        for (int i = 0; i < labels.Length; i++)
+        {
+            if (labels[i].GetComponentInParent<Button>() == null)
+                return labels[i];
+        }
+        return labels.Length > 0 ? labels[0] : null;
+    }
+
     static Button FindChildButton(Transform root, string childName)
     {
-        Transform t = root.Find(childName);
-        return t != null ? t.GetComponent<Button>() : null;
+        foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+        {
+            if (t.name == childName)
+                return t.GetComponent<Button>();
+        }
+        return null;
     }
 
     public void InviteFriendToGame(string friendUserId, string friendDisplayName = null)
@@ -797,9 +1177,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         _pendingInviteFriendId = friendUserId;
-        _pendingInviteFriendName = string.IsNullOrEmpty(friendDisplayName) ? GetFriendDisplayName(friendUserId) : friendDisplayName;
+        _pendingInviteFriendName = string.IsNullOrEmpty(friendDisplayName)
+            ? GetFriendDisplayNameInternal(friendUserId)
+            : friendDisplayName;
 
-        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
             TrySendPendingInvite();
             return;
@@ -848,6 +1230,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                     return;
                 }
 
+                MarkGameInviteSent(targetUserId);
+                RefreshFriendsListUI();
                 ShowUIError($"Invite sent to {friendName}!");
                 Debug.Log($"[Invite] Sent room {roomPin} to {targetUserId}");
             });
@@ -864,6 +1248,35 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         inviteDbRef.ChildAdded += OnIncomingInviteAdded;
         _inviteListenerStarted = true;
         Debug.Log("[Invite] Listening for invites on " + myId);
+
+        inviteDbRef.GetValueAsync().ContinueWithOnMainThread(task =>
+        {
+            if (task.IsFaulted || task.IsCanceled || task.Result == null || !task.Result.Exists) return;
+
+            DataSnapshot latest = null;
+            long latestTicks = 0;
+            foreach (DataSnapshot child in task.Result.Children)
+            {
+                if (!child.Exists) continue;
+                long ticks = 0;
+                if (child.Child("createdAt").Exists)
+                    long.TryParse(child.Child("createdAt").Value?.ToString(), out ticks);
+                if (latest == null || ticks >= latestTicks)
+                {
+                    latest = child;
+                    latestTicks = ticks;
+                }
+            }
+
+            if (latest == null) return;
+            string roomPin = latest.Child("roomPin").Value?.ToString();
+            string fromName = latest.Child("fromName").Value?.ToString() ?? "Friend";
+            if (!string.IsNullOrEmpty(roomPin))
+            {
+                ShowIncomingInvite(fromName, roomPin);
+                latest.Reference.RemoveValueAsync();
+            }
+        });
     }
 
     void OnIncomingInviteAdded(object sender, ChildChangedEventArgs args)

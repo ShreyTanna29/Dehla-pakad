@@ -189,8 +189,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void RefreshPlayOnlineButtonState()
     {
-        if (playOnlineButton == null) return;
-        playOnlineButton.interactable = IsPlayOnlineReady();
+        if (playOnlineButton != null)
+            playOnlineButton.interactable = true;
     }
 
     public void TryConnectPhotonAtStartup()
@@ -658,7 +658,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             Debug.LogError("[GameStart ERROR] Missing Panel_Game");
         }
 
-        InitializeGameplayScene();
+        // Only initialize gameplay logic if we are actually in a room and have a player.
+        // Otherwise, this will be called again in OnJoinedRoom.
+        if (PhotonNetwork.InRoom)
+        {
+            InitializeGameplayScene();
+        }
+        
         Debug.Log("[GameInit] Game scene visible");
     }
 
@@ -749,10 +755,20 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public static void InitializeGameplayScene()
     {
         Debug.Log("[GameStart] InitializeGameplayScene");
+        
+        if (PlayerHand.LocalInstance == null)
+            PlayerHand.ResolveLocalHand();
+
         if (PlayerHand.LocalInstance != null)
+        {
             PlayerHand.LocalInstance.InitializeGameScene();
-        else
+        }
+        else if (PhotonNetwork.InRoom)
+        {
+            // Only log error if we are in a room where we expect the player to exist.
             Debug.LogError("[GameStart ERROR] Missing PlayerHand");
+        }
+
         if (PlayerProfileSync.Instance != null)
             PlayerProfileSync.Instance.InitializeGameScene();
         if (TrumpManager.Instance != null)
@@ -1042,11 +1058,7 @@ yield return new WaitForSeconds(1f);
             HideLoading();
 
         if (PlayWithFriendsManager.Instance != null)
-        {
-            PlayWithFriendsManager.Instance.DisplayMyID();
-            PlayWithFriendsManager.Instance.CheckFriendsOnlineStatus();
-            PlayWithFriendsManager.Instance.StartInviteListener();
-        }
+            PlayWithFriendsManager.Instance.EnsureFriendServicesStarted();
 
         RefreshPlayOnlineButtonState();
     }
@@ -1071,7 +1083,7 @@ yield return new WaitForSeconds(1f);
         }
 
         bool rejoiningActiveGame = false;
-        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
             rejoiningActiveGame = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
                 && (bool)gs;
@@ -1217,6 +1229,9 @@ yield return new WaitForSeconds(1f);
         // Make sure the local NetworkPlayer exists BEFORE init/deal so PlayerHand.LocalInstance is valid.
         EnsureLocalNetworkPlayer();
         if (PlayerHand.LocalInstance == null)
+            PlayerHand.ResolveLocalHand();
+        
+        if (PlayerHand.LocalInstance == null)
             Debug.LogError("[GameStart ERROR] Missing PlayerHand");
 
         // 6. Show gameCanvasGroup + 7. Activate Panel_Game (+ SetAsLastSibling)
@@ -1246,6 +1261,13 @@ yield return new WaitForSeconds(1f);
     public override void OnLeftRoom()
     {
         Debug.Log("[Photon] LeftRoom");
+
+        if (pendingOfflineMatch)
+        {
+            Debug.Log("[Bot Mode] Left online room, transitioning to offline room...");
+            return;
+        }
+
         isPlayBotsMode = false;
         gameStartInProgress = false;
         dealingStarted = false;
@@ -1293,10 +1315,7 @@ yield return new WaitForSeconds(1f);
     {
         if (btn == null) return;
 
-        if (isBots)
-            btn.interactable = true;
-        else
-            btn.interactable = IsPlayOnlineReady();
+        btn.interactable = true;
 
         UIButtonHoverUtility.SetupHoverScale(btn);
 

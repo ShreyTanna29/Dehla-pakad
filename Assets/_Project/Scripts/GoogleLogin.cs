@@ -329,6 +329,9 @@ public class GoogleLogin : MonoBehaviour
         if (PlayerProfileSync.Instance != null)
             PlayerProfileSync.Instance.UpdateAllNames();
 
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.EnsureFriendServicesStarted();
+
         Debug.Log("Login Flow Complete. Nickname: " + PhotonNetwork.NickName
             + $" | PhotonReady={PhotonNetwork.IsConnectedAndReady} | InLobby={PhotonNetwork.InLobby}");
     }

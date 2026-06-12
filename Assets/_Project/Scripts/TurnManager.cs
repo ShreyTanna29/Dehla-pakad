@@ -209,18 +209,9 @@ public class TurnManager : MonoBehaviourPunCallbacks
         PlayerHand myHand = PlayerHand.LocalInstance;
         if (myHand == null || myHand.myCards == null || myHand.myCards.Count == 0 || CardInteract.isPlayingCard) return;
 
-        CardData cardToPlay = myHand.myCards[0]; 
-
-        if (myHand.currentTrick != null && myHand.currentTrick.Count > 0)
-        {
-            CardSuit ledSuit = myHand.currentTrick[0].suit;
-            List<CardData> matchingCards = myHand.myCards.FindAll(c => c.cardSuit == ledSuit);
-            
-            if (matchingCards.Count > 0)
-            {
-                cardToPlay = matchingCards[0]; 
-            }
-        }
+        List<CardData> legalCards = PlayerHand.GetValidCards(myHand.myCards, myHand.currentTrick);
+        if (legalCards == null || legalCards.Count == 0) return;
+        CardData cardToPlay = legalCards[0];
 
         GameObject cardUIObj = null;
         

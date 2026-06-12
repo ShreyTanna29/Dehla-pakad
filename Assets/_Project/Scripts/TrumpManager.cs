@@ -75,6 +75,9 @@ public class TrumpManager : MonoBehaviourPunCallbacks
             case GameModeType.Cut2Trump:
                 Instance.ApplyTrumpState(CardSuit.Spades, true, false);
                 break;
+            case GameModeType.HiddenTrump:
+                Instance.ApplyTrumpState(CardSuit.Spades, false, false);
+                break;
             case GameModeType.TrumpSpades:
             default:
                 Instance.ApplyTrumpState(CardSuit.Spades, true, showPopup);
@@ -95,6 +98,7 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         {
             case GameModeType.ThirteenthCardTrump:
             case GameModeType.Cut2Trump:
+            case GameModeType.HiddenTrump:
                 return !isTrumpRevealed;
             case GameModeType.TrumpSpades:
             case GameModeType.Cut1Trump:
@@ -105,7 +109,7 @@ public class TrumpManager : MonoBehaviourPunCallbacks
 
     CardSuit ResolveTrumpSuitForDisplay(CardSuit suit)
     {
-        if (suit >= CardSuit.Spades && suit <= CardSuit.Clubs)
+        if (suit >= CardSuit.Spades && suit <= CardSuit.Diamonds)
             return suit;
         return CardSuit.Spades;
     }
@@ -178,6 +182,41 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         Debug.Log($"[TrumpUI] Updated trump to {newSuit}, revealed={isRevealed}");
     }
 
+    /// <summary>
+    /// Reveals the previously hidden trump (Hidden Trump mode). Updates trump state,
+    /// refreshes the UI and shows a "Hidden Trump Unlocked!" popup so every player
+    /// knows the hidden card has been opened.
+    /// </summary>
+    public void RevealHiddenTrump(CardSuit newSuit)
+    {
+        currentTrumpSuit = newSuit;
+        isTrumpRevealed = true;
+
+        PlayerHand.currentTrumpSuit = newSuit;
+        PlayerHand.isTrumpRevealed = true;
+
+        if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
+        {
+            var props = new ExitGames.Client.Photon.Hashtable
+            {
+                { "TS", (int)newSuit },
+                { "TR", true }
+            };
+            PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        }
+
+        // Force UI update immediately
+        UpdateTrumpUI(newSuit);
+        ShowHiddenCardUnlockedPopup(newSuit);
+
+        Debug.Log($"[TrumpUI] Hidden trump unlocked — trump is {newSuit}");
+    }
+
+    public void ShowHiddenCardUnlockedPopup(CardSuit suit)
+    {
+        ShowTrumpChangePopup(suit, "Hidden Card Unlocked!\nTrump is " + suit);
+    }
+
     public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
     {
         if (!propertiesThatChanged.ContainsKey("TS") && !propertiesThatChanged.ContainsKey("TR"))
@@ -200,8 +239,13 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         EnsureTrumpDisplayVisible();
         UpdateTrumpUI(suit);
 
-        if (changed && revealed && !ShouldDisplayTrumpAsHidden())
-            ShowTrumpChangePopup(suit);
+        if (changed && revealed)
+        {
+            if (GetCurrentGameMode() == GameModeType.HiddenTrump && !oldRevealed)
+                ShowHiddenCardUnlockedPopup(suit);
+            else if (!ShouldDisplayTrumpAsHidden())
+                ShowTrumpChangePopup(suit);
+        }
     }
 
     [PunRPC]
@@ -308,34 +352,76 @@ $"[TrumpUI] Current Trump: {displaySuit} (gameplay revealed={isTrumpRevealed})\n
         }
     }
 
-    void ShowTrumpChangePopup(CardSuit newSuit)
+    void EnsureTrumpChangePopupRefs()
     {
+        if (trumpChangePopup != null && trumpChangeText != null) return;
+
+        GameObject found = GameObject.Find("TrumpChangePopup");
+        if (found == null) return;
+
+        trumpChangePopup = found;
+        if (trumpChangeText == null)
+            trumpChangeText = found.GetComponentInChildren<TMP_Text>(true);
+    }
+
+    void ShowTrumpChangePopup(CardSuit newSuit, string customMessage = null)
+    {
+        EnsureTrumpChangePopupRefs();
+
         if (trumpChangePopup == null)
         {
             Debug.LogWarning("[Trump] trumpChangePopup is not assigned.");
             return;
         }
 
+        Transform node = trumpChangePopup.transform;
+        while (node != null)
+        {
+            if (!node.gameObject.activeSelf)
+                node.gameObject.SetActive(true);
+            node = node.parent;
+        }
+
+        trumpChangePopup.transform.SetAsLastSibling();
+
         _popupTween?.Kill();
-        trumpChangePopup.SetActive(true);
         trumpChangePopup.transform.DOKill();
+        trumpChangePopup.SetActive(true);
 
         if (trumpChangeText != null)
-            trumpChangeText.text = "Trump Changed to " + newSuit + "!";
+        {
+            if (!trumpChangeText.gameObject.activeSelf)
+                trumpChangeText.gameObject.SetActive(true);
+            trumpChangeText.text = customMessage ?? ("Trump Changed to " + newSuit + "!");
+            trumpChangeText.color = Color.white;
+            trumpChangeText.enableWordWrapping = true;
+        }
 
-        trumpChangePopup.transform.localScale = Vector3.zero;
-        trumpChangePopup.transform.DOScale(1f, 0.5f).SetEase(Ease.OutBack);
+        CanvasGroup popupCg = trumpChangePopup.GetComponent<CanvasGroup>();
+        if (popupCg == null)
+            popupCg = trumpChangePopup.AddComponent<CanvasGroup>();
+        popupCg.alpha = 1f;
+        popupCg.blocksRaycasts = false;
+        popupCg.interactable = false;
+
+        trumpChangePopup.transform.localScale = Vector3.one;
+        trumpChangePopup.transform.DOPunchScale(new Vector3(0.08f, 0.08f, 0f), 0.35f, 4, 0.5f).SetUpdate(true);
 
         _popupTween = DOVirtual.DelayedCall(TrumpPopupVisibleSeconds, () =>
         {
             if (trumpChangePopup == null) return;
-            trumpChangePopup.transform.DOScale(0f, 0.5f).SetEase(Ease.InBack)
+            trumpChangePopup.transform.DOScale(0f, 0.35f).SetEase(Ease.InBack).SetUpdate(true)
                 .OnComplete(() =>
                 {
                     if (trumpChangePopup != null)
+                    {
+                        trumpChangePopup.transform.localScale = Vector3.one;
                         trumpChangePopup.SetActive(false);
+                    }
                 });
-        });
+        }).SetUpdate(true);
+
+        Debug.Log($"[TrumpUI] Popup shown: {trumpChangeText?.text ?? customMessage}");
     }
 
     static void LogTrumpState(string source, CardSuit oldSuit, bool oldRevealed, CardSuit newSuit, bool newRevealed)

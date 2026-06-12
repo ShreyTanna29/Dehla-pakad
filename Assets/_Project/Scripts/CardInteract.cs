@@ -113,7 +113,11 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         if (myDisplay != null)
         {
             if (myDisplay.cardBackgroundImage != null)
-                myDisplay.cardBackgroundImage.color = GetCardBackgroundColor(brightness);
+            {
+                Color bgCol = defaultBgColor * brightness;
+                bgCol.a = 1f; // Force full opacity so that dimmed/non-playable cards are not see-through (transparent)
+                myDisplay.cardBackgroundImage.color = bgCol;
+            }
 
             Color iconColor = GetSuitIconColor(myDisplay.myCardData.cardSuit, brightness);
             if (myDisplay.cornerRankImage != null)

@@ -38,9 +38,7 @@ public class DehlaPakadAI : MonoBehaviour
 
         HandContext ctx = BuildContext(botHand, currentTrick, trumpSuit, isTrumpRevealed, botActorNumber, mode, isTwoTaash, isDoubleSar, isLeading);
 
-        List<CardData> legalMoves = isLeading
-            ? new List<CardData>(botHand)
-            : PlayerHand.GetValidCards(botHand, currentTrick);
+        List<CardData> legalMoves = PlayerHand.GetValidCards(botHand, currentTrick);
 
         if (legalMoves.Count == 0)
             return botHand[0];
@@ -564,7 +562,8 @@ public class DehlaPakadAI : MonoBehaviour
         mode == GameModeType.Cut1Trump || mode == GameModeType.Cut2Trump;
 
     static bool IsHiddenTrumpMode(GameModeType mode) =>
-        mode == GameModeType.ThirteenthCardTrump || mode == GameModeType.Cut2Trump;
+        mode == GameModeType.ThirteenthCardTrump || mode == GameModeType.Cut2Trump
+        || mode == GameModeType.HiddenTrump;
 
     static int GetPartnerActor(int actor)
     {

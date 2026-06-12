@@ -1,0 +1,47 @@
+{
+    "asset": "85db76d937b2d0845bb0c4e8cb1c2ee4",
+    "fileName": "019eb6b4-94f0-7205-b0d8-197c5a2c0ef0.png",
+    "prompt": "A wooden game UI button in the EXACT same art style as the provided reference images: a walnut dark-brown wooden plank with visible wood grain, glossy beveled rounded-rectangle edges and a soft drop shadow. All text and the icon are cream/beige colored with an engraved embossed look and a subtle dark outline, exactly matching the reference fonts and emboss style. TOP: Hindi Devanagari title reading exactly \"बंद/छुपी काट\". CENTER: a cream-colored icon of a single face-down playing card (a closed card showing its decorative back pattern) symbolizing a hidden, closed trump. BOTTOM: English subtitle reading exactly \"(Hide Mode)\". Match the colors, lighting, wood texture, proportions and engraving style of the references. Fully transparent background outside the wooden plank. Centered composition, horizontal 3:2 layout.",
+    "negativePrompt": "",
+    "model": "gemini-3.0-pro",
+    "modelName": "Gemini 3.0 Pro",
+    "customSeed": -1,
+    "w3CTraceId": "",
+    "feedback": 0,
+    "refinementMode": "Generation",
+    "pixelateTargetSize": 0,
+    "pixelateKeepImageSize": false,
+    "pixelatePixelBlockSize": 0,
+    "pixelatePixelGridSize": 0,
+    "pixelateMode": 0,
+    "pixelateOutlineThickness": 0,
+    "doodles": {
+        "m_Items": [
+            {
+                "doodleReferenceType": 0,
+                "doodle": [],
+                "label": "Image 1",
+                "strength": 0.25,
+                "invertStrength": false,
+                "assetReferenceGuid": "b1d89932e705db14c903c9479952bec1",
+                "unlabeledIndex": 0
+            },
+            {
+                "doodleReferenceType": 0,
+                "doodle": [],
+                "label": "Image 2",
+                "strength": 0.25,
+                "invertStrength": false,
+                "assetReferenceGuid": "4f992b4fd603b974488d97d335a675a9",
+                "unlabeledIndex": 1
+            }
+        ]
+    },
+    "upscaleFactor": 0,
+    "dimensions": {
+        "width": 1024,
+        "height": 1024
+    },
+    "spriteSheet": false,
+    "duration": 0.0
+}

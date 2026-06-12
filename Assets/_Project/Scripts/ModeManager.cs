@@ -109,7 +109,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
         // Trump Modes
         WireButton("Button_PlayTrumpMode", () => OnClick_TrumpMode(1));
         WireButton("Button_Play13CardMode", () => OnClick_TrumpMode(2));
-        WireButton("Button_PlayFirstCut", () => OnClick_TrumpMode(3));
+        // Repurposed: the "First Cut" button now selects Hidden Trump (mode 5) instead of Cut1Trump (mode 3).
+        WireButton("Button_PlayFirstCut", () => OnClick_TrumpMode(5));
         WireButton("Button_PlayCut2Trump", () => OnClick_TrumpMode(4));
         
         // Logic Modes
@@ -156,7 +157,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         string[] buttonNames =
         {
             "Button_PlayFriends", "Button_Play1Taash", "Button_Play2Taash",
-            "Button_PlayTrumpMode", "Button_Play13CardMode", "Button_PlayCut2Trump",
+            "Button_PlayTrumpMode", "Button_Play13CardMode", "Button_PlayCut2Trump", "Button_PlayFirstCut",
             "Button_Play1Sar", "Button_Play2Sar", "Button_LogicA", "Button_LogicB",
             "Button_LogicC", "Button_BackToHome", "Play", "Button_InviteFriends"
         };
@@ -182,6 +183,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
             "Button_PlayTrumpMode",
             "Button_Play13CardMode",
             "Button_PlayCut2Trump",
+            "Button_PlayFirstCut",
             "Button_Play1Sar",
             "Button_Play2Sar",
             "Button_LogicA",
@@ -206,7 +208,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (PlayerPrefs.HasKey(PrefsTrickMode))
             currentTrickMode = PlayerPrefs.GetInt(PrefsTrickMode, 1);
         if (PlayerPrefs.HasKey(PrefsTrumpMode))
-            currentTrumpMode = PlayerPrefs.GetInt(PrefsTrumpMode, 3);
+            currentTrumpMode = PlayerPrefs.GetInt(PrefsTrumpMode, 1);
         if (PlayerPrefs.HasKey(PrefsSarMode))
             currentSarMode = PlayerPrefs.GetInt(PrefsSarMode, 1);
         if (PlayerPrefs.HasKey(PrefsLogicMode))
@@ -235,7 +237,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
             case 1: GameSettings.Instance.currentMode = GameModeType.TrumpSpades; break;
             case 2: GameSettings.Instance.currentMode = GameModeType.ThirteenthCardTrump; break;
             case 3: GameSettings.Instance.currentMode = GameModeType.Cut1Trump; break;
+            // NOTE: Button_PlayCut2Trump has been repurposed to select Hidden Trump (mode 5).
+            // Cut2Trump (mode 4) still exists in code and remains reachable via room sync / saved prefs.
             case 4: GameSettings.Instance.currentMode = GameModeType.Cut2Trump; break;
+            case 5: GameSettings.Instance.currentMode = GameModeType.HiddenTrump; break;
         }
     }
 
@@ -481,7 +486,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
             && PhotonNetwork.InRoom
             && PhotonNetwork.IsMasterClient
             && PhotonNetwork.CurrentRoom != null
-            && !PhotonNetwork.CurrentRoom.IsVisible;
+            && !PhotonNetwork.CurrentRoom.IsVisible
+            && !PhotonNetwork.OfflineMode;
     }
 
     void WireCut2TrumpButton()
@@ -541,8 +547,9 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (btn13thCard != null)
             btn13thCard.color = currentTrumpMode == 2 ? selectedColor : unselectedColor;
 
+        // Button_PlayFirstCut is repurposed to Hidden Trump (mode 5).
         if (btnFirstCut != null)
-            btnFirstCut.color = currentTrumpMode == 3 ? selectedColor : unselectedColor;
+            btnFirstCut.color = currentTrumpMode == 5 ? selectedColor : unselectedColor;
 
         if (btnCut2Trump != null)
             btnCut2Trump.color = currentTrumpMode == 4 ? selectedColor : unselectedColor;
@@ -582,7 +589,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         bool isPrivateFriends = PhotonNetwork.InRoom
             && PhotonNetwork.CurrentRoom != null
-            && !PhotonNetwork.CurrentRoom.IsVisible;
+            && !PhotonNetwork.CurrentRoom.IsVisible
+            && !PhotonNetwork.OfflineMode;
         bool isBots = NetworkManager.Instance != null && NetworkManager.Instance.isPlayBotsMode;
         MatchType matchType = GameSettings.Instance != null
             ? GameSettings.Instance.currentMatchType
@@ -805,7 +813,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
-        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+        if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
             bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs1) && (bool)gs1;
             if (!rejoining)

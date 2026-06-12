@@ -1,0 +1,38 @@
+{
+    "asset": "4f992b4fd603b974488d97d335a675a9",
+    "fileName": "019eb6df-e3e5-7a5c-a853-09bd9e37566c.png",
+    "prompt": "Keep the wooden plaque shape, size, wood texture, lighting, beveled edges and overall style EXACTLY the same as this image. Only change the engraved content on the plaque: replace the Hindi Devanagari title text with exactly \"बंद/छुपी काट\", replace the central icon with a cream-colored ornate face-down playing card (a closed card showing its decorative back pattern), and replace the bottom English subtitle with exactly \"(Hide Mode)\". Keep the same cream/beige engraved emboss text style and the same wide horizontal proportions. Transparent background outside the plaque.",
+    "negativePrompt": "",
+    "model": "gemini-3.0-pro",
+    "modelName": "Gemini 3.0 Pro",
+    "customSeed": -1,
+    "w3CTraceId": "",
+    "feedback": 0,
+    "refinementMode": "Generation",
+    "pixelateTargetSize": 0,
+    "pixelateKeepImageSize": false,
+    "pixelatePixelBlockSize": 0,
+    "pixelatePixelGridSize": 0,
+    "pixelateMode": 0,
+    "pixelateOutlineThickness": 0,
+    "doodles": {
+        "m_Items": [
+            {
+                "doodleReferenceType": 7,
+                "doodle": [],
+                "label": "Image",
+                "strength": 0.25,
+                "invertStrength": false,
+                "assetReferenceGuid": "4f992b4fd603b974488d97d335a675a9",
+                "unlabeledIndex": -1
+            }
+        ]
+    },
+    "upscaleFactor": 0,
+    "dimensions": {
+        "width": 1024,
+        "height": 1024
+    },
+    "spriteSheet": false,
+    "duration": 0.0
+}

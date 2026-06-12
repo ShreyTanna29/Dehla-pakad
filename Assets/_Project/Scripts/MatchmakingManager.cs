@@ -125,7 +125,7 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
 
     public void StopSearching(bool isMatchFound)
     {
-        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !isMatchFound)
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode && !isMatchFound)
         {
             Debug.Log("[Matchmaking] Private Room detected, bypassing exit logic.");
             return;

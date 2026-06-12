@@ -8,6 +8,8 @@ public struct HandLayoutConfig
 
 public static class HandLayoutHelper
 {
+    public const float HandCardSpacingX = 120f;
+
     public static void ResetTwoTaashSpacingCache() { }
 
     public static float GetPrefabCardWidth(GameObject cardPrefab) => GetPrefabCardSize(cardPrefab).x;
@@ -27,23 +29,7 @@ public static class HandLayoutHelper
         if (cardCount <= 0) cardCount = 1;
         if (prefabCardWidth <= 0f) prefabCardWidth = 100f;
 
-        float areaWidth = availableWidthPx > 1f ? availableWidthPx * 0.98f : availableWidthPx;
-
-        int fullHandCount = TaashRules.CardsPerPlayer;
-        float simulatedFitSpacing = (areaWidth - fullHandCount * prefabCardWidth) / (fullHandCount - 1);
-
-        float spacing;
-        if (cardCount == 1)
-        {
-            spacing = 0f;
-        }
-        else
-        {
-            float maxOverlap = -prefabCardWidth * 0.75f;
-            float minOverlap = -prefabCardWidth * 0.35f;
-
-            spacing = Mathf.Clamp(simulatedFitSpacing, maxOverlap, minOverlap);
-        }
+        float spacing = cardCount <= 1 ? 0f : HandCardSpacingX;
 
         return new HandLayoutConfig
         {
