@@ -83,19 +83,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public bool IsActorBotControlled(int actorNumber) => botActorNumbers.Contains(actorNumber);
 
-    public static int GetActiveHumanPlayerCount()
-    {
-        if (!PhotonNetwork.InRoom)
-            return PhotonNetwork.OfflineMode ? 1 : 0;
-
-        int count = 0;
-        foreach (Player p in PhotonNetwork.PlayerList)
-        {
-            if (!p.IsInactive)
-                count++;
-        }
-        return count;
-    }
+    public static int GetActiveHumanPlayerCount() => PhotonRoomPlayers.CountActiveHumans();
 
     /// <summary>Real (active) humans in room. Bots are not counted.</summary>
     public static int GetRealPlayerCountInRoom()
@@ -116,14 +104,16 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public List<int> BuildActiveSeatList()
     {
+        if (botActorNumbers == null) botActorNumbers = new List<int>();
+
         var seats = new List<int>(MaxTableSeats);
         var used = new HashSet<int>();
 
         if (PhotonNetwork.InRoom)
         {
-            foreach (Player p in PhotonNetwork.PlayerList)
+            foreach (Player p in PhotonRoomPlayers.GetSorted())
             {
-                if (p.IsInactive) continue;
+                if (p == null || p.IsInactive) continue;
                 if (used.Add(p.ActorNumber))
                 {
                     seats.Add(p.ActorNumber);
@@ -568,7 +558,10 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
             if (PhotonNetwork.IsMasterClient)
             {
-                foreach (Player p in PhotonNetwork.PlayerList) EnsureHandCachedForActor(p.ActorNumber);
+                foreach (Player p in PhotonRoomPlayers.GetSorted())
+                {
+                    if (p != null) EnsureHandCachedForActor(p.ActorNumber);
+                }
                 foreach (int bot in botActorNumbers) EnsureHandCachedForActor(bot);
             }
         }
@@ -611,9 +604,80 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
 
         if (PhotonNetwork.IsMasterClient && gameStarted && IsDealingComplete)
+        {
+            // A brand-new player joined a match in progress (e.g. host used REPLACE to invite a
+            // friend into a bot seat). Hand them an available bot's cards so they take that seat.
+            AssignBotSeatToNewPlayer(newPlayer);
             SyncReconnectingPlayer(newPlayer);
+        }
         else if (PhotonNetwork.IsMasterClient)
             OnRoomJoinedCheckStart();
+    }
+
+    /// <summary>
+    /// Master-only. When a new (non-reconnecting) player joins a match already in progress,
+    /// transfer an existing bot's hand to that player so they replace the bot in its seat.
+    /// Real players are prioritised by BuildActiveSeatList, so the freed bot is trimmed
+    /// automatically. Returns true if a bot seat was handed off.
+    /// </summary>
+    bool AssignBotSeatToNewPlayer(Player newPlayer)
+    {
+        if (!PhotonNetwork.IsMasterClient || !gameStarted || !IsDealingComplete) return false;
+        if (newPlayer == null || botActorNumbers.Count == 0) return false;
+
+        // Already has a hand cached/persisted (true reconnect) — leave it to the normal path.
+        EnsureHandCachedForActor(newPlayer.ActorNumber);
+        if (humanHandsOnMaster.TryGetValue(newPlayer.ActorNumber, out List<CardData> existing) && existing.Count > 0)
+            return false;
+
+        // Prefer a phantom (filler) bot; fall back to any bot.
+        int chosenBot = -1;
+        foreach (int b in botActorNumbers)
+        {
+            if (IsPhantomBotActor(b)) { chosenBot = b; break; }
+        }
+        if (chosenBot < 0) chosenBot = botActorNumbers[0];
+
+        EnsureHandCachedForActor(chosenBot);
+        List<CardData> hand = null;
+        if (botHands.TryGetValue(chosenBot, out List<CardData> bh) && bh != null)
+            hand = new List<CardData>(bh);
+        else if (humanHandsOnMaster.TryGetValue(chosenBot, out List<CardData> hh) && hh != null)
+            hand = new List<CardData>(hh);
+
+        // Free the bot seat.
+        botActorNumbers.Remove(chosenBot);
+        botHands.Remove(chosenBot);
+        humanHandsOnMaster.Remove(chosenBot);
+
+        if (hand != null)
+        {
+            humanHandsOnMaster[newPlayer.ActorNumber] = hand;
+            PersistHandToRoom(newPlayer.ActorNumber, hand);
+        }
+
+        DedupeBotActorNumbers();
+        SyncBotsToRoom();
+
+        Debug.Log($"[Replace] New player {newPlayer.ActorNumber} took over bot {chosenBot}'s seat.");
+
+        if (PlayerHand.LocalInstance != null) PlayerHand.LocalInstance.RebuildSeatOrderPublic();
+        if (PlayerProfileSync.Instance != null) PlayerProfileSync.Instance.UpdateAllNames();
+        return true;
+    }
+
+    /// <summary>
+    /// Master-only. Reopens the (private, in-progress) room so an invited friend can join to
+    /// replace a bot. Called by the in-game REPLACE flow.
+    /// </summary>
+    public void ReopenRoomForReplace()
+    {
+        if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
+        if (!PhotonNetwork.CurrentRoom.IsOpen)
+        {
+            PhotonNetwork.CurrentRoom.IsOpen = true;
+            Debug.Log("[Replace] Room reopened so an invited friend can take a bot seat.");
+        }
     }
 
     void SyncReconnectingPlayer(Player p)

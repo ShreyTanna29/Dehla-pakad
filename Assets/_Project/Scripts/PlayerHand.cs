@@ -23,9 +23,17 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     void Awake()
     {
+        EnsureHandListsInitialized();
+
         // Only the local human NetworkPlayer may own gameplay/UI state (multiplayer-safe).
         if (photonView != null && photonView.IsMine)
             LocalInstance = this;
+    }
+
+    void EnsureHandListsInitialized()
+    {
+        if (myCards == null) myCards = new List<CardData>();
+        if (currentTrick == null) currentTrick = new List<TrickCard>();
     }
 
     public static PlayerHand ResolveLocalHand()
@@ -854,6 +862,12 @@ private static bool _resultPanelShown = false;
         }
     }
 
+    /// <summary>
+    /// Public hook to rebuild the seat/turn order after a mid-game seat change
+    /// (e.g. a bot seat handed off to a newly invited player).
+    /// </summary>
+    public void RebuildSeatOrderPublic() => BuildTableTurnOrder();
+
     void BuildTableTurnOrder()
     {
         tableTurnOrder.Clear();
@@ -1324,6 +1338,7 @@ private static bool _resultPanelShown = false;
     {
         if (handAreaTransform == null) return;
 
+        EnsureHandListsInitialized();
         List<CardData> availableHand = new List<CardData>(myCards);
 
         if (isHiddenCardActive && !isTrumpRevealed
@@ -1484,6 +1499,7 @@ private static bool _resultPanelShown = false;
         if (isHiddenCardActive && !isTrumpRevealed
             && cardData.cardSuit == hiddenTrumpCard.cardSuit && cardData.cardRank == hiddenTrumpCard.cardRank)
         {
+            EnsureHandListsInitialized();
             int matchingCardsLeft = myCards.Count(c =>
                 c.cardSuit == cardData.cardSuit && c.cardRank == cardData.cardRank);
 
@@ -1999,6 +2015,7 @@ private static bool _resultPanelShown = false;
 
     public void RefreshHandUI(bool animate = true, bool force = false)
     {
+        EnsureHandListsInitialized();
         if (handAreaTransform == null) return;
         if (!force && (IsDealAnimationRunning || !isDealingComplete)) return;
 

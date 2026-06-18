@@ -182,14 +182,18 @@ public class FriendsPanelUIController : MonoBehaviour
         int count = 0;
         if (PlayWithFriendsManager.Instance != null)
         {
-            foreach (string friendId in PlayWithFriendsManager.Instance.MyFriends)
+            IReadOnlyList<string> friends = PlayWithFriendsManager.Instance.MyFriends;
+            if (friends != null)
             {
-                if (string.IsNullOrEmpty(friendId)) continue;
-                string displayName = PlayWithFriendsManager.Instance.GetFriendDisplayName(friendId);
-                FriendInfo info = PlayWithFriendsManager.Instance.GetFriendPhotonInfo(friendId);
-                bool inviteSent = PlayWithFriendsManager.Instance.IsGameInviteSent(friendId);
-                BuildFriendRow(friendId, displayName, info, inviteSent);
-                count++;
+                foreach (string friendId in friends)
+                {
+                    if (string.IsNullOrEmpty(friendId)) continue;
+                    string displayName = PlayWithFriendsManager.Instance.GetFriendDisplayName(friendId);
+                    FriendInfo info = PlayWithFriendsManager.Instance.GetFriendPhotonInfo(friendId);
+                    bool inviteSent = PlayWithFriendsManager.Instance.IsGameInviteSent(friendId);
+                    BuildFriendRow(friendId, displayName, info, inviteSent);
+                    count++;
+                }
             }
         }
 
@@ -471,6 +475,8 @@ public class FriendsPanelUIController : MonoBehaviour
     /// <summary>Prefix search over usernames.</summary>
     void SearchByUsername(string query)
     {
+        if (_usersDb == null) return;
+
         _usersDb.Child("users").OrderByChild("username")
             .StartAt(query)
             .EndAt(query + "\uf8ff")
@@ -523,6 +529,7 @@ public class FriendsPanelUIController : MonoBehaviour
         GameObject row = BuildBaseRow(friendsListContainer, displayName, userId);
 
         bool alreadyFriend = PlayWithFriendsManager.Instance != null
+            && PlayWithFriendsManager.Instance.MyFriends != null
             && PlayWithFriendsManager.Instance.MyFriends.Contains(userId);
 
         Button add = CreateCircleButton(row.transform, "AddButton",

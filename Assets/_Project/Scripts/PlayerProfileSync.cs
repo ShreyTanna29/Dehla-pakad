@@ -42,6 +42,11 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
         SetupAvatars();
         PublishLocalAvatar();
         UpdateAllNames();
+
+        // Make the 3 opponent seat avatars clickable for the stats / add-friend popup.
+        if (PlayerStatsPopupController.Instance != null)
+            PlayerStatsPopupController.Instance.WireSeatAvatars();
+
         Debug.Log("[GameInit] Player profiles initialized");
     }
 
@@ -143,6 +148,8 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
 
     void Update()
     {
+        if (!PhotonNetwork.InRoom && !PhotonNetwork.OfflineMode) return;
+
         if (Time.time - lastUpdateStatsTime > 1.0f)
         {
             lastUpdateStatsTime = Time.time;
@@ -166,9 +173,9 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
             AssignAvatarSprite(imgMyAvatar, PhotonNetwork.LocalPlayer.ActorNumber);
         }
 
-        foreach (Player p in PhotonNetwork.PlayerList)
+        foreach (Player p in PhotonRoomPlayers.GetSorted())
         {
-            if (p.IsLocal) continue;
+            if (p == null || p.IsLocal) continue;
             int seatIndex = GetSeatIndex(p.ActorNumber);
             
             string displayName = p.NickName;

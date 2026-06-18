@@ -71,9 +71,24 @@ public class InGameAddFriendController : MonoBehaviour
         }
     }
 
+    void Start()
+    {
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.RequestsChanged += OnRequestsChanged;
+    }
+
     void OnDestroy()
     {
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.RequestsChanged -= OnRequestsChanged;
         if (Instance == this) Instance = null;
+    }
+
+    /// <summary>Live-refresh the list if a request arrives/leaves while the panel is open.</summary>
+    void OnRequestsChanged()
+    {
+        if (_panelGroup != null && _panelGroup.gameObject.activeSelf)
+            PopulateRows();
     }
 
     void ResolveThemeAssets()
@@ -282,19 +297,126 @@ public class InGameAddFriendController : MonoBehaviour
             if (_rows[i] != null) Destroy(_rows[i]);
         _rows.Clear();
 
-        List<Player> opponents = GetTableOpponents();
+        // 1) Incoming friend requests (Accept / Decline) shown at the top.
+        int requestCount = 0;
+        if (PlayWithFriendsManager.Instance != null)
+        {
+            // Copy to a list first — accepting/declining mutates the source dictionary.
+            var requests = new List<KeyValuePair<string, string>>(PlayWithFriendsManager.Instance.IncomingRequests);
+            if (requests.Count > 0)
+            {
+                _rows.Add(CreateSectionHeader("FRIEND REQUESTS"));
+                foreach (var req in requests)
+                {
+                    _rows.Add(CreateRequestRow(req.Key, req.Value));
+                    requestCount++;
+                }
+            }
+        }
 
-        if (opponents.Count == 0)
+        // 2) Current table opponents you can add.
+        List<Player> opponents = GetTableOpponents();
+        if (opponents.Count > 0)
+        {
+            if (requestCount > 0) _rows.Add(CreateSectionHeader("PLAYERS AT TABLE"));
+            foreach (Player p in opponents)
+                _rows.Add(CreatePlayerRow(p));
+        }
+
+        if (requestCount == 0 && opponents.Count == 0)
         {
             GameObject empty = NewRect("EmptyRow", _rowsContent);
             empty.AddComponent<LayoutElement>().preferredHeight = 120;
             AddTmp(empty.transform, "No players to add right now.", new Color(1, 1, 1, 0.7f), 26, TextAlignmentOptions.Center, FontStyles.Italic);
             _rows.Add(empty);
-            return;
         }
+    }
 
-        foreach (Player p in opponents)
-            _rows.Add(CreatePlayerRow(p));
+    GameObject CreateSectionHeader(string text)
+    {
+        GameObject header = NewRect("SectionHeader", _rowsContent);
+        header.GetComponent<RectTransform>().sizeDelta = new Vector2(700, 44);
+        LayoutElement le = header.AddComponent<LayoutElement>();
+        le.preferredHeight = 44;
+        le.preferredWidth = 700;
+        var txt = AddTmp(header.transform, text, new Color(1f, 0.86f, 0.45f, 1f), 26, TextAlignmentOptions.Left, FontStyles.Bold);
+        var rt = txt.rectTransform;
+        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(18, 0); rt.offsetMax = new Vector2(-18, 0);
+        return header;
+    }
+
+    GameObject CreateRequestRow(string fromUserId, string fromName)
+    {
+        GameObject row = NewRect("RequestRow", _rowsContent);
+        RectTransform rowRt = row.GetComponent<RectTransform>();
+        rowRt.sizeDelta = new Vector2(700, 96);
+        LayoutElement le = row.AddComponent<LayoutElement>();
+        le.preferredHeight = 96;
+        le.preferredWidth = 700;
+        Image rowBg = row.AddComponent<Image>();
+        rowBg.color = new Color(0.30f, 0.62f, 0.22f, 0.18f);
+
+        // Name box
+        GameObject nameBox = NewRect("NameBox", row.transform);
+        RectTransform nbRt = nameBox.GetComponent<RectTransform>();
+        nbRt.anchorMin = nbRt.anchorMax = new Vector2(0f, 0.5f);
+        nbRt.pivot = new Vector2(0f, 0.5f);
+        nbRt.sizeDelta = new Vector2(330, 76);
+        nbRt.anchoredPosition = new Vector2(20, 0);
+        string displayName = string.IsNullOrEmpty(fromName) ? "Player" : fromName;
+        var nameTxt = AddTmp(nameBox.transform, displayName, Color.white, 30, TextAlignmentOptions.Left, FontStyles.Bold);
+        var nameRt = nameTxt.rectTransform;
+        nameRt.anchorMin = Vector2.zero; nameRt.anchorMax = Vector2.one;
+        nameRt.offsetMin = new Vector2(10, 0); nameRt.offsetMax = new Vector2(-10, 0);
+        nameTxt.overflowMode = TextOverflowModes.Ellipsis;
+
+        // Decline (X) button
+        GameObject declineGo = NewRect("DeclineButton", row.transform);
+        RectTransform dcRt = declineGo.GetComponent<RectTransform>();
+        dcRt.anchorMin = dcRt.anchorMax = new Vector2(1f, 0.5f);
+        dcRt.pivot = new Vector2(1f, 0.5f);
+        dcRt.sizeDelta = new Vector2(78, 70);
+        dcRt.anchoredPosition = new Vector2(-15, 0);
+        Image dcImg = declineGo.AddComponent<Image>();
+        dcImg.color = new Color(0.62f, 0.26f, 0.18f, 1f);
+        if (woodBoardSprite != null) { dcImg.sprite = woodBoardSprite; dcImg.type = Image.Type.Sliced; }
+        Button dcBtn = declineGo.AddComponent<Button>();
+        dcBtn.targetGraphic = dcImg;
+        var dcLabel = AddTmp(declineGo.transform, "\u2715", Color.white, 30, TextAlignmentOptions.Center, FontStyles.Bold);
+        Stretch(dcLabel.rectTransform);
+
+        // Accept (✓) button
+        GameObject acceptGo = NewRect("AcceptButton", row.transform);
+        RectTransform acRt = acceptGo.GetComponent<RectTransform>();
+        acRt.anchorMin = acRt.anchorMax = new Vector2(1f, 0.5f);
+        acRt.pivot = new Vector2(1f, 0.5f);
+        acRt.sizeDelta = new Vector2(150, 70);
+        acRt.anchoredPosition = new Vector2(-103, 0);
+        Image acImg = acceptGo.AddComponent<Image>();
+        acImg.color = GreenBtn;
+        if (woodBoardSprite != null) { acImg.sprite = woodBoardSprite; acImg.type = Image.Type.Sliced; }
+        Button acBtn = acceptGo.AddComponent<Button>();
+        acBtn.targetGraphic = acImg;
+        var acLabel = AddTmp(acceptGo.transform, "ACCEPT", Color.white, 26, TextAlignmentOptions.Center, FontStyles.Bold);
+        Stretch(acLabel.rectTransform);
+
+        string id = fromUserId;
+        string nm = displayName;
+        acBtn.onClick.AddListener(() =>
+        {
+            if (PlayWithFriendsManager.Instance != null)
+                PlayWithFriendsManager.Instance.AcceptFriendRequest(id, nm);
+            PopulateRows();
+        });
+        dcBtn.onClick.AddListener(() =>
+        {
+            if (PlayWithFriendsManager.Instance != null)
+                PlayWithFriendsManager.Instance.DeclineFriendRequest(id);
+            PopulateRows();
+        });
+
+        return row;
     }
 
     List<Player> GetTableOpponents()
@@ -302,7 +424,7 @@ public class InGameAddFriendController : MonoBehaviour
         var list = new List<Player>();
         if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return list;
 
-        foreach (Player p in PhotonNetwork.PlayerList)
+        foreach (Player p in PhotonRoomPlayers.GetSorted())
         {
             if (p == null) continue;
             if (p.IsLocal) continue;                       // not myself

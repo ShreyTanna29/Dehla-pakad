@@ -408,6 +408,9 @@ public class DehlaPakadAI : MonoBehaviour
         bool isDoubleSar,
         bool isLeading)
     {
+        if (hand == null) hand = new List<CardData>();
+        if (trick == null) trick = new List<PlayerHand.TrickCard>();
+
         int partner = GetPartnerActor(botActor);
         CardSuit leadSuit = isLeading ? CardSuit.Spades : trick[0].suit;
         bool hasLead = !isLeading && hand.Any(c => c.cardSuit == leadSuit);

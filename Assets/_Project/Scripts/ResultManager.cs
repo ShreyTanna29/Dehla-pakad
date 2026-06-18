@@ -245,8 +245,20 @@ public class ResultManager : MonoBehaviourPunCallbacks
         HideResultPanelImmediate();
     }
 
+    void EnsurePlayerResults()
+    {
+        if (playerResults == null || playerResults.Length < 4)
+            playerResults = new PlayerResult[4];
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (playerResults[i] == null)
+                playerResults[i] = new PlayerResult { name = GetInitialPlayerName(i) };
+        }
+    }
+
     [ContextMenu("Show Test Result")]
-public void ShowResult()
+    public void ShowResult()
     {
         if (_isShowingResult)
         {
@@ -261,6 +273,7 @@ public void ShowResult()
 
         _isShowingResult = true;
         Debug.Log("Result Panel Opening");
+        EnsurePlayerResults();
         EnsurePanelHierarchyActive();
         EnsureDimOverlay();
 
@@ -425,6 +438,7 @@ public void ShowResult()
 
     void AssignRanks()
     {
+        EnsurePlayerResults();
         var sorted = playerResults.OrderByDescending(p => p.score).ToList();
         for (int i = 0; i < sorted.Count; i++)
             sorted[i].rank = i + 1;

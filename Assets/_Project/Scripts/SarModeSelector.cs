@@ -12,8 +12,8 @@ public class SarModeSelector : MonoBehaviour
     // Unselected buttons tint (hex: 6D360D)
     public Color normalColor = ModeManager.ModeUnselectedColor;
     public Color hoverColor = new Color(0.9f, 0.9f, 0.9f);
-    // Selected buttons tint (hex: CBA06B)
-    public Color selectedColor = ModeManager.ModeSelectedColor;
+    // Selected buttons tint (hex: E3DED7) — always read from ModeManager at runtime.
+    static Color SelectedTint => ModeManager.ModeSelectedColor;
 
     Image _oneSarImage;
     Image _twoSarImage;
@@ -83,7 +83,7 @@ public class SarModeSelector : MonoBehaviour
             // Keep color driven ONLY by selection state (UpdateButtonVisuals()).
             if (!btn.interactable) return;
             if (IsModeSelected(mode))
-                img.color = selectedColor;
+                img.color = SelectedTint;
         };
 
         helper.OnPointerExitAction = () => UpdateButtonVisuals();
@@ -126,14 +126,14 @@ public class SarModeSelector : MonoBehaviour
 
         if (_oneSarImage != null)
         {
-            _oneSarImage.color = IsModeSelected(1) ? selectedColor : normalColor;
+            _oneSarImage.color = IsModeSelected(1) ? SelectedTint : normalColor;
             if (oneSarButton != null)
                 oneSarButton.transition = Selectable.Transition.None;
         }
 
         if (_twoSarImage != null)
         {
-            _twoSarImage.color = IsModeSelected(2) ? selectedColor : normalColor;
+            _twoSarImage.color = IsModeSelected(2) ? SelectedTint : normalColor;
             if (twoSarButton != null)
                 twoSarButton.transition = Selectable.Transition.None;
         }

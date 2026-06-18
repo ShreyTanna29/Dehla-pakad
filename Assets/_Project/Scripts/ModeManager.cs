@@ -10,8 +10,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
 {
     public static ModeManager Instance;
 
-    // Shared UI tints for modes + home panels (hex: CBA06B / 6D360D)
-    public static readonly Color ModeSelectedColor = new Color(0xCB / 255f, 0xA0 / 255f, 0x6B / 255f, 1f);
+    // Shared UI tints for modes panel (hex: E3DED7 / 6D360D)
+    public static readonly Color ModeSelectedColor = new Color(0xE3 / 255f, 0xDE / 255f, 0xD7 / 255f, 1f);
     public static readonly Color ModeUnselectedColor = new Color(0x6D / 255f, 0x36 / 255f, 0x0D / 255f, 1f);
 
     [Header("UI Panels")]
@@ -359,44 +359,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public void ApplyHomeScreenButtonColors()
     {
-        ApplyHomePlayButtonVisual("Button_PlayOnline", ModeUnselectedColor);
-        ApplyHomePlayButtonVisual("Button_PlayBots", ModeUnselectedColor);
-
-        Color friendsColor = isFriendsMatchMode ? ModeSelectedColor : ModeUnselectedColor;
-        ApplyHomePlayButtonVisual("Button_PlayFriends", friendsColor);
-
-        Color bright = Color.white;
-        SetUtilityButtonColor("Button_InviteFriends", bright);
-        SetUtilityButtonColor("Button_Shop", bright);
-        SetUtilityButtonColor("Button_Settings", bright);
-        SetUtilityButtonColor("Button_Share", bright);
-        SetUtilityButtonColor("Button_NoADS", bright);
-    }
-
-    void ApplyHomePlayButtonVisual(string objectName, Color color)
-    {
-        EnsureUiSearchRoot();
-        if (!UiSafeLookup.TryGet(objectName, out GameObject go) || go == null) return;
-
-        Image img = go.GetComponent<Image>();
-        if (img != null)
-            img.color = color;
-
-        Button btn = go.GetComponent<Button>();
-        if (btn != null)
-            btn.transition = Selectable.Transition.None;
-    }
-
-    void SetUtilityButtonColor(string objectName, Color color)
-    {
-        EnsureUiSearchRoot();
-        if (!UiSafeLookup.TryGetImage(objectName, out Image img) || img == null) return;
-        img.color = color;
-    }
-
-    void SetButtonImageColor(string objectName, Color color)
-    {
-        SetUtilityButtonColor(objectName, color);
+        // Home buttons keep their scene-authored sprite colors — no runtime tinting.
     }
 
     public void OnClick_TrickMode(int mode, bool broadcastToRoom = true)
@@ -590,7 +553,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (handsToggle != null)
             handsToggle.SetValue(currentSarMode, animate: true, notify: false);
 
-        // Selected buttons tint (hex: CBA06B), unselected (hex: 6D360D)
+        // Selected buttons tint (hex: E3DED7), unselected (hex: 6D360D)
         Color selectedColor = ModeSelectedColor;
         Color unselectedColor = ModeUnselectedColor;
 
@@ -855,7 +818,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
             CustomRoomProperties = roomProperties,
             CustomRoomPropertiesForLobby = new string[] { "TM", "RM", "SM" },
             PlayerTtl = 30000,
-            EmptyRoomTtl = 30000
+            EmptyRoomTtl = 30000,
+            // Required so other players can read each other's AuthValues.UserId (account id).
+            // The in-game friend / stats popup uses Player.UserId to identify opponents.
+            PublishUserId = true
         };
     }
 

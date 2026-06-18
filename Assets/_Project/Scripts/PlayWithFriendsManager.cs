@@ -91,6 +91,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public IReadOnlyList<string> MyFriends => myFriends;
     public IReadOnlyDictionary<string, string> IncomingRequests => incomingRequests;
 
+    /// <summary>Fires whenever the incoming friend-request list changes (added/removed/accepted/declined).
+    /// In-game panels subscribe to live-refresh their Accept/Decline rows.</summary>
+    public event System.Action RequestsChanged;
+    void NotifyRequestsChanged() => RequestsChanged?.Invoke();
+
     public string GetFriendDisplayName(string friendId) => GetFriendDisplayNameInternal(friendId);
 
     public FriendInfo GetFriendPhotonInfo(string friendId) =>
@@ -115,6 +120,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         LoadFriends();
+        if (myFriends == null) myFriends = new List<string>();
         EnsurePhotonUserId();
         EnsureNickname();
         EnsurePhotonView();
@@ -303,7 +309,10 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         {
             MaxPlayers = 4,
             IsVisible = false,
-            IsOpen = true
+            IsOpen = true,
+            // Required so players can read each other's account id (Player.UserId) in-game,
+            // used by the friend / stats popup.
+            PublishUserId = true
         };
 
         PhotonNetwork.CreateRoom(newPin, roomOptions);
@@ -506,7 +515,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (!PhotonNetwork.InRoom || playerSlotsText == null || playerSlotsText.Length == 0) return;
 
-        Player[] currentPlayers = PhotonNetwork.PlayerList;
+        Player[] currentPlayers = PhotonRoomPlayers.GetSorted();
         int realPlayerCount = currentPlayers.Length;
 
         for (int i = 0; i < playerSlotsText.Length; i++)
@@ -1280,6 +1289,28 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             PhotonNetwork.FindFriends(myFriends.ToArray());
     }
 
+    /// <summary>
+    /// Removes a user from the local friends list (used by the in-game player-stats popup
+    /// REMOVE action). Persists the change and refreshes any friends UI.
+    /// </summary>
+    public void RemoveFriend(string friendUserId)
+    {
+        if (string.IsNullOrEmpty(friendUserId)) return;
+        if (!myFriends.Remove(friendUserId)) return;
+
+        friendDisplayNames.Remove(friendUserId);
+        _gameInvitesSent.Remove(friendUserId);
+
+        SaveFriends();
+        RefreshFriendsListUI();
+        CheckFriendsOnlineStatus();
+        Debug.Log($"[Friends] Removed {friendUserId}");
+    }
+
+    /// <summary>True if the given user id is already in the local friends list.</summary>
+    public bool IsFriend(string friendUserId) =>
+        !string.IsNullOrEmpty(friendUserId) && myFriends.Contains(friendUserId);
+
     // ==========================================
     // FRIEND REQUEST SYSTEM (Accept / Decline)
     // ==========================================
@@ -1291,6 +1322,25 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public void SendFriendRequest(string targetUserId, string targetName)
     {
         if (string.IsNullOrEmpty(targetUserId)) return;
+        targetUserId = targetUserId.Trim();
+
+        // The whole friend system keys on the account id (Firebase uid / Photon UserId).
+        // But the UID users see and type is the short 10-digit public GameUid. If the caller
+        // passed a GameUid (e.g. from the home "Add by UID" box), resolve it to the account id
+        // first — otherwise the request is written to a path nobody listens on and is lost.
+        if (GameUidService.LooksLikeUid(targetUserId))
+        {
+            GameUidService.ResolveFirebaseUid(targetUserId, resolved =>
+            {
+                if (string.IsNullOrEmpty(resolved))
+                {
+                    ShowUIError("No player found with that UID.");
+                    return;
+                }
+                SendFriendRequest(resolved, targetName);
+            });
+            return;
+        }
 
         string myId = MyUserId;
         if (!string.IsNullOrEmpty(myId) && targetUserId == myId)
@@ -1382,6 +1432,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         incomingRequests[fromId] = fromName;
         Debug.Log($"[FriendReq] Incoming request from {fromName} ({fromId})");
         RefreshFriendsListUI();
+        NotifyRequestsChanged();
     }
 
     void OnFriendRequestRemoved(object sender, ChildChangedEventArgs args)
@@ -1437,6 +1488,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         incomingRequests.Remove(fromUserId);
         RefreshFriendsListUI();
+        NotifyRequestsChanged();
     }
 
     public void StartFriendAcceptListener()
@@ -1779,6 +1831,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     void LoadFriends()
     {
+        if (myFriends == null) myFriends = new List<string>();
         string data = PlayerPrefs.GetString(FriendsPrefsKey, "");
         myFriends.Clear();
         if (!string.IsNullOrEmpty(data))
