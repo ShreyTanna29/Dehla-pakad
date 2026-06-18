@@ -40,6 +40,7 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
             gameUiSearchRoot = NetworkManager.Instance.gameCanvasGroup.transform;
 
         SetupAvatars();
+        PublishLocalAvatar();
         UpdateAllNames();
         Debug.Log("[GameInit] Player profiles initialized");
     }
@@ -123,8 +124,20 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
         UpdateAllNames(); 
     }
     
+    public override void OnJoinedRoom()
+    {
+        PublishLocalAvatar();
+        UpdateAllNames();
+    }
+
     public override void OnPlayerEnteredRoom(Player newPlayer) { UpdateAllNames(); }
     public override void OnPlayerLeftRoom(Player otherPlayer) { UpdateAllNames(); }
+
+    public override void OnPlayerPropertiesUpdate(Player targetPlayer, ExitGames.Client.Photon.Hashtable changedProps)
+    {
+        if (changedProps != null && changedProps.ContainsKey(PlayerProfileManager.PROP_AVATAR))
+            UpdateAllNames();
+    }
 
     private float lastUpdateStatsTime = 0f;
 
@@ -148,9 +161,8 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
 
         if (txtMyName && PhotonNetwork.LocalPlayer != null)
         {
-            string myName = PhotonNetwork.LocalPlayer.NickName;
-            if (myName.Length > 10) myName = myName.Substring(0, 10); 
-            txtMyName.text = myName + " (Me)";
+            string myName = GetLocalProfileDisplayName();
+            txtMyName.text = myName;
             AssignAvatarSprite(imgMyAvatar, PhotonNetwork.LocalPlayer.ActorNumber);
         }
 
@@ -197,14 +209,97 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
              Debug.LogWarning($"[ProfileSync] Cannot assign avatar for actor {actorNumber} - Image component is null");
              return;
         }
-        
-        List<Sprite> pool = MatchmakingManager.GlobalProfileSprites;
-        if (pool == null || pool.Count == 0) return;
-        
-        int spriteIndex = Mathf.Abs(actorNumber) % pool.Count;
+
+        Sprite[] pool = GetCanonicalPool();
+        if (pool == null || pool.Length == 0) return;
+
+        int spriteIndex = ResolveAvatarIndex(actorNumber);
+        if (spriteIndex < 0 || spriteIndex >= pool.Length)
+            spriteIndex = Mathf.Abs(actorNumber) % pool.Length; // fallback for bots / missing data
+
         img.sprite = pool[spriteIndex];
         img.preserveAspect = true;
         img.enabled = true; // Ensure it's enabled
+    }
+
+    // Returns the avatar index the player actually selected during profile setup.
+    // The local player uses its saved PlayerPrefs choice directly; remote players use the
+    // synced Photon custom property. Returns -1 when unknown (caller falls back).
+    int ResolveAvatarIndex(int actorNumber)
+    {
+        if (PhotonNetwork.LocalPlayer != null && actorNumber == PhotonNetwork.LocalPlayer.ActorNumber)
+        {
+            int local = PlayerProfileManager.GetSavedAvatarIndex();
+            if (local >= 0) return local;
+        }
+
+        Player p = GetPlayerByActor(actorNumber);
+        if (p != null && p.CustomProperties != null &&
+            p.CustomProperties.TryGetValue(PlayerProfileManager.PROP_AVATAR, out object val) && val != null)
+        {
+            if (val is int vi) return vi;
+            if (int.TryParse(val.ToString(), out int parsed)) return parsed;
+        }
+        return -1;
+    }
+
+    Player GetPlayerByActor(int actorNumber)
+    {
+        if (!PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.OfflineMode) return null;
+        if (PhotonNetwork.CurrentRoom != null)
+            return PhotonNetwork.CurrentRoom.GetPlayer(actorNumber);
+        return null;
+    }
+
+    Sprite[] _cachedPool;
+
+    // Use the exact sprite list the avatar index was chosen from (profile setup) so a
+    // synced index maps to the same picture on every client. Falls back to the global pool.
+    Sprite[] GetCanonicalPool()
+    {
+        if (PlayerProfileManager.Instance != null &&
+            PlayerProfileManager.Instance.profileSprites != null &&
+            PlayerProfileManager.Instance.profileSprites.Length > 0)
+        {
+            _cachedPool = PlayerProfileManager.Instance.profileSprites;
+            return _cachedPool;
+        }
+
+        if (_cachedPool != null && _cachedPool.Length > 0) return _cachedPool;
+
+        if (MatchmakingManager.GlobalProfileSprites != null && MatchmakingManager.GlobalProfileSprites.Count > 0)
+            _cachedPool = MatchmakingManager.GlobalProfileSprites.ToArray();
+
+        return _cachedPool;
+    }
+
+    // Make sure this client's chosen avatar is published to the room so others can see it.
+    void PublishLocalAvatar()
+    {
+        int idx = PlayerProfileManager.GetSavedAvatarIndex();
+        if (idx < 0) return;
+        if (!PhotonNetwork.IsConnected && !PhotonNetwork.OfflineMode) return;
+
+        object current = null;
+        if (PhotonNetwork.LocalPlayer.CustomProperties != null)
+            PhotonNetwork.LocalPlayer.CustomProperties.TryGetValue(PlayerProfileManager.PROP_AVATAR, out current);
+        if (current is int ci && ci == idx) return;
+
+        var props = new ExitGames.Client.Photon.Hashtable { { PlayerProfileManager.PROP_AVATAR, idx } };
+        PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+    }
+
+    static string GetLocalProfileDisplayName()
+    {
+        string profileName = PlayerPrefs.GetString("PlayerUsername", string.Empty).Trim();
+        if (!string.IsNullOrEmpty(profileName))
+            return profileName;
+
+        string nickName = PhotonNetwork.NickName;
+        if (!string.IsNullOrEmpty(nickName))
+            return nickName;
+
+        return "Player";
     }
 
     private void SetSeatText(int seatIndex, string name)

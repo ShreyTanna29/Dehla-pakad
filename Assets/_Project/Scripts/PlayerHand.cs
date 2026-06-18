@@ -33,6 +33,22 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         if (LocalInstance != null && LocalInstance.photonView != null && LocalInstance.photonView.IsMine)
             return LocalInstance;
 
+        if (PhotonNetwork.IsConnected)
+        {
+            foreach (PhotonView view in PhotonNetwork.PhotonViewCollection)
+            {
+                if (view == null || !view.IsMine) continue;
+                if (!view.gameObject.name.Contains("NetworkPlayer")) continue;
+
+                PlayerHand hand = view.GetComponent<PlayerHand>();
+                if (hand != null)
+                {
+                    LocalInstance = hand;
+                    return hand;
+                }
+            }
+        }
+
         PlayerHand[] hands = Object.FindObjectsByType<PlayerHand>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (PlayerHand hand in hands)
         {
@@ -40,6 +56,18 @@ public class PlayerHand : MonoBehaviourPunCallbacks
             {
                 LocalInstance = hand;
                 return hand;
+            }
+        }
+
+        if (PhotonNetwork.OfflineMode)
+        {
+            foreach (PlayerHand hand in hands)
+            {
+                if (hand != null)
+                {
+                    LocalInstance = hand;
+                    return hand;
+                }
             }
         }
 
@@ -445,7 +473,7 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
         Vector3 targetLocal = GetFinalPositionForSeat(seat);
         cardObj.transform.DOScale(0.8f, 0.35f);
-        cardObj.transform.DOLocalMove(targetLocal, 0.35f).SetEase(Ease.OutBack);
+        cardObj.transform.DOLocalMove(targetLocal, 0.35f).SetEase(Ease.InOutSine);
         cardObj.transform.localRotation = Quaternion.identity;
 
         currentTrick.Add(new TrickCard { actorNumber = senderActorNum, suit = (CardSuit)suitIndex, rankValue = rankIndex, cardObject = cardObj });
@@ -462,9 +490,8 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     public static List<TrickCard> accumulatedTableCards = new List<TrickCard>();
     static Transform _accumulatedPileRoot;
 
-    static bool _handRevealRunning;
     public static bool IsGameplayInputBlocked =>
-        IsDealAnimationRunning || _handRevealRunning || IsTrickLocked ||
+        IsDealAnimationRunning || IsTrickLocked ||
         CardInteract.isPlayingCard || GameFlowState.Current == GameFlowPhase.GameFinished;
 
     private int _localCurrentTurnActor = -1;
@@ -771,7 +798,6 @@ private static bool _resultPanelShown = false;
         _lastProcessTurnTrickCount = -1;
         _resultPanelShown = false;
         isDealingComplete = false;
-        _handRevealRunning = false;
         tableTurnOrder.Clear();
         botActorsThinking.Clear();
         actorsPlayedThisTrick.Clear();
@@ -853,7 +879,7 @@ private static bool _resultPanelShown = false;
 
     bool IsDealingReadyForPlay()
     {
-        if (IsDealAnimationRunning || _handRevealRunning) return false;
+        if (IsDealAnimationRunning) return false;
         if (isDealingComplete) return true;
         return DeckManager.Instance != null && DeckManager.Instance.IsDealingComplete;
     }
@@ -1100,12 +1126,12 @@ private static bool _resultPanelShown = false;
         isHiddenCardActive && !isTrumpRevealed
         && card.cardSuit == hiddenTrumpCard.cardSuit && card.cardRank == hiddenTrumpCard.cardRank;
 
-    static bool IsCardLegalPlay(List<CardData> hand, List<TrickCard> trick, CardData card) =>
-        IsCardInHand(GetValidCards(hand, trick), card);
+    static bool IsCardLegalPlay(List<CardData> hand, List<TrickCard> trick, CardData card, int forActorNumber) =>
+        IsCardInHand(GetValidCards(hand, trick, forActorNumber), card);
 
-    static CardData SanitizeBotCardChoice(List<CardData> hand, List<TrickCard> trick, CardData choice)
+    static CardData SanitizeBotCardChoice(List<CardData> hand, List<TrickCard> trick, CardData choice, int forActorNumber)
     {
-        List<CardData> legal = GetValidCards(hand, trick);
+        List<CardData> legal = GetValidCards(hand, trick, forActorNumber);
         if (legal.Count == 0) return hand[0];
         if (IsCardInHand(legal, choice)) return choice;
         return legal[0];
@@ -1120,7 +1146,23 @@ private static bool _resultPanelShown = false;
             return false;
         }
         if (photonView == null) return false;
-        photonView.RPC("RPC_PlayCard", RpcTarget.All, actorNumber, (int)card.cardSuit, (int)card.cardRank);
+
+        int suit = (int)card.cardSuit;
+        int rank = (int)card.cardRank;
+
+        // Apply on master immediately — RpcTarget.All is not synchronous, so retry/watchdog used to false-fail.
+        if (PhotonNetwork.IsMasterClient)
+        {
+            RPC_PlayCard(actorNumber, suit, rank, default);
+            if (!actorsPlayedThisTrick.Contains(actorNumber))
+                return false;
+
+            if (!PhotonNetwork.OfflineMode)
+                photonView.RPC("RPC_PlayCard", RpcTarget.Others, actorNumber, suit, rank);
+            return true;
+        }
+
+        photonView.RPC("RPC_PlayCard", RpcTarget.All, actorNumber, suit, rank);
         return actorsPlayedThisTrick.Contains(actorNumber);
     }
 
@@ -1145,13 +1187,13 @@ private static bool _resultPanelShown = false;
 
         botActorsThinking.Remove(actorNumber);
 
-        List<CardData> legal = GetValidCards(hand, currentTrick);
+        List<CardData> legal = GetValidCards(hand, currentTrick, actorNumber);
         if (legal.Count == 0) legal = new List<CardData>(hand);
 
         CardData preferred = legal[0];
         if (DehlaPakadAI.Instance != null)
             preferred = SanitizeBotCardChoice(hand, currentTrick, DehlaPakadAI.Instance.ThinkAndSelectCard(
-                hand, currentTrick, currentTrumpSuit, isTrumpRevealed, actorNumber));
+                hand, currentTrick, currentTrumpSuit, isTrumpRevealed, actorNumber), actorNumber);
 
         if (PlayBotCard(actorNumber, preferred)) return;
 
@@ -1231,7 +1273,7 @@ private static bool _resultPanelShown = false;
             CardData botCard = DehlaPakadAI.Instance != null
                 ? DehlaPakadAI.Instance.ThinkAndSelectCard(hand, currentTrick, currentTrumpSuit, isTrumpRevealed, actorNumber)
                 : hand[0];
-            botCard = SanitizeBotCardChoice(hand, currentTrick, botCard);
+            botCard = SanitizeBotCardChoice(hand, currentTrick, botCard, actorNumber);
             cardActuallyPlayed = PlayBotCard(actorNumber, botCard);
         }
         finally
@@ -1284,15 +1326,14 @@ private static bool _resultPanelShown = false;
 
         List<CardData> availableHand = new List<CardData>(myCards);
 
-        if (isHiddenCardActive && !isTrumpRevealed)
+        if (isHiddenCardActive && !isTrumpRevealed
+            && PhotonNetwork.LocalPlayer != null
+            && PhotonNetwork.LocalPlayer.ActorNumber == hiddenCardOwnerActor)
         {
             int hiddenIndex = availableHand.FindIndex(c =>
                 c.cardSuit == hiddenTrumpCard.cardSuit && c.cardRank == hiddenTrumpCard.cardRank);
             if (hiddenIndex >= 0)
                 availableHand.RemoveAt(hiddenIndex);
-
-            if (availableHand.Count == 0)
-                availableHand = new List<CardData>(myCards);
         }
 
         bool isLeading = currentTrick == null || currentTrick.Count == 0;
@@ -1303,6 +1344,12 @@ private static bool _resultPanelShown = false;
         var usedValidMatches = new Dictionary<(CardSuit, CardRank), int>();
         CardInteract[] interacts = handAreaTransform.GetComponentsInChildren<CardInteract>();
         bool hiddenCardBlockedUI = false;
+        int lastHandSibling = -1;
+        foreach (CardInteract c2 in interacts)
+        {
+            if (c2 == null || c2.isPlayed) continue;
+            lastHandSibling = Mathf.Max(lastHandSibling, c2.transform.GetSiblingIndex());
+        }
 
         foreach (CardInteract ci in interacts)
         {
@@ -1312,8 +1359,11 @@ private static bool _resultPanelShown = false;
 
             bool isThisCardHidden = false;
             if (isHiddenCardActive && !isTrumpRevealed && !hiddenCardBlockedUI
+                && PhotonNetwork.LocalPlayer != null
+                && PhotonNetwork.LocalPlayer.ActorNumber == hiddenCardOwnerActor
                 && d.myCardData.cardSuit == hiddenTrumpCard.cardSuit
-                && d.myCardData.cardRank == hiddenTrumpCard.cardRank)
+                && d.myCardData.cardRank == hiddenTrumpCard.cardRank
+                && ci.transform.GetSiblingIndex() == lastHandSibling)
             {
                 isThisCardHidden = true;
                 hiddenCardBlockedUI = true;
@@ -1398,21 +1448,18 @@ private static bool _resultPanelShown = false;
         }
     }
 
-    public static List<CardData> GetValidCards(List<CardData> hand, List<TrickCard> trick)
+    public static List<CardData> GetValidCards(List<CardData> hand, List<TrickCard> trick, int forActorNumber = -1)
     {
         if (hand == null || hand.Count == 0) return new List<CardData>();
 
         List<CardData> availableHand = new List<CardData>(hand);
 
-        if (isHiddenCardActive && !isTrumpRevealed)
+        if (isHiddenCardActive && !isTrumpRevealed && forActorNumber == hiddenCardOwnerActor)
         {
             int hiddenIndex = availableHand.FindIndex(c =>
                 c.cardSuit == hiddenTrumpCard.cardSuit && c.cardRank == hiddenTrumpCard.cardRank);
             if (hiddenIndex >= 0)
                 availableHand.RemoveAt(hiddenIndex);
-
-            if (availableHand.Count == 0)
-                availableHand = new List<CardData>(hand);
         }
 
         if (trick == null || trick.Count == 0) return availableHand;
@@ -1461,7 +1508,7 @@ private static bool _resultPanelShown = false;
             CardInteract.isPlayingCard = false;
             return;
         }
-        if (!IsCardLegalPlay(myCards, currentTrick, cardData))
+        if (!IsCardLegalPlay(myCards, currentTrick, cardData, localActor))
         {
             Debug.LogWarning("[Play] Blocked hidden or illegal card.");
             CardInteract.isPlayingCard = false;
@@ -1698,6 +1745,10 @@ private static bool _resultPanelShown = false;
         ClearTrickPlayLocks();
         _lastProcessTurnActor = -1;
         _lastProcessTurnTrickCount = -1;
+        // FIX: reset the de-dupe guard so ProcessTurn(winnerActor) below is not swallowed
+        // on non-master clients when the winner was also the last actor to play in the trick.
+        // Previously this left the winner's hand permanently disabled until the 15s auto-play fired.
+        _lastHandledTurnActor = -1;
 
         isCleaningTable = false;
         isResolvingTrick = false;
@@ -1712,13 +1763,20 @@ private static bool _resultPanelShown = false;
 
         if (PhotonNetwork.IsMasterClient)
         {
-            totalTricksPlayed++;
+            // Use a locally computed value for the end-of-game check.
+            // Re-reading totalTricksPlayed here would read the Photon room property "TP",
+            // which is updated asynchronously (server round-trip) and would still hold the
+            // previous value online — causing the final trick check to fail and the
+            // leaderboard to never appear in online multiplayer.
+            int newTrickCount = _localTotalTricksPlayed + 1;
+            totalTricksPlayed = newTrickCount;
 
-            if (totalTricksPlayed >= tricksToWin)
+            if (newTrickCount >= tricksToWin)
             {
                 GameFlowState.SetPhase(GameFlowPhase.GameFinished, forceRecovery: true);
                 botActorsThinking.Clear();
                 CardInteract.canPlayCards = false;
+                Debug.Log($"[PlayerHand] Game finished (trick {newTrickCount}/{tricksToWin}). Broadcasting result panel.");
                 if (photonView != null)
                     photonView.RPC("RPC_ShowGameResult", RpcTarget.All);
                 else
@@ -1764,8 +1822,11 @@ private static bool _resultPanelShown = false;
 
     public static float GetDealBatchDuration(int cardsInBatch)
     {
-        float perSeat = (cardsInBatch - 1) * DealCardLaunchGap + DealShrinkDuration + 0.2f;
-        return 4f * perSeat + DealRoundSettlePause + 0.2f;
+        // Real per-seat runtime of DealAnimationOnlyRoutine: cardsInBatch launch-gaps + the 0.2s
+        // per-seat settle pause; final 0.2s tail at the end. This matches the actual animation
+        // so callers can add a precise inter-batch gap on top (see DeckManager FullDealingSequenceRoutine).
+        float perSeat = cardsInBatch * DealCardLaunchGap + 0.2f;
+        return 4f * perSeat + 0.2f;
     }
 
     static string GetDealRoundLabel(int cardsInBatch)
@@ -1816,6 +1877,40 @@ private static bool _resultPanelShown = false;
         return baseTarget;
     }
 
+    Transform GetDealAnimationParent()
+    {
+        if (NetworkManager.Instance != null && NetworkManager.Instance.gameCanvasGroup != null)
+            return NetworkManager.Instance.gameCanvasGroup.transform;
+
+        EnsureGameplayUiRefs();
+        if (gameUiSearchRoot != null)
+            return gameUiSearchRoot;
+
+        return canvasTransform;
+    }
+
+    void PlaceDealCardBehindOverlays(Transform cardTransform)
+    {
+        Transform parent = cardTransform != null ? cardTransform.parent : null;
+        if (parent == null) return;
+
+        int targetIndex = parent.childCount - 1;
+
+        if (InGameSettingsController.Instance != null && InGameSettingsController.Instance.settingsPanel != null)
+        {
+            Transform settings = InGameSettingsController.Instance.settingsPanel.transform;
+            if (settings.parent == parent)
+                targetIndex = Mathf.Min(targetIndex, settings.GetSiblingIndex());
+        }
+        else if (UiSafeLookup.TryGet("Panel_GameSettings", out GameObject settingsGo)
+                 && settingsGo.transform.parent == parent)
+        {
+            targetIndex = Mathf.Min(targetIndex, settingsGo.transform.GetSiblingIndex());
+        }
+
+        cardTransform.SetSiblingIndex(targetIndex);
+    }
+
     IEnumerator DealAnimationOnlyRoutine(int cardsInBatch)
     {
         while (_isDealAnimRunning) yield return null;
@@ -1833,15 +1928,19 @@ private static bool _resultPanelShown = false;
             }
         }
 
-        if (canvasTransform == null)
+        Transform dealParent = GetDealAnimationParent();
+        if (dealParent == null)
         {
             _isDealAnimRunning = false;
             IsDealAnimationRunning = false;
             yield break;
         }
 
-        RectTransform canvasRect = canvasTransform as RectTransform;
-        Vector2 deckAnchor = GetAnchorInCanvas(canvasRect, centerPos != null ? centerPos.position : canvasRect.position);
+        RectTransform canvasRect = dealParent as RectTransform;
+        if (canvasRect == null)
+            canvasRect = dealParent.GetComponent<RectTransform>();
+
+        Vector2 deckAnchor = GetAnchorInCanvas(canvasRect, centerPos != null ? centerPos.position : dealParent.position);
 
         // 🚀 User Order: Bottom (0) → Right (3) → Top (2) → Left (1)
         int[] dealOrder = { 0, 3, 2, 1 };
@@ -1856,7 +1955,8 @@ private static bool _resultPanelShown = false;
 
             for (int i = 0; i < cardsInBatch; i++)
             {
-                GameObject flyingCard = Object.Instantiate(dummyCardPrefab, canvasTransform);
+                GameObject flyingCard = Object.Instantiate(dummyCardPrefab, dealParent);
+                PlaceDealCardBehindOverlays(flyingCard.transform);
                 RectTransform cardRt = flyingCard.GetComponent<RectTransform>();
                 cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
 
@@ -1914,32 +2014,59 @@ private static bool _resultPanelShown = false;
             Object.DestroyImmediate(child.gameObject);
         }
 
-        // Sirf EK hidden patte ko alag nikalo, baaki sabko sort karo
-        List<CardData> sortedCards = new List<CardData>();
-        bool hiddenFound = false;
+        // Hidden trump owner: keep hidden card at the end until unlocked; then sort normally.
+        bool isLocalHiddenOwner = isHiddenCardActive
+            && PhotonNetwork.LocalPlayer != null
+            && PhotonNetwork.LocalPlayer.ActorNumber == hiddenCardOwnerActor;
 
-        foreach (CardData c in myCards)
+        List<CardData> sortedCards;
+        if (isLocalHiddenOwner && !isTrumpRevealed)
         {
-            if (isHiddenCardActive && !isTrumpRevealed && !hiddenFound
-                && c.cardSuit == hiddenTrumpCard.cardSuit && c.cardRank == hiddenTrumpCard.cardRank)
+            sortedCards = new List<CardData>();
+            CardData? pinnedHidden = null;
+
+            foreach (CardData c in myCards)
             {
-                hiddenFound = true;
+                if (!pinnedHidden.HasValue
+                    && c.cardSuit == hiddenTrumpCard.cardSuit
+                    && c.cardRank == hiddenTrumpCard.cardRank)
+                {
+                    pinnedHidden = c;
+                }
+                else
+                {
+                    sortedCards.Add(c);
+                }
             }
-            else
-            {
-                sortedCards.Add(c);
-            }
+
+            sortedCards = sortedCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
+            if (pinnedHidden.HasValue)
+                sortedCards.Add(pinnedHidden.Value);
+        }
+        else
+        {
+            sortedCards = myCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
         }
 
-        sortedCards = sortedCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
-        if (hiddenFound) sortedCards.Add(hiddenTrumpCard);
         myCards = sortedCards;
 
-        bool isTwoRows = myCards.Count > 13;
-        const int cardsPerRow = 13;
-        float spacingX = HandLayoutHelper.HandCardSpacingX;
+        bool isTwoRows = TaashRules.IsTwoTaashMode && myCards.Count > HandLayoutHelper.CardsPerRow;
+        const int cardsPerRow = HandLayoutHelper.CardsPerRow;
+        float handWidthPx = HandLayoutHelper.GetHandAreaWidth(handAreaTransform as RectTransform);
+        float prefabWidth = HandLayoutHelper.GetPrefabCardWidth(cardUIPrefab);
         bool hiddenCardUIProcessed = false;
         bool revealedHiddenProcessed = false;
+
+        HandLayoutConfig row0Layout = HandLayoutHelper.GetLayout(
+            isTwoRows ? Mathf.Min(cardsPerRow, myCards.Count) : myCards.Count,
+            handWidthPx,
+            prefabWidth);
+        HandLayoutConfig row1Layout = default;
+        if (isTwoRows)
+        {
+            int row1Count = Mathf.Max(0, myCards.Count - cardsPerRow);
+            row1Layout = HandLayoutHelper.GetLayout(row1Count, handWidthPx, prefabWidth);
+        }
 
         for (int i = 0; i < myCards.Count; i++)
         {
@@ -1949,9 +2076,10 @@ private static bool _resultPanelShown = false;
 
             // Sirf EK patte ko UI mein grey aur hidden karna hai
             bool isThisCardHidden = false;
-            if (isHiddenCardActive && !isTrumpRevealed && !hiddenCardUIProcessed
+            if (isLocalHiddenOwner && !isTrumpRevealed && !hiddenCardUIProcessed
                 && myCards[i].cardSuit == hiddenTrumpCard.cardSuit
-                && myCards[i].cardRank == hiddenTrumpCard.cardRank)
+                && myCards[i].cardRank == hiddenTrumpCard.cardRank
+                && i == myCards.Count - 1)
             {
                 isThisCardHidden = true;
                 hiddenCardUIProcessed = true;
@@ -1989,7 +2117,7 @@ private static bool _resultPanelShown = false;
                 }
             }
 
-            CardInteract cardInteract = newCardUI.GetComponent<CardInteract>();
+            CardInteract cardInteract = newCardUI.GetComponentInChildren<CardInteract>();
             if (cardInteract != null && isThisCardHidden)
             {
                 cardInteract.isValidToPlay = false;
@@ -2003,9 +2131,10 @@ private static bool _resultPanelShown = false;
             int col = i % cardsPerRow;
             int cardsInThisRow = Mathf.Min(cardsPerRow, myCards.Count - row * cardsPerRow);
 
-            float startX = -((cardsInThisRow - 1) * spacingX) / 2f;
-            float xPos = startX + col * spacingX;
-            float yPos = isTwoRows ? (row == 0 ? 50f : -70f) : 0f;
+            HandLayoutConfig layout = row == 0 ? row0Layout : row1Layout;
+            float startX = HandLayoutHelper.ComputeStartX(layout, cardsInThisRow);
+            float xPos = startX + col * (layout.prefabCardWidth + layout.spacing);
+            float yPos = HandLayoutHelper.GetRowY(row, isTwoRows);
 
             rt.anchoredPosition = new Vector2(xPos, yPos);
 
@@ -2014,6 +2143,9 @@ private static bool _resultPanelShown = false;
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yPos - 100f);
                 rt.DOAnchorPosY(yPos, 0.35f).SetEase(Ease.OutBack).SetDelay(i * 0.02f).SetUpdate(true);
             }
+
+            if (cardInteract != null)
+                cardInteract.ResetVisualOffset();
         }
     }
 
@@ -2060,12 +2192,7 @@ private static bool _resultPanelShown = false;
         if (!matchInProgress)
         {
             yield return new WaitForSeconds(DealFlyDuration + 0.1f);
-            if (handAreaTransform != null)
-                ClearHandUI();
-
-            _handRevealRunning = true;
-            yield return AnimateHandSpreadReveal();
-            _handRevealRunning = false;
+            RefreshHandUI(animate: true, force: true);
         }
         else
         {
@@ -2085,50 +2212,6 @@ private static bool _resultPanelShown = false;
         ProcessTurn(starterActor);
     }
 
-    IEnumerator AnimateHandSpreadReveal()
-    {
-        if (handAreaTransform == null || cardUIPrefab == null) yield break;
-        if (IsDealAnimationRunning || _isDealAnimRunning) yield break;
-
-        myCards = myCards
-            .OrderBy(c => SuitOrder(c.cardSuit))
-            .ThenBy(c => RankOrder(c.cardRank))
-            .ToList();
-
-        ClearHandUI();
-
-        HorizontalLayoutGroup revealHlg = handAreaTransform.GetComponent<HorizontalLayoutGroup>();
-        if (revealHlg != null) revealHlg.enabled = false;
-
-        float handWidthPx = HandLayoutHelper.GetHandAreaWidth(handAreaTransform as RectTransform);
-        float prefabWidth = HandLayoutHelper.GetPrefabCardWidth(cardUIPrefab);
-        HandLayoutConfig layout = HandLayoutHelper.GetLayout(myCards.Count, handWidthPx, prefabWidth);
-        float startX = HandLayoutHelper.ComputeStartX(layout, myCards.Count);
-
-        var cardRects = new List<RectTransform>();
-        for (int i = 0; i < myCards.Count; i++)
-        {
-            GameObject card = Object.Instantiate(cardUIPrefab, handAreaTransform);
-            card.GetComponent<CardDisplay>()?.SetCardData(myCards[i]);
-            RectTransform rt = card.GetComponent<RectTransform>();
-            float targetX = startX + i * (layout.prefabCardWidth + layout.spacing);
-            rt.anchoredPosition = new Vector2(targetX, 0f);
-            rt.localScale = Vector3.one * 0.9f;
-            cardRects.Add(rt);
-        }
-
-        if (cardRects.Count == 0) yield break;
-
-        Sequence popSeq = DOTween.Sequence();
-        for (int i = 0; i < cardRects.Count; i++)
-        {
-            RectTransform rt = cardRects[i];
-            popSeq.Insert(i * 0.03f, rt.DOScale(1.05f, 0.12f).SetEase(Ease.OutQuad));
-            popSeq.Insert(i * 0.03f + 0.12f, rt.DOScale(1f, 0.12f).SetEase(Ease.OutBack));
-        }
-        yield return popSeq.WaitForCompletion();
-    }
-
     [PunRPC]
     void RPC_ShowGameResult()
     {
@@ -2137,7 +2220,11 @@ private static bool _resultPanelShown = false;
 
     public void ShowGameResultLocal()
     {
-        if (_resultPanelShown) return;
+        if (_resultPanelShown)
+        {
+            Debug.Log("[PlayerHand] ShowGameResultLocal skipped — result already shown this game.");
+            return;
+        }
         _resultPanelShown = true;
 
         botActorsThinking.Clear();
@@ -2146,7 +2233,16 @@ private static bool _resultPanelShown = false;
         if (TurnManager.Instance != null) TurnManager.Instance.StopTimer();
 
         GameFlowState.SetPhase(GameFlowPhase.GameFinished, forceRecovery: true);
-        if (ResultManager.Instance != null) ResultManager.Instance.ShowResult();
+
+        if (ResultManager.Instance != null)
+        {
+            Debug.Log("[PlayerHand] Showing result/leaderboard panel.");
+            ResultManager.Instance.ShowResult();
+        }
+        else
+        {
+            Debug.LogError("[PlayerHand] ResultManager.Instance is null — cannot show leaderboard panel! Ensure a ResultManager exists in the scene.");
+        }
     }
 
     static Vector2 GetAnchorInCanvas(RectTransform canvasRect, Vector3 worldPos)

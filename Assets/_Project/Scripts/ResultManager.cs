@@ -24,6 +24,12 @@ public class ResultManager : MonoBehaviourPunCallbacks
     public Button restartButton;
     public Transform scoreboardContainer;
 
+    [Header("Leaderboard Theme (assign in scene)")]
+    [Tooltip("Rounded wooden board sprite used for the panel background (e.g. BG_Buttons).")]
+    public Sprite woodBoardSprite;
+    [Tooltip("Settings gear icon sprite (e.g. settings_button).")]
+    public Sprite gearButtonSprite;
+
     [System.Serializable]
     public class PlayerResult
     {
@@ -44,6 +50,12 @@ public class ResultManager : MonoBehaviourPunCallbacks
     private bool _isShowingResult;
     private static bool _resultPanelResolveWarned;
 
+    const int RoundsPerMatch = 3;
+    const int KotDehlasOneTaash = 4;
+    const int KotDehlasTwoTaash = 8;
+    readonly int[][] _roundDehlas = new int[RoundsPerMatch][];
+    int _currentRoundIndex;
+
     // Professional Theme Colors
     static readonly Color PanelBgColor = new Color(0.25f, 0.15f, 0.05f, 0.95f); // Wooden Dark
     static readonly Color FrameColor = new Color(0.45f, 0.28f, 0.15f, 1f);     // Wooden Frame
@@ -60,6 +72,9 @@ public class ResultManager : MonoBehaviourPunCallbacks
         for (int i = 0; i < 4; i++)
             playerResults[i] = new PlayerResult { name = GetInitialPlayerName(i) };
 
+        for (int r = 0; r < RoundsPerMatch; r++)
+            _roundDehlas[r] = new int[4];
+
         HideResultPanelImmediate();
         WireButtons();
     }
@@ -68,11 +83,13 @@ public class ResultManager : MonoBehaviourPunCallbacks
     {
         if (homeButton != null)
         {
+            EnableButtonVisuals(homeButton);
             homeButton.onClick.RemoveAllListeners();
             homeButton.onClick.AddListener(OnHomeClicked);
         }
         if (restartButton != null)
         {
+            EnableButtonVisuals(restartButton);
             restartButton.onClick.RemoveAllListeners();
             restartButton.onClick.AddListener(OnRestartClicked);
         }
@@ -223,8 +240,13 @@ public class ResultManager : MonoBehaviourPunCallbacks
         }
     }
 
+    public void CloseResult()
+    {
+        HideResultPanelImmediate();
+    }
+
     [ContextMenu("Show Test Result")]
-    public void ShowResult()
+public void ShowResult()
     {
         if (_isShowingResult)
         {
@@ -252,6 +274,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
         else
             Debug.Log("Winner Determined: (none)");
 
+        FinalizeCurrentRoundScores();
         BuildResultPanelUI();
         Debug.Log("Result Data Loaded");
 
@@ -285,9 +308,6 @@ public class ResultManager : MonoBehaviourPunCallbacks
         }
 
         StartCoroutine(AnimateRowsRoutine());
-
-        if (TurnManager.Instance != null)
-            TurnManager.Instance.StopTimer();
     }
 
     System.Collections.IEnumerator AnimateRowsRoutine()
@@ -363,6 +383,36 @@ public class ResultManager : MonoBehaviourPunCallbacks
         return raw.Split('\n')[0].Trim();
     }
 
+    void FinalizeCurrentRoundScores()
+    {
+        if (_currentRoundIndex < 0 || _currentRoundIndex >= RoundsPerMatch) return;
+
+        for (int seat = 0; seat < 4; seat++)
+            _roundDehlas[_currentRoundIndex][seat] = playerResults[seat].dehlasCollected;
+
+        Debug.Log($"[Result] Round R{_currentRoundIndex + 1} finalized: " +
+                  string.Join(", ", Enumerable.Range(0, 4).Select(i => $"{playerResults[i].name}={_roundDehlas[_currentRoundIndex][i]}")));
+    }
+
+    static int GetKotThreshold()
+    {
+        return TaashRules.IsTwoTaashMode ? KotDehlasTwoTaash : KotDehlasOneTaash;
+    }
+
+    static string FormatDehlaScore(int dehlas)
+    {
+        int kotThreshold = GetKotThreshold();
+        return dehlas == kotThreshold ? $"{dehlas} (KOT)" : dehlas.ToString();
+    }
+
+    static int SumRound(int[] roundScores)
+    {
+        int total = 0;
+        for (int i = 0; i < roundScores.Length; i++)
+            total += roundScores[i];
+        return total;
+    }
+
     void CalculateScores()
     {
         // Simple scoring based on Dehlas and tricks
@@ -386,121 +436,375 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
         if (resultPanel == null) return;
         
-        // Ensure MainFrame exists
+        // Load Wood Board background safely
+#if UNITY_EDITOR
+        if (woodBoardSprite == null)
+        {
+            woodBoardSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/Sprites/Images/BG_Buttons.png");
+        }
+#endif
+
+        // Ensure MainFrame exists and set its size & sprite to match the wooden board style
         Transform mainFrame = resultPanel.transform.Find("MainFrame");
         if (mainFrame == null)
         {
-            mainFrame = CreateRect("MainFrame", resultPanel.transform, Vector2.zero, new Vector2(800, 1000)).transform;
+            mainFrame = CreateRect("MainFrame", resultPanel.transform, Vector2.zero, new Vector2(1200, 780)).transform;
         }
         else
         {
-            // Clear previous children except specific ones if needed, but easier to just use containers
-            foreach (Transform child in mainFrame)
-            {
-                if (child.name != "ButtonsContainer" && child.name != "Title" && child.name != "Description")
-                    Destroy(child.gameObject);
-            }
+            ClearDynamicMainFrameContent(mainFrame);
         }
 
-        AddImage(mainFrame.gameObject, FrameColor);
+        // Apply Wood Background to MainFrame
+        var mainFrameImage = AddImage(mainFrame.gameObject, Color.white);
+        if (woodBoardSprite != null)
+        {
+            mainFrameImage.sprite = woodBoardSprite;
+            mainFrameImage.type = Image.Type.Simple;
+        }
+        else
+        {
+            // Fallback to high-quality dark theme if sprite is missing
+            mainFrameImage.color = PanelBgColor;
+        }
+
+        var rectMf = mainFrame.GetComponent<RectTransform>();
+        if (rectMf != null)
+        {
+            rectMf.sizeDelta = new Vector2(1200, 780);
+            rectMf.anchoredPosition = Vector2.zero;
+        }
+
         var shadow = mainFrame.gameObject.GetComponent<Shadow>();
         if (shadow == null) shadow = mainFrame.gameObject.AddComponent<Shadow>();
-        shadow.effectColor = new Color(0, 0, 0, 0.5f);
-        shadow.effectDistance = new Vector2(5, -5);
+        shadow.effectColor = new Color(0, 0, 0, 0.4f);
+        shadow.effectDistance = new Vector2(6, -6);
 
-        PlayerResult winner = playerResults.OrderBy(p => p.rank).First();
+        // Layout constants (shared so separators / dashed lines align with the rows)
+        float headerH = 150f;
+        float rowH = 60f;
+        float rowSpacing = 14f;
+        float sideColWidth = 130f;
+        float playerColWidth = 160f;
+        float colSpacing = 15f;
+        float tableCenterY = 90f;
+        float tableContentH = headerH + (4f * rowH) + (4f * rowSpacing); // 446
+        float tableWidth = (sideColWidth * 2f) + (playerColWidth * 4f) + (colSpacing * 5f); // 975
+        float tableTopEdge = tableCenterY + (tableContentH / 2f);
 
-        // Header Section
-        var headerGo = CreateRect("Header", mainFrame, new Vector2(0, 350), new Vector2(750, 250));
-        var vlgHeader = headerGo.AddComponent<VerticalLayoutGroup>();
-        vlgHeader.childAlignment = TextAnchor.MiddleCenter;
-        vlgHeader.spacing = 10;
-        vlgHeader.childControlHeight = vlgHeader.childControlWidth = false;
+        // 1. Create Round Close Button (X) at Top Right of the board
+        CreateCloseButton(mainFrame);
 
-        AddTmp(headerGo.transform, "WINNER", WinnerGoldColor, 64, TextAlignmentOptions.Center, FontStyles.Bold);
-        
-        // Winner Avatar
-        var avatarFrame = CreateRect("WinnerAvatarFrame", headerGo.transform, Vector2.zero, new Vector2(120, 120));
-        var avatarImgGo = CreateRect("AvatarImage", avatarFrame.transform, Vector2.zero, new Vector2(110, 110));
-        var img = AddImage(avatarImgGo, Color.white);
-        img.sprite = GetAvatarSprite(winner.actorNumber);
-        img.preserveAspect = true;
-        AddImage(avatarFrame.gameObject, WinnerGoldColor); // Gold border
+        // 2. Setup the Scorecard Grid (Table)
+        // Scorecard Table holds all columns horizontally
+        var scorecardTableGo = CreateRect("ScorecardTable", mainFrame, new Vector2(0, tableCenterY), new Vector2(tableWidth, tableContentH));
+        var hlg = scorecardTableGo.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = colSpacing;
+        hlg.childAlignment = TextAnchor.UpperCenter;
+        hlg.childControlWidth = false;
+        hlg.childControlHeight = false;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = false;
 
-        AddTmp(headerGo.transform, winner.name.ToUpper(), TextWhiteColor, 36, TextAlignmentOptions.Center, FontStyles.Bold);
+        // Round scores come from actual dehlas captured each chaal (no fake/demo data).
+        int[] r1_scores = _roundDehlas[0];
+        int[] r2_scores = _roundDehlas[1];
+        int[] r3_scores = _roundDehlas[2];
 
-        // Scoreboard Section
-        var scoreboardGo = CreateRect("Scoreboard", mainFrame, new Vector2(0, -50), new Vector2(700, 500));
-        var vlgScore = scoreboardGo.AddComponent<VerticalLayoutGroup>();
-        vlgScore.spacing = 15;
-        vlgScore.padding = new RectOffset(10, 10, 10, 10);
-        vlgScore.childControlWidth = true;
-        vlgScore.childForceExpandHeight = false;
+        int r1_total = SumRound(r1_scores);
+        int r2_total = SumRound(r2_scores);
+        int r3_total = SumRound(r3_scores);
 
-        foreach (var p in playerResults.OrderBy(x => x.rank))
+        // Player totals
+        int[] playerTotals = new int[4];
+        for (int i = 0; i < 4; i++)
         {
-            CreateScoreRow(scoreboardGo.transform, p);
+            playerTotals[i] = r1_scores[i] + r2_scores[i] + r3_scores[i];
         }
 
+        int grandTotal = r1_total + r2_total + r3_total;
+
+        // Find winner based on grand totals
+        int winningTotal = playerTotals.Max();
+        int winnerIndex = System.Array.IndexOf(playerTotals, winningTotal);
+
+        // --- Column 1: ROUNDS ---
+        var roundsCol = CreateColumn("RoundsColumn", scorecardTableGo.transform, sideColWidth, tableContentH, rowSpacing);
+        CreateLabelCell("ROUNDS", roundsCol.transform, sideColWidth, headerH, true);
+        CreateValueCell("R1", roundsCol.transform, sideColWidth, rowH, true);
+        CreateValueCell("R2", roundsCol.transform, sideColWidth, rowH, true);
+        CreateValueCell("R3", roundsCol.transform, sideColWidth, rowH, true);
+        CreateValueCell("TOTAL", roundsCol.transform, sideColWidth, rowH, true);
+        _dynamicRows.Add(roundsCol);
+
+        // --- Columns 2-5: PLAYERS ---
+        for (int seat = 0; seat < 4; seat++)
+        {
+            var pCol = CreateColumn($"PlayerColumn_{seat}", scorecardTableGo.transform, playerColWidth, tableContentH, rowSpacing);
+            
+            // Player Header Cell with Avatar and Name Box
+            CreatePlayerHeaderCell(seat, pCol.transform, playerColWidth, headerH);
+            
+            // R1 score
+            CreateValueCell(FormatDehlaScore(r1_scores[seat]), pCol.transform, playerColWidth, rowH, false,
+                isCurrentRound: _currentRoundIndex == 0);
+
+            // R2 score
+            CreateValueCell(FormatDehlaScore(r2_scores[seat]), pCol.transform, playerColWidth, rowH, false,
+                isCurrentRound: _currentRoundIndex == 1);
+
+            // R3 score
+            CreateValueCell(FormatDehlaScore(r3_scores[seat]), pCol.transform, playerColWidth, rowH, false,
+                isCurrentRound: _currentRoundIndex == 2);
+            
+            // Total score
+            bool isWinner = (seat == winnerIndex);
+            CreateValueCell(playerTotals[seat].ToString(), pCol.transform, playerColWidth, rowH, true, isWinner: isWinner);
+            
+            _dynamicRows.Add(pCol);
+        }
+
+        // --- Column 6: TOTAL ---
+        var totalCol = CreateColumn("TotalColumn", scorecardTableGo.transform, sideColWidth, tableContentH, rowSpacing);
+        CreateLabelCell("TOTAL", totalCol.transform, sideColWidth, headerH, true);
+        CreateValueCell(r1_total.ToString(), totalCol.transform, sideColWidth, rowH, true,
+            isCurrentRound: _currentRoundIndex == 0);
+        CreateValueCell(r2_total.ToString(), totalCol.transform, sideColWidth, rowH, true,
+            isCurrentRound: _currentRoundIndex == 1);
+        CreateValueCell(r3_total.ToString(), totalCol.transform, sideColWidth, rowH, true,
+            isCurrentRound: _currentRoundIndex == 2);
+        CreateValueCell(grandTotal.ToString(), totalCol.transform, sideColWidth, rowH, true, isWinner: true);
+        _dynamicRows.Add(totalCol);
+
+        // 3. Draw Vertical Column Dividers under MainFrame (computed from column widths)
+        float[] sepX = new float[] { -350f, -175f, 0f, 175f, 350f };
+        for (int i = 0; i < sepX.Length; i++)
+        {
+            var line = CreateRect($"SeparatorLine_{i}", mainFrame, new Vector2(sepX[i], tableCenterY), new Vector2(2, tableContentH - 20f));
+            AddImage(line, new Color(1f, 1f, 1f, 0.18f));
+        }
+
+        // 4. Draw Horizontal Dashed Divider Lines under MainFrame (computed to sit in the row gaps)
+        float gap1 = tableTopEdge - headerH - (rowSpacing / 2f);
+        float[] dashedY = new float[]
+        {
+            gap1,
+            gap1 - rowH - rowSpacing,
+            gap1 - (rowH + rowSpacing) * 2f,
+            gap1 - (rowH + rowSpacing) * 3f
+        };
+        for (int i = 0; i < dashedY.Length; i++)
+        {
+            var lineGo = CreateRect($"DashedLine_{i}", mainFrame, new Vector2(0, dashedY[i]), new Vector2(tableWidth, 20));
+            var txt = AddTmp(lineGo.transform, ". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .", new Color(1f, 1f, 1f, 0.25f), 18, TextAlignmentOptions.Center, FontStyles.Bold);
+            txt.rectTransform.anchoredPosition = Vector2.zero;
+        }
+
+        EnsureSceneButtons(mainFrame);
+    }
+
+    void ClearDynamicMainFrameContent(Transform mainFrame)
+    {
+        if (mainFrame == null) return;
+
+        var toDestroy = new List<GameObject>();
+        foreach (Transform child in mainFrame)
+        {
+            string childName = child.name;
+            if (childName == "ScorecardTable" || childName == "CloseButton")
+                toDestroy.Add(child.gameObject);
+            else if (childName.StartsWith("SeparatorLine_") || childName.StartsWith("DashedLine_"))
+                toDestroy.Add(child.gameObject);
+        }
+
+        foreach (GameObject go in toDestroy)
+            DestroyObjectSafe(go);
+    }
+
+    void EnsureSceneButtons(Transform mainFrame)
+    {
         Transform btnContainer = mainFrame.Find("ButtonsContainer");
         if (btnContainer == null)
         {
-            btnContainer = CreateRect("ButtonsContainer", mainFrame, new Vector2(0, -400), new Vector2(600, 100)).transform;
-            var hlg = btnContainer.gameObject.AddComponent<HorizontalLayoutGroup>();
-            hlg.spacing = 40;
-            hlg.childAlignment = TextAnchor.MiddleCenter;
-            hlg.childControlWidth = hlg.childControlHeight = true;
+            var btnContainerGo = CreateRect("ButtonsContainer", mainFrame, new Vector2(0, -300), new Vector2(700, 90));
+            var hlgBtn = btnContainerGo.AddComponent<HorizontalLayoutGroup>();
+            hlgBtn.spacing = 60;
+            hlgBtn.childAlignment = TextAnchor.MiddleCenter;
+            hlgBtn.childControlWidth = false;
+            hlgBtn.childControlHeight = false;
+            btnContainer = btnContainerGo.transform;
         }
-        btnContainer.SetAsLastSibling();
 
-        EnsureButton(ref restartButton, btnContainer, "RestartButton", "PLAY AGAIN", new Color(0.1f, 0.6f, 0.2f), OnRestartClicked);
-        EnsureButton(ref homeButton, btnContainer, "HomeButton", "HOME", new Color(0.6f, 0.2f, 0.1f), OnHomeClicked);
+        WireSceneButton(ref restartButton, btnContainer, "RestartButton", OnRestartClicked);
+        WireSceneButton(ref homeButton, btnContainer, "HomeButton", OnHomeClicked);
     }
 
-    void CreateScoreRow(Transform parent, PlayerResult p)
+    void WireSceneButton(ref Button btn, Transform container, string childName, UnityEngine.Events.UnityAction action)
     {
-        bool isWinner = p.rank == 1;
-        Color bg = isWinner ? new Color(0.5f, 0.4f, 0.1f, 0.6f) : RowBgColor;
+        if (btn == null)
+        {
+            Transform existing = container.Find(childName);
+            if (existing != null)
+                btn = existing.GetComponent<Button>();
+        }
+
+        if (btn == null)
+        {
+            Color fallbackColor = childName == "RestartButton"
+                ? new Color(0.12f, 0.65f, 0.28f)
+                : new Color(0.85f, 0.35f, 0.15f);
+            string label = childName == "RestartButton" ? "PLAY AGAIN" : "HOME";
+            EnsureFallbackButton(ref btn, container, childName, label, fallbackColor, action);
+            return;
+        }
+
+        if (btn.transform.parent != container)
+            btn.transform.SetParent(container, false);
+
+        EnableButtonVisuals(btn);
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(action);
+    }
+
+    static void EnableButtonVisuals(Button btn)
+    {
+        if (btn == null) return;
+        btn.enabled = true;
+        btn.interactable = true;
+        btn.gameObject.SetActive(true);
+
+        var img = btn.GetComponent<Image>();
+        if (img != null)
+            img.enabled = true;
+    }
+
+    void EnsureFallbackButton(ref Button btn, Transform parent, string goName, string label, Color bgColor, UnityEngine.Events.UnityAction action)
+    {
+        var go = CreateRect(goName, parent, Vector2.zero, new Vector2(280, 90));
+        AddImage(go, bgColor);
+        btn = go.AddComponent<Button>();
+        btn.targetGraphic = go.GetComponent<Image>();
+        var newTmp = AddTmp(go.transform, label, Color.white, 30, TextAlignmentOptions.Center, FontStyles.Bold);
+        newTmp.rectTransform.sizeDelta = new Vector2(280, 90);
+
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(action);
+
+        var colors = btn.colors;
+        colors.highlightedColor = bgColor * 1.2f;
+        colors.pressedColor = bgColor * 0.8f;
+        btn.colors = colors;
+    }
+
+    GameObject CreateColumn(string name, Transform parent, float width, float contentHeight, float spacing)
+    {
+        var col = CreateRect(name, parent, Vector2.zero, new Vector2(width, contentHeight));
+        col.AddComponent<CanvasGroup>(); // For fading/animation
+        var vlg = col.AddComponent<VerticalLayoutGroup>();
+        vlg.childAlignment = TextAnchor.UpperCenter;
+        vlg.spacing = spacing;
+        vlg.childControlWidth = false;
+        vlg.childControlHeight = false;
+        vlg.childForceExpandWidth = false;
+        vlg.childForceExpandHeight = false;
+        return col;
+    }
+
+    void CreateLabelCell(string text, Transform parent, float width, float height, bool isBold)
+    {
+        var cell = CreateRect("LabelCell", parent, Vector2.zero, new Vector2(width, height));
+        // Push label towards the bottom so it aligns with name boxes
+        var txt = AddTmp(cell.transform, text, Color.white, 28, TextAlignmentOptions.Bottom, isBold ? FontStyles.Bold : FontStyles.Normal);
+        txt.rectTransform.anchoredPosition = new Vector2(0, -25f);
+        txt.rectTransform.sizeDelta = new Vector2(width, height);
+    }
+
+    void CreatePlayerHeaderCell(int seatIndex, Transform parent, float width, float height)
+    {
+        var cell = CreateRect("PlayerHeaderCell", parent, Vector2.zero, new Vector2(width, height));
+
+        // 1. Avatar Border/Frame (Circle)
+        var avatarFrameGo = CreateRect("AvatarFrame", cell.transform, new Vector2(0, 35f), new Vector2(75, 75));
+        var borderImg = AddImage(avatarFrameGo, new Color(0.35f, 0.22f, 0.12f, 0.85f));
+        Sprite circleSprite = null;
+#if UNITY_EDITOR
+        circleSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/2D Cards Game Art Pack/Sprites/Characters/frame_circle.png");
+#endif
+        if (circleSprite != null) borderImg.sprite = circleSprite;
+
+        // 2. Avatar Inside Image
+        var avatarImgGo = CreateRect("AvatarImage", avatarFrameGo.transform, Vector2.zero, new Vector2(68, 68));
+        var avatarImg = AddImage(avatarImgGo, Color.white);
+        avatarImg.sprite = GetAvatarSprite(GetActorNumberBySeat(seatIndex));
+        avatarImg.preserveAspect = true;
+
+        // 3. Name BG Box (Brown Rounded)
+        var nameBoxGo = CreateRect("NameBox", cell.transform, new Vector2(0, -25f), new Vector2(140, 32));
+        var nameBoxImg = AddImage(nameBoxGo, new Color(0.35f, 0.22f, 0.12f, 1f));
+        if (woodBoardSprite != null)
+        {
+            nameBoxImg.sprite = woodBoardSprite;
+            nameBoxImg.type = Image.Type.Simple;
+        }
+
+        // 4. Name Text
+        string name = GetSeatDisplayName(seatIndex);
+        var nameTxt = AddTmp(nameBoxGo.transform, name, Color.white, 16, TextAlignmentOptions.Center, FontStyles.Bold);
+        nameTxt.rectTransform.anchoredPosition = Vector2.zero;
+        nameTxt.rectTransform.sizeDelta = new Vector2(130, 26);
+        nameTxt.overflowMode = TextOverflowModes.Ellipsis;
+    }
+
+    void CreateValueCell(string text, Transform parent, float width, float height, bool isBold, bool isWinner = false, bool isCurrentRound = false)
+    {
+        var cell = CreateRect("ValueCell", parent, Vector2.zero, new Vector2(width, height));
         
-        var row = new GameObject("PlayerRow", typeof(RectTransform), typeof(CanvasGroup), typeof(Image), typeof(HorizontalLayoutGroup));
-        row.transform.SetParent(parent, false);
-        var le = row.AddComponent<LayoutElement>();
-        le.preferredHeight = 80;
+        // Define colors
+        Color textColor = Color.white; // Default readable white on wood
+        int fontSize = 28;
+        FontStyles style = isBold ? FontStyles.Bold : FontStyles.Normal;
+
+        if (isWinner)
+        {
+            textColor = new Color(1f, 0.82f, 0.2f, 1f); // Golden Highlight for Winner
+            style = FontStyles.Bold;
+            fontSize = 30;
+        }
+        else if (isCurrentRound)
+        {
+            textColor = new Color(0.45f, 1f, 0.5f, 1f); // Bright green for current active round
+            style = FontStyles.Bold;
+        }
+
+        var txt = AddTmp(cell.transform, text, textColor, fontSize, TextAlignmentOptions.Center, style);
+        txt.rectTransform.anchoredPosition = Vector2.zero;
+        txt.rectTransform.sizeDelta = new Vector2(width, height);
+    }
+
+    void CreateCloseButton(Transform parent)
+    {
+        var btnGo = CreateRect("CloseButton", parent, new Vector2(540, 330), new Vector2(64, 64));
         
-        var img = row.GetComponent<Image>();
-        img.color = bg;
+        var bgImg = AddImage(btnGo, new Color(0.35f, 0.22f, 0.12f, 1f));
+        Sprite circleSprite = null;
+#if UNITY_EDITOR
+        circleSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/2D Cards Game Art Pack/Sprites/Characters/frame_circle.png");
+#endif
+        if (circleSprite != null) bgImg.sprite = circleSprite;
         
-        var hlg = row.GetComponent<HorizontalLayoutGroup>();
-        hlg.padding = new RectOffset(20, 20, 5, 5);
-        hlg.spacing = 20;
-        hlg.childAlignment = TextAnchor.MiddleLeft;
-        hlg.childControlWidth = false;
-        hlg.childForceExpandWidth = false;
+        var btn = btnGo.AddComponent<Button>();
+        btn.targetGraphic = bgImg;
+        btn.onClick.AddListener(CloseResult);
 
-        // Rank
-        var rankText = AddTmp(row.transform, $"#{p.rank}", isWinner ? WinnerGoldColor : TextWhiteColor, 32, TextAlignmentOptions.Left, FontStyles.Bold);
-        rankText.rectTransform.sizeDelta = new Vector2(60, 50);
-
-        // Avatar
-        var avatarFrame = CreateRect("AvatarFrame", row.transform, Vector2.zero, new Vector2(60, 60));
-        var avatarImgGo = CreateRect("Avatar", avatarFrame.transform, Vector2.zero, new Vector2(56, 56));
-        var aImg = AddImage(avatarImgGo, Color.white);
-        aImg.sprite = GetAvatarSprite(p.actorNumber);
-        aImg.preserveAspect = true;
-        if (isWinner) AddImage(avatarFrame.gameObject, WinnerGoldColor);
-
-        // Name
-        var nameText = AddTmp(row.transform, p.name, isWinner ? WinnerGoldColor : TextWhiteColor, 28, TextAlignmentOptions.Left);
-        nameText.rectTransform.sizeDelta = new Vector2(200, 50);
-        nameText.overflowMode = TextOverflowModes.Ellipsis;
-
-        // Score
-        AddTmp(row.transform, $"Score: {p.score}", TextGoldColor, 26, TextAlignmentOptions.Right).rectTransform.sizeDelta = new Vector2(140, 50);
-
-        // Dehlas
-        AddTmp(row.transform, $"Dehlas: {p.dehlasCollected}", TextWhiteColor, 26, TextAlignmentOptions.Right).rectTransform.sizeDelta = new Vector2(120, 50);
-
-        _dynamicRows.Add(row);
+        var txt = AddTmp(btnGo.transform, "X", Color.white, 26, TextAlignmentOptions.Center, FontStyles.Bold);
+        txt.rectTransform.anchoredPosition = Vector2.zero;
+        txt.rectTransform.sizeDelta = new Vector2(50, 50);
+        
+        var colors = btn.colors;
+        colors.normalColor = new Color(0.35f, 0.22f, 0.12f, 1f);
+        colors.highlightedColor = new Color(0.5f, 0.3f, 0.15f, 1f);
+        colors.pressedColor = new Color(0.2f, 0.1f, 0.05f, 1f);
+        btn.colors = colors;
     }
 
     Sprite GetAvatarSprite(int actorNumber)
@@ -546,39 +850,24 @@ public class ResultManager : MonoBehaviourPunCallbacks
         return tmp;
     }
 
-    void EnsureButton(ref Button btn, Transform parent, string goName, string label, Color bgColor, UnityEngine.Events.UnityAction action)
-    {
-        if (btn == null)
-        {
-            var go = CreateRect(goName, parent, Vector2.zero, new Vector2(250, 80));
-            AddImage(go, bgColor);
-            btn = go.AddComponent<Button>();
-            btn.targetGraphic = go.GetComponent<Image>();
-            AddTmp(go.transform, label, Color.white, 28, TextAlignmentOptions.Center, FontStyles.Bold);
-        }
-        else
-        {
-            btn.transform.SetParent(parent, false);
-            var img = btn.GetComponent<Image>();
-            if (img != null) img.color = bgColor;
-            var tmp = btn.GetComponentInChildren<TMP_Text>();
-            if (tmp != null) tmp.text = label;
-        }
-
-        btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(action);
-        
-        var colors = btn.colors;
-        colors.highlightedColor = bgColor * 1.2f;
-        colors.pressedColor = bgColor * 0.8f;
-        btn.colors = colors;
-    }
-
     void ClearDynamicUI()
     {
         foreach (var go in _dynamicRows)
-            if (go != null) Destroy(go);
+            if (go != null) DestroyObjectSafe(go);
         _dynamicRows.Clear();
+    }
+
+    void DestroyObjectSafe(GameObject go)
+    {
+        if (go == null) return;
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            DestroyImmediate(go);
+            return;
+        }
+#endif
+        Destroy(go);
     }
 
     void OnHomeClicked()
@@ -626,6 +915,13 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     void ResetMatchStats()
     {
+        _currentRoundIndex = 0;
+        for (int r = 0; r < RoundsPerMatch; r++)
+        {
+            for (int i = 0; i < 4; i++)
+                _roundDehlas[r][i] = 0;
+        }
+
         for (int i = 0; i < 4; i++)
         {
             playerResults[i].tricksWon = 0;

@@ -209,7 +209,8 @@ public class TurnManager : MonoBehaviourPunCallbacks
         PlayerHand myHand = PlayerHand.LocalInstance;
         if (myHand == null || myHand.myCards == null || myHand.myCards.Count == 0 || CardInteract.isPlayingCard) return;
 
-        List<CardData> legalCards = PlayerHand.GetValidCards(myHand.myCards, myHand.currentTrick);
+        int localActor = PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : -1;
+        List<CardData> legalCards = PlayerHand.GetValidCards(myHand.myCards, myHand.currentTrick, localActor);
         if (legalCards == null || legalCards.Count == 0) return;
         CardData cardToPlay = legalCards[0];
 

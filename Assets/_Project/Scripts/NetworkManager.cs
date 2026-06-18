@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using Photon.Pun; 
 using Photon.Realtime; 
@@ -78,13 +79,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             Debug.Log("[Photon] Assigned consistent UserId: " + uid);
         }
 
+        HideHomeUntilLogin();
+
         if (HasInternet())
             ConnectToPhoton();
     }
 
     void Start()
     {
-        // Home UI is shown only after GoogleLogin confirms a valid Firebase session
         HideHomeUntilLogin();
 
         EnsureLoadingDoesNotBlockUI();
@@ -141,9 +143,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (PhotonNetwork.IsConnectedAndReady
             && !PhotonNetwork.InLobby
-            && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
+            && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby
+            && CanCallPhotonLobbyOps()
+            && Instance != null)
         {
-            PhotonNetwork.JoinLobby();
+            Instance.EnsureJoinLobby();
         }
 
         photonStart = Time.unscaledTime;
@@ -178,13 +182,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return false;
 
         return PhotonNetwork.IsConnectedAndReady;
-    }
-
-    public void EnsureJoinLobby()
-    {
-        if (PhotonNetwork.OfflineMode || !PhotonNetwork.IsConnectedAndReady) return;
-        if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
-            PhotonNetwork.JoinLobby();
     }
 
     void RefreshPlayOnlineButtonState()
@@ -225,7 +222,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         ConnectToPhoton();
     }
 
-    static bool IsPhotonConnectingOrConnected()
+    public static bool IsPhotonConnectingOrConnected()
     {
         ClientState state = PhotonNetwork.NetworkClientState;
         return PhotonNetwork.IsConnected
@@ -233,6 +230,30 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             || state == ClientState.ConnectingToMasterServer
             || state == ClientState.Authenticating
             || state == ClientState.JoiningLobby;
+    }
+
+    public static bool CanCallPhotonLobbyOps()
+    {
+        if (PhotonNetwork.OfflineMode) return false;
+
+        ClientState state = PhotonNetwork.NetworkClientState;
+        if (state == ClientState.Disconnecting
+            || state == ClientState.DisconnectingFromMasterServer
+            || state == ClientState.DisconnectingFromGameServer
+            || state == ClientState.Leaving
+            || state == ClientState.Disconnected)
+            return false;
+
+        return PhotonNetwork.IsConnected;
+    }
+
+    public void EnsureJoinLobby()
+    {
+        if (!CanCallPhotonLobbyOps()) return;
+        if (!PhotonNetwork.IsConnectedAndReady) return;
+        if (PhotonNetwork.InRoom) return;
+        if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
+            PhotonNetwork.JoinLobby();
     }
 
     void ShowNoInternetLoading()
@@ -609,6 +630,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void UpdateUIState(bool isHome)
     {
+        if (isHome && !GoogleLogin.HasCompletedLoginFlow)
+        {
+            HideHomeUntilLogin();
+            return;
+        }
+
         if (isHome)
             ShowHomeUI();
         else
@@ -755,18 +782,43 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public static void InitializeGameplayScene()
     {
         Debug.Log("[GameStart] InitializeGameplayScene");
-        
-        if (PlayerHand.LocalInstance == null)
-            PlayerHand.ResolveLocalHand();
 
+        if (Instance != null)
+        {
+            Instance.EnsureLocalNetworkPlayer();
+            Instance.StartCoroutine(Instance.InitializeGameplaySceneWhenReady());
+            return;
+        }
+
+        RunInitializeGameplayScene();
+    }
+
+    IEnumerator InitializeGameplaySceneWhenReady()
+    {
+        EnsureLocalNetworkPlayer();
+
+        float timeout = 3f;
+        while (PlayerHand.LocalInstance == null && timeout > 0f)
+        {
+            PlayerHand.ResolveLocalHand();
+            if (PlayerHand.LocalInstance == null)
+                EnsureLocalNetworkPlayer();
+            yield return null;
+            timeout -= Time.deltaTime;
+        }
+
+        RunInitializeGameplayScene();
+    }
+
+    static void RunInitializeGameplayScene()
+    {
         if (PlayerHand.LocalInstance != null)
         {
             PlayerHand.LocalInstance.InitializeGameScene();
         }
-        else if (PhotonNetwork.InRoom)
+        else if (PhotonNetwork.InRoom || PhotonNetwork.OfflineMode)
         {
-            // Only log error if we are in a room where we expect the player to exist.
-            Debug.LogError("[GameStart ERROR] Missing PlayerHand");
+            Debug.LogWarning("[GameStart] PlayerHand still missing after spawn wait — will retry on next init.");
         }
 
         if (PlayerProfileSync.Instance != null)
@@ -817,8 +869,15 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
         else
         {
-            EnterOfflineModeAndStart();
+            StartCoroutine(EnterOfflineModeDeferred());
         }
+    }
+
+    IEnumerator EnterOfflineModeDeferred()
+    {
+        // Never CreateRoom from inside OnDisconnected — wait until Photon finishes dispatch.
+        yield return null;
+        EnterOfflineModeAndStart();
     }
 
     private void EnterOfflineModeAndStart()
@@ -888,8 +947,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             loadingCanvasGroup.gameObject.SetActive(false);
         });
 
-        // If we just finished initial loading and are in lobby, show home screen
-        if (PhotonNetwork.InLobby && homeCanvasGroup != null && homeCanvasGroup.alpha < 0.1f)
+        // Never auto-open home from Photon lobby until the user finishes login + profile setup.
+        if (GoogleLogin.HasCompletedLoginFlow
+            && PhotonNetwork.InLobby
+            && homeCanvasGroup != null
+            && homeCanvasGroup.alpha < 0.1f)
         {
             UpdateUIState(true);
         }
@@ -920,7 +982,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             if (PhotonNetwork.InRoom)
                 PhotonNetwork.LeaveRoom();
             else if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
-                PhotonNetwork.JoinLobby();
+                EnsureJoinLobby();
             return;
         }
 
@@ -929,7 +991,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             Debug.Log("[Photon] Connected during matchmaking — resuming lobby/match");
             HideLoading();
             if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
-                PhotonNetwork.JoinLobby();
+                EnsureJoinLobby();
             else if (ModeManager.Instance != null)
                 ModeManager.Instance.StartSmartMatchmakingFromNetwork();
             return;
@@ -999,7 +1061,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (pendingOfflineMatch)
         {
-            EnterOfflineModeAndStart();
+            StartCoroutine(EnterOfflineModeDeferred());
+            RefreshPlayOnlineButtonState();
+            return;
         }
         else if (cause != DisconnectCause.DisconnectByClientLogic && cause != DisconnectCause.None)
         {
@@ -1037,7 +1101,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             {
                 HideLoading();
                 if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
-                    PhotonNetwork.JoinLobby();
+                    EnsureJoinLobby();
                 else if (ModeManager.Instance != null)
                     ModeManager.Instance.StartSmartMatchmakingFromNetwork();
                 yield break;
@@ -1076,10 +1140,17 @@ yield return new WaitForSeconds(1f);
 
     public override void OnJoinedRoom()
     {
+        StartCoroutine(HandleJoinedRoomDeferred());
+    }
+
+    IEnumerator HandleJoinedRoomDeferred()
+    {
+        yield return null;
+
         if (_localMatchAbandoned)
         {
             PhotonNetwork.LeaveRoom();
-            return;
+            yield break;
         }
 
         bool rejoiningActiveGame = false;
@@ -1098,7 +1169,7 @@ yield return new WaitForSeconds(1f);
                 StayInPrivateLobbyUI();
                 HideReconnectPanels();
                 isAttemptingRejoin = false;
-                return;
+                yield break;
             }
         }
 
@@ -1125,18 +1196,7 @@ yield return new WaitForSeconds(1f);
         HideLoading();
         isAttemptingRejoin = false;
 
-        bool hasExistingPlayer = false;
-        foreach (var view in PhotonNetwork.PhotonViewCollection)
-        {
-            if (view.IsMine && view.gameObject.name.Contains("NetworkPlayer"))
-            {
-                hasExistingPlayer = true;
-                break;
-            }
-        }
-
-        if (!hasExistingPlayer)
-            PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
+        EnsureLocalNetworkPlayer();
 
         if (DeckManager.Instance != null && !DeckManager.IsPrivateFriendsRoom())
             DeckManager.Instance.OnRoomJoinedCheckStart();
@@ -1163,7 +1223,15 @@ yield return new WaitForSeconds(1f);
         }
 
         Debug.Log("[GameStart] Instantiating local NetworkPlayer");
-        PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
+        GameObject playerObj = PhotonNetwork.Instantiate("NetworkPlayer", Vector3.zero, Quaternion.identity);
+        if (playerObj != null)
+        {
+            PlayerHand hand = playerObj.GetComponent<PlayerHand>();
+            if (hand != null && hand.photonView != null && hand.photonView.IsMine)
+                PlayerHand.LocalInstance = hand;
+        }
+
+        PlayerHand.ResolveLocalHand();
     }
 
     /// <summary>
@@ -1228,11 +1296,7 @@ yield return new WaitForSeconds(1f);
 
         // Make sure the local NetworkPlayer exists BEFORE init/deal so PlayerHand.LocalInstance is valid.
         EnsureLocalNetworkPlayer();
-        if (PlayerHand.LocalInstance == null)
-            PlayerHand.ResolveLocalHand();
-        
-        if (PlayerHand.LocalInstance == null)
-            Debug.LogError("[GameStart ERROR] Missing PlayerHand");
+        PlayerHand.ResolveLocalHand();
 
         // 6. Show gameCanvasGroup + 7. Activate Panel_Game (+ SetAsLastSibling)
         // 8. Initialize PlayerHand, PlayerProfileSync, TrumpManager (done inside ShowGameScene).
@@ -1273,6 +1337,26 @@ yield return new WaitForSeconds(1f);
         dealingStarted = false;
         PhotonNetwork.OfflineMode = false;
         ReturnToHomeScreen();
+        StartCoroutine(EnsureLobbyAfterLeaveRoom());
+    }
+
+    IEnumerator EnsureLobbyAfterLeaveRoom()
+    {
+        float timeout = 8f;
+        while (timeout > 0f)
+        {
+            if (CanCallPhotonLobbyOps() && PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.InRoom)
+            {
+                EnsureJoinLobby();
+                yield break;
+            }
+
+            if (!IsPhotonConnectingOrConnected() && HasInternet())
+                ConnectToPhoton();
+
+            yield return new WaitForSeconds(0.25f);
+            timeout -= 0.25f;
+        }
     }
 
     public override void OnMasterClientSwitched(Player newMaster)

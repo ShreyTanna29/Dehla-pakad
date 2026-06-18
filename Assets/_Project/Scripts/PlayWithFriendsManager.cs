@@ -23,8 +23,27 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public GameObject modesPanel;
     public TMP_Text clientWaitingText;
 
+    [Header("Online Matchmaking (shared seat panel)")]
+    [Tooltip("Countdown / status text shown only while this panel is used as the online matchmaking lobby.")]
+    public TMP_Text matchmakingTimerText;
+    [Tooltip("Wooden plaque holding the timer text (shown only in online matchmaking mode).")]
+    public GameObject matchmakingTimerPlaque;
+    // When true the seat panel acts as the ONLINE matchmaking lobby (public room):
+    // timer is shown, PIN / Create / manual Start / Bots controls are hidden, and the
+    // match auto-starts (driven by DeckManager) once the table fills or the timer ends.
+    bool _onlineMode;
+    public bool IsOnlineMode => _onlineMode;
+
     [Header("Live Player List UI")]
     public TMP_Text[] playerSlotsText;
+    [Tooltip("Avatar Image under each chair, parallel index to playerSlotsText.")]
+    public UnityEngine.UI.Image[] playerSlotsAvatar;
+
+    [Header("Room Creation / PIN Display")]
+    [Tooltip("CREATE ROOM button shown until the private room exists.")]
+    public GameObject createRoomButton;
+    [Tooltip("Wooden plaque holding the ROOM ID text, shown once the room exists.")]
+    public GameObject roomIdPlaque;
 
     [Header("Toggle Bot Settings")]
     public GameObject includeBotsButton;
@@ -66,6 +85,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     bool _inviteListenerStarted;
     string _listenersBoundUserId;
     readonly HashSet<string> _gameInvitesSent = new HashSet<string>();
+    bool _pendingCreatePrivateRoom;
+    Coroutine _createRoomCoroutine;
 
     public IReadOnlyList<string> MyFriends => myFriends;
     public IReadOnlyDictionary<string, string> IncomingRequests => incomingRequests;
@@ -146,11 +167,23 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     void Start()
     {
         if (errorText != null) errorText.gameObject.SetActive(false);
-        if (startGameButton != null) startGameButton.SetActive(false);
         if (clientWaitingText != null) clientWaitingText.gameObject.SetActive(false);
         if (includeBotsButton != null) includeBotsButton.SetActive(false);
         ClearPlayerListUI();
         EnsureFriendServicesStarted();
+
+        // If this panel was activated as the online matchmaking lobby, do not touch the
+        // friends-only Start button — ShowOnlineMatchmakingLobby() already configured it.
+        if (_onlineMode) return;
+
+        // New flow: the Start button is always visible on the seat panel but stays
+        // greyed/disabled until the table is full. Re-apply correct state for any room.
+        if (startGameButton != null)
+        {
+            startGameButton.SetActive(true);
+            SetStartButtonInteractable(false);
+        }
+        CheckPlayerCountAndToggleStart();
     }
 
     /// <summary>Call after login / Photon ready so Firebase listeners use the real user id.</summary>
@@ -219,17 +252,49 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (errorText != null) errorText.gameObject.SetActive(false);
 
-        if (!PhotonNetwork.IsConnectedAndReady || (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.ConnectedToMasterServer))
+        if (PhotonNetwork.InRoom)
         {
-            if (PhotonNetwork.NetworkClientState == ClientState.ConnectedToNameServer)
-            {
-                 Debug.Log("[Photon] Still on NameServer. Waiting...");
-                 ShowUIError("Connecting to Master Server...");
-                 return;
-            }
-            ShowUIError("Server not ready. Wait a moment...");
+            ShowUIError("Leave the current room first.");
             return;
         }
+
+        if (PhotonNetwork.IsConnectedAndReady)
+        {
+            _pendingCreatePrivateRoom = false;
+            if (_createRoomCoroutine != null)
+            {
+                StopCoroutine(_createRoomCoroutine);
+                _createRoomCoroutine = null;
+            }
+            DoCreatePrivateRoom();
+            return;
+        }
+
+        if (!NetworkManager.HasInternet())
+        {
+            ShowUIError("No internet connection.");
+            return;
+        }
+
+        _pendingCreatePrivateRoom = true;
+
+        if (NetworkManager.IsPhotonConnectingOrConnected())
+            ShowUIError("Connecting... please wait.");
+        else
+        {
+            ShowUIError("Connecting to server...");
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ConnectToPhoton();
+        }
+
+        if (_createRoomCoroutine != null)
+            StopCoroutine(_createRoomCoroutine);
+        _createRoomCoroutine = StartCoroutine(WaitAndCreatePrivateRoomRoutine());
+    }
+
+    void DoCreatePrivateRoom()
+    {
+        if (!PhotonNetwork.IsConnectedAndReady || PhotonNetwork.InRoom) return;
 
         string newPin = Random.Range(10000, 99999).ToString();
         Debug.Log("Generating PIN: " + newPin);
@@ -244,6 +309,51 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         PhotonNetwork.CreateRoom(newPin, roomOptions);
     }
 
+    IEnumerator WaitAndCreatePrivateRoomRoutine()
+    {
+        float timeout = 20f;
+        while (timeout > 0f && _pendingCreatePrivateRoom)
+        {
+            if (PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.InRoom)
+            {
+                _pendingCreatePrivateRoom = false;
+                _createRoomCoroutine = null;
+                if (errorText != null) errorText.gameObject.SetActive(false);
+                DoCreatePrivateRoom();
+                yield break;
+            }
+
+            if (!NetworkManager.IsPhotonConnectingOrConnected() && NetworkManager.HasInternet()
+                && NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.ConnectToPhoton();
+            }
+
+            yield return new WaitForSeconds(0.25f);
+            timeout -= 0.25f;
+        }
+
+        _pendingCreatePrivateRoom = false;
+        _createRoomCoroutine = null;
+        if (!PhotonNetwork.IsConnectedAndReady)
+            ShowUIError("Could not connect. Try again.");
+    }
+
+    public override void OnConnectedToMaster()
+    {
+        if (_pendingCreatePrivateRoom && PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.InRoom)
+        {
+            if (_createRoomCoroutine != null)
+            {
+                StopCoroutine(_createRoomCoroutine);
+                _createRoomCoroutine = null;
+            }
+            _pendingCreatePrivateRoom = false;
+            if (errorText != null) errorText.gameObject.SetActive(false);
+            DoCreatePrivateRoom();
+        }
+    }
+
     // ==========================================
     // 2. CLIENT: JOIN ROOM WITH PIN
     // ==========================================
@@ -255,6 +365,19 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (pinInputField == null || string.IsNullOrEmpty(pinInputField.text))
         {
             ShowUIError("Enter valid PIN!");
+            return;
+        }
+
+        if (!PhotonNetwork.IsConnectedAndReady)
+        {
+            if (!NetworkManager.HasInternet())
+            {
+                ShowUIError("No internet connection.");
+                return;
+            }
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ConnectToPhoton();
+            ShowUIError("Connecting... please wait.");
             return;
         }
 
@@ -277,7 +400,15 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         if (!PhotonNetwork.IsConnectedAndReady)
         {
-            ShowUIError("Server not ready. Wait a moment...");
+            if (!NetworkManager.HasInternet())
+            {
+                ShowUIError("No internet connection.");
+                return;
+            }
+
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ConnectToPhoton();
+            ShowUIError("Connecting... please wait.");
             return;
         }
 
@@ -305,6 +436,13 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.CurrentRoom == null) return;
 
+        // Online matchmaking: this panel is the lobby — fill seats with real players.
+        if (_onlineMode)
+        {
+            UpdatePlayerListUI();
+            return;
+        }
+
         if (!PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
             Debug.Log("Private Room Joined. Waiting in Lobby...");
@@ -320,16 +458,23 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.CurrentRoom == null) return;
 
+        // New flow: ensure the seat panel itself is visible (a client may have joined
+        // via the JoinTable panel on the Modes screen) and hide the Modes panel.
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
+        if (modesPanel != null) modesPanel.SetActive(false);
+
+        // Friends mode: show PIN/Room ID plaque, hide online timer.
+        _onlineMode = false;
+        ApplyModeControls(false);
+        SetSeatPanelTitle("SELECT CHAIRS");
+
         if (pinCreationPanel != null)
         {
             pinCreationPanel.SetActive(true);
             pinCreationPanel.transform.SetAsLastSibling();
         }
-        if (generatedPinText != null) generatedPinText.text = "Room PIN: " + PhotonNetwork.CurrentRoom.Name;
+        if (generatedPinText != null) generatedPinText.text = "ROOM ID :- " + PhotonNetwork.CurrentRoom.Name;
         if (errorText != null) errorText.gameObject.SetActive(false);
-
-        if (modesPanel != null && !PhotonNetwork.IsMasterClient)
-            modesPanel.SetActive(false);
 
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("BotsIncluded", out object botsObj))
             ApplyBotsIncludedState((bool)botsObj);
@@ -370,9 +515,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
             if (i < realPlayerCount)
             {
-                string hostTag = currentPlayers[i].IsMasterClient ? " (Host)" : "";
-                playerSlotsText[i].text = currentPlayers[i].NickName + hostTag;
+                Player p = currentPlayers[i];
+                string hostTag = p.IsMasterClient ? " (Host)" : "";
+                playerSlotsText[i].text = p.NickName + hostTag;
                 playerSlotsText[i].color = Color.white;
+                SetSeatAvatar(i, GetAvatarIndexForPlayer(p), true);
             }
             else if (areBotsIncluded)
             {
@@ -380,13 +527,74 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                     ? "DehlaBot"
                     : "AI Bot " + (i - realPlayerCount + 1);
                 playerSlotsText[i].color = new Color(0.4f, 1f, 0.4f, 1f);
+                SetSeatAvatar(i, -1, true); // fallback bot avatar
             }
             else
             {
-                playerSlotsText[i].text = "Waiting for Friend...";
+                playerSlotsText[i].text = _onlineMode ? "Waiting..." : "Waiting for Friend...";
                 playerSlotsText[i].color = new Color(1f, 1f, 1f, 0.4f);
+                SetSeatAvatar(i, -1, false); // empty seat
             }
         }
+    }
+
+    // ==========================================
+    // SEAT AVATARS (real selected profile images)
+    // ==========================================
+
+    Sprite[] _avatarPoolCache;
+
+    /// <summary>Canonical avatar sprite pool (same list profile indices were chosen from).</summary>
+    Sprite[] GetAvatarPool()
+    {
+        if (PlayerProfileManager.Instance != null
+            && PlayerProfileManager.Instance.profileSprites != null
+            && PlayerProfileManager.Instance.profileSprites.Length > 0)
+        {
+            _avatarPoolCache = PlayerProfileManager.Instance.profileSprites;
+            return _avatarPoolCache;
+        }
+        if (_avatarPoolCache != null && _avatarPoolCache.Length > 0) return _avatarPoolCache;
+        if (MatchmakingManager.GlobalProfileSprites != null && MatchmakingManager.GlobalProfileSprites.Count > 0)
+            _avatarPoolCache = MatchmakingManager.GlobalProfileSprites.ToArray();
+        return _avatarPoolCache;
+    }
+
+    /// <summary>Avatar index a player selected: local uses PlayerPrefs, remote uses synced custom property.</summary>
+    int GetAvatarIndexForPlayer(Player p)
+    {
+        if (p == null) return -1;
+        if (PhotonNetwork.LocalPlayer != null && p.ActorNumber == PhotonNetwork.LocalPlayer.ActorNumber)
+        {
+            int local = PlayerProfileManager.GetSavedAvatarIndex();
+            if (local >= 0) return local;
+        }
+        if (p.CustomProperties != null
+            && p.CustomProperties.TryGetValue(PlayerProfileManager.PROP_AVATAR, out object val) && val != null)
+        {
+            if (val is int vi) return vi;
+            if (int.TryParse(val.ToString(), out int parsed)) return parsed;
+        }
+        return -1;
+    }
+
+    /// <summary>Assigns the avatar sprite for a seat. occupied=false dims the slot (empty seat).</summary>
+    void SetSeatAvatar(int seatIndex, int avatarIndex, bool occupied)
+    {
+        if (playerSlotsAvatar == null || seatIndex < 0 || seatIndex >= playerSlotsAvatar.Length) return;
+        UnityEngine.UI.Image img = playerSlotsAvatar[seatIndex];
+        if (img == null) return;
+
+        Sprite[] pool = GetAvatarPool();
+        if (pool != null && pool.Length > 0)
+        {
+            int idx = avatarIndex;
+            if (idx < 0 || idx >= pool.Length) idx = Mathf.Abs(seatIndex + 1) % pool.Length;
+            img.sprite = pool[idx];
+            img.preserveAspect = true;
+        }
+        // Dim empty seats, full colour for occupied ones.
+        img.color = occupied ? Color.white : new Color(1f, 1f, 1f, 0.25f);
     }
 
     void ClearPlayerListUI()
@@ -403,6 +611,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     void CheckPlayerCountAndToggleStart()
     {
+        // Online matchmaking auto-starts (DeckManager-driven) and has no manual Start button.
+        if (_onlineMode) return;
+
         if (startGameButton == null)
             UiSafeLookup.TryGet("Btn_StartPrivateGame", out startGameButton);
 
@@ -419,13 +630,195 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         if (startGameButton == null) return;
 
+        // Host always sees the Start button, but it stays greyed/disabled until the
+        // table is full (4 seats) or bots are included.
+        startGameButton.SetActive(true);
         bool canStart = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats || areBotsIncluded;
-        startGameButton.SetActive(canStart);
+        SetStartButtonInteractable(canStart);
+    }
+
+    void SetStartButtonInteractable(bool on)
+    {
+        if (startGameButton == null) return;
+
+        Button btn = startGameButton.GetComponent<Button>();
+        if (btn != null) btn.interactable = on;
+
+        CanvasGroup cg = startGameButton.GetComponent<CanvasGroup>();
+        if (cg == null) cg = startGameButton.AddComponent<CanvasGroup>();
+        cg.alpha = on ? 1f : 0.5f;
+        cg.interactable = on;
+        cg.blocksRaycasts = on;
+    }
+
+    /// <summary>
+    /// Called when the seat/lobby panel is opened (host taps Play on the modes screen).
+    /// Resets the player list and shows the Start button greyed-out until the table fills.
+    /// </summary>
+    public void OnSeatPanelOpened()
+    {
+        if (errorText != null) errorText.gameObject.SetActive(false);
+        ClearPlayerListUI();
+
+        if (startGameButton == null)
+            UiSafeLookup.TryGet("Btn_StartPrivateGame", out startGameButton);
+
+        if (startGameButton != null)
+        {
+            startGameButton.SetActive(true);
+            SetStartButtonInteractable(false);
+        }
+
+        // Friends mode: ensure online controls are off and PIN plaque is shown.
+        _onlineMode = false;
+        ApplyModeControls(false);
+        SetSeatPanelTitle("SELECT CHAIRS");
+
+        // New flow: the Create Room button is hidden on the seat panel, so the host
+        // automatically creates the private room as soon as this panel opens. Friends
+        // join from the Modes screen's JOIN TABLE panel using the shown ROOM ID.
+        if (!PhotonNetwork.InRoom)
+            CreatePrivateRoom();
+
+        CheckPlayerCountAndToggleStart();
+    }
+
+    // ==========================================
+    // ONLINE MATCHMAKING (shared seat panel)
+    // ==========================================
+
+    /// <summary>
+    /// Shows this seat panel as the ONLINE matchmaking lobby. Hides PIN / Create / manual
+    /// Start / Bots controls, shows the countdown timer, and fills seats with real players
+    /// as they join the public room. The match auto-starts (driven by DeckManager) once the
+    /// table is full or the timer expires.
+    /// </summary>
+    public void ShowOnlineMatchmakingLobby()
+    {
+        _onlineMode = true;
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
+        transform.SetAsLastSibling();
+
+        if (errorText != null) errorText.gameObject.SetActive(false);
+        if (modesPanel != null) modesPanel.SetActive(false);
+        if (startGameButton != null) startGameButton.SetActive(false); // online auto-starts
+
+        ApplyModeControls(true);
+        SetSeatPanelTitle("FINDING PLAYERS");
+
+        if (matchmakingTimerText != null) matchmakingTimerText.text = "Finding players...";
+
+        ClearPlayerListUI();
+        if (PhotonNetwork.InRoom) UpdatePlayerListUI();
+    }
+
+    /// <summary>Forwarded from DeckManager's matchmaking countdown (players found + seconds left).</summary>
+    public void UpdateOnlineTimer(int playersFound, int countdown)
+    {
+        if (!_onlineMode) return;
+
+        if (matchmakingTimerText != null)
+        {
+            matchmakingTimerText.text = playersFound >= DeckManager.MaxTableSeats
+                ? "Starting game..."
+                : $"Players: {playersFound}/{DeckManager.MaxTableSeats}    Starting in {Mathf.Max(0, countdown)}s";
+        }
+
+        if (PhotonNetwork.InRoom) UpdatePlayerListUI();
+    }
+
+    /// <summary>Hides the seat panel (used on match found / cancel for the online flow).</summary>
+    public void HideLobby()
+    {
+        _onlineMode = false;
+        ApplyModeControls(false);
+        HidePrivateFriendsLobbyUI();
+        if (gameObject.activeSelf) gameObject.SetActive(false);
+    }
+
+    /// <summary>Toggles friends-only vs online-only seat-panel controls.</summary>
+    void ApplyModeControls(bool online)
+    {
+        GameObject createBtn = createRoomButton;
+        if (createBtn == null)
+        {
+            Transform t = transform.Find("ContentArea/Host Section/Btn_CreateRoom");
+            if (t != null) createBtn = t.gameObject;
+        }
+        if (createBtn != null) createBtn.SetActive(false); // room auto-creates in both flows
+
+        Transform join = transform.Find("ContentArea/Join Section");
+        if (join != null) join.gameObject.SetActive(false); // join handled on the modes screen
+
+        GameObject plaque = roomIdPlaque;
+        if (plaque == null)
+        {
+            Transform t = transform.Find("RoomIdPlaque");
+            if (t != null) plaque = t.gameObject;
+        }
+        if (plaque != null) plaque.SetActive(!online); // PIN/Room ID only for friends
+
+        if (online && includeBotsButton != null) includeBotsButton.SetActive(false);
+
+        if (matchmakingTimerPlaque != null) matchmakingTimerPlaque.SetActive(online);
+        if (matchmakingTimerText != null) matchmakingTimerText.gameObject.SetActive(online);
+    }
+
+    void SetSeatPanelTitle(string text)
+    {
+        Transform t = transform.Find("TitlePlaque/Title");
+        if (t == null) t = transform.Find("Title");
+        if (t != null)
+        {
+            TMP_Text label = t.GetComponent<TMP_Text>();
+            if (label != null) label.text = text;
+        }
+    }
+
+    /// <summary>
+    /// Seat-panel BACK button. In online matchmaking it cancels the search; in friends
+    /// mode it leaves the private room and returns to the modes screen.
+    /// </summary>
+    public void OnSeatPanelBackClicked()
+    {
+        if (_onlineMode)
+        {
+            if (MatchmakingManager.Instance != null)
+                MatchmakingManager.Instance.OnCancelClicked();
+            else
+                HideLobby();
+            return;
+        }
+
+        LeavePrivateRoomIfAny();
+        HidePrivateFriendsLobbyUI();
+        gameObject.SetActive(false);
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.OnClick_ClosePlayWithFriends();
+    }
+
+    /// <summary>Leaves the private (invisible) room if we are currently in one.</summary>
+    public void LeavePrivateRoomIfAny()
+    {
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null
+            && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
+        {
+            PhotonNetwork.LeaveRoom();
+        }
     }
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
-        if (PhotonNetwork.CurrentRoom == null || PhotonNetwork.CurrentRoom.IsVisible) return;
+        if (PhotonNetwork.CurrentRoom == null) return;
+
+        // Online matchmaking lobby: seat the newly joined real player.
+        if (_onlineMode)
+        {
+            UpdatePlayerListUI();
+            return;
+        }
+
+        if (PhotonNetwork.CurrentRoom.IsVisible) return;
 
         if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats && areBotsIncluded)
         {
@@ -441,10 +834,26 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
     {
+        if (_onlineMode)
+        {
+            UpdatePlayerListUI();
+            return;
+        }
+
         if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
             UpdatePlayerListUI();
             CheckPlayerCountAndToggleStart();
+        }
+    }
+
+    public override void OnPlayerPropertiesUpdate(Player targetPlayer, ExitGames.Client.Photon.Hashtable changedProps)
+    {
+        // Refresh seat avatars when a player's selected avatar arrives/changes.
+        if (changedProps != null && changedProps.ContainsKey(PlayerProfileManager.PROP_AVATAR)
+            && gameObject.activeInHierarchy && PhotonNetwork.InRoom)
+        {
+            UpdatePlayerListUI();
         }
     }
 
@@ -574,10 +983,35 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
     }
 
-    public void OpenModesPanel() => OpenModesPanelForHost();
+    // New flow: modes are chosen BEFORE the seat panel opens, so the seat panel's
+    // Start button now starts the game directly instead of re-opening the modes panel.
+    public void OpenModesPanel() => OnHostStartFriendsGame();
 
     // Backward-compatible alias for Btn_StartPrivateGame
-    public void StartPrivateGame() => OpenModesPanelForHost();
+    public void StartPrivateGame() => OnHostStartFriendsGame();
+
+    /// <summary>
+    /// Host pressed Start on the seat panel. Only proceeds when the table is full
+    /// (4 players) or bots are included, then routes through the single ModeManager
+    /// start router which performs the private-friends final start.
+    /// </summary>
+    public void OnHostStartFriendsGame()
+    {
+        if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        bool full = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats || areBotsIncluded;
+        if (!full)
+        {
+            ShowUIError("Need 4 players to start!");
+            return;
+        }
+
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.StartGameFromModePanel();
+        else
+            FinalStartWithSelectedModes();
+    }
 
     void ResolveModesPanel()
     {
@@ -773,9 +1207,30 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public void DisplayMyID()
     {
+        ResolveMyUserIdText();
         if (myUserIdText == null) return;
-        string id = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
-        myUserIdText.text = "My ID: " + id;
+
+        // Show the short public UID (PUBG / Free Fire style). Tap to copy it.
+        string uid = GameUidService.LocalGameUid;
+        UidUI.BindCopyLabel(myUserIdText, uid, "My UID: ");
+    }
+
+    void ResolveMyUserIdText()
+    {
+        if (myUserIdText != null) return;
+
+        // The Friends panel header has a "Text_MyID" label that may not be wired in the inspector.
+        if (FriendsPanelUIController.Instance != null)
+        {
+            foreach (Transform t in FriendsPanelUIController.Instance.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name == "Text_MyID")
+                {
+                    myUserIdText = t.GetComponent<TMP_Text>();
+                    break;
+                }
+            }
+        }
     }
 
     public void UI_AddFriendBtnClicked()

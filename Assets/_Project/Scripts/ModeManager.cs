@@ -10,6 +10,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
 {
     public static ModeManager Instance;
 
+    // Shared UI tints for modes + home panels (hex: CBA06B / 6D360D)
+    public static readonly Color ModeSelectedColor = new Color(0xCB / 255f, 0xA0 / 255f, 0x6B / 255f, 1f);
+    public static readonly Color ModeUnselectedColor = new Color(0x6D / 255f, 0x36 / 255f, 0x0D / 255f, 1f);
+
     [Header("UI Panels")]
     public GameObject panelModes; 
     public GameObject panelHomeScreen;
@@ -19,7 +23,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     [Header("Game Modes Settings")]
     public int currentTrickMode = 1;
-    public int currentTrumpMode = 3;
+    public int currentTrumpMode = 1;
     public int currentSarMode = 1;
     public int currentLogicMode = 1;
 
@@ -36,6 +40,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public Image btnLogicA;
     public Image btnLogicB;
     public Image btnLogicC;
+
+    [Header("Sliding Toggles")]
+    public SlidingModeToggle deckToggle;
+    public SlidingModeToggle handsToggle;
 
     private bool findMatchAfterLobby = false;
     private bool isFriendsMatchMode = false;
@@ -205,15 +213,36 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     void RestoreSavedModes()
     {
-        if (PlayerPrefs.HasKey(PrefsTrickMode))
-            currentTrickMode = PlayerPrefs.GetInt(PrefsTrickMode, 1);
-        if (PlayerPrefs.HasKey(PrefsTrumpMode))
-            currentTrumpMode = PlayerPrefs.GetInt(PrefsTrumpMode, 1);
-        if (PlayerPrefs.HasKey(PrefsSarMode))
-            currentSarMode = PlayerPrefs.GetInt(PrefsSarMode, 1);
-        if (PlayerPrefs.HasKey(PrefsLogicMode))
-            currentLogicMode = PlayerPrefs.GetInt(PrefsLogicMode, 1);
+        bool hasSavedModes = PlayerPrefs.HasKey(PrefsTrickMode)
+            || PlayerPrefs.HasKey(PrefsTrumpMode)
+            || PlayerPrefs.HasKey(PrefsSarMode)
+            || PlayerPrefs.HasKey(PrefsLogicMode);
+
+        if (!hasSavedModes)
+        {
+            ApplyDefaultModes();
+        }
+        else
+        {
+            if (PlayerPrefs.HasKey(PrefsTrickMode))
+                currentTrickMode = PlayerPrefs.GetInt(PrefsTrickMode, 1);
+            if (PlayerPrefs.HasKey(PrefsTrumpMode))
+                currentTrumpMode = PlayerPrefs.GetInt(PrefsTrumpMode, 1);
+            if (PlayerPrefs.HasKey(PrefsSarMode))
+                currentSarMode = PlayerPrefs.GetInt(PrefsSarMode, 1);
+            if (PlayerPrefs.HasKey(PrefsLogicMode))
+                currentLogicMode = PlayerPrefs.GetInt(PrefsLogicMode, 1);
+        }
+
         ApplyModesToGameSettings();
+    }
+
+    void ApplyDefaultModes()
+    {
+        currentTrickMode = 1;   // 1 Taash
+        currentTrumpMode = 1;     // Trump Spades
+        currentSarMode = 1;       // 1 Hands (Sir)
+        currentLogicMode = 1;
     }
 
     public void SaveSelectedModes()
@@ -274,10 +303,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public void OpenModePanelFromHome() => OnClick_PlayOnline_Home();
 
-    void OpenModePanelInternal()
+    void OpenModePanelInternal(bool friendsMode = false)
     {
         GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
-        isFriendsMatchMode = false;
+        isFriendsMatchMode = friendsMode;
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
@@ -330,22 +359,44 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public void ApplyHomeScreenButtonColors()
     {
+        ApplyHomePlayButtonVisual("Button_PlayOnline", ModeUnselectedColor);
+        ApplyHomePlayButtonVisual("Button_PlayBots", ModeUnselectedColor);
+
+        Color friendsColor = isFriendsMatchMode ? ModeSelectedColor : ModeUnselectedColor;
+        ApplyHomePlayButtonVisual("Button_PlayFriends", friendsColor);
+
         Color bright = Color.white;
-        SetButtonImageColor("Button_PlayOnline", bright);
-        SetButtonImageColor("Button_PlayBots", bright);
-        SetButtonImageColor("Button_PlayFriends", bright);
-        SetButtonImageColor("Button_InviteFriends", bright);
-        SetButtonImageColor("Button_Shop", bright);
-        SetButtonImageColor("Button_Settings", bright);
-        SetButtonImageColor("Button_Share", bright);
-        SetButtonImageColor("Button_NoADS", bright);
+        SetUtilityButtonColor("Button_InviteFriends", bright);
+        SetUtilityButtonColor("Button_Shop", bright);
+        SetUtilityButtonColor("Button_Settings", bright);
+        SetUtilityButtonColor("Button_Share", bright);
+        SetUtilityButtonColor("Button_NoADS", bright);
     }
 
-    void SetButtonImageColor(string objectName, Color color)
+    void ApplyHomePlayButtonVisual(string objectName, Color color)
+    {
+        EnsureUiSearchRoot();
+        if (!UiSafeLookup.TryGet(objectName, out GameObject go) || go == null) return;
+
+        Image img = go.GetComponent<Image>();
+        if (img != null)
+            img.color = color;
+
+        Button btn = go.GetComponent<Button>();
+        if (btn != null)
+            btn.transition = Selectable.Transition.None;
+    }
+
+    void SetUtilityButtonColor(string objectName, Color color)
     {
         EnsureUiSearchRoot();
         if (!UiSafeLookup.TryGetImage(objectName, out Image img) || img == null) return;
         img.color = color;
+    }
+
+    void SetButtonImageColor(string objectName, Color color)
+    {
+        SetUtilityButtonColor(objectName, color);
     }
 
     public void OnClick_TrickMode(int mode, bool broadcastToRoom = true)
@@ -376,12 +427,11 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (GameSettings.Instance != null)
             GameSettings.Instance.currentMatchType = MatchType.PlayWithFriends;
         UpdateFriendsOverlay();
-        ResetButtonScales();
         ApplyHomeScreenButtonColors();
-        UpdateModeSelectionUIColors();
 
-        if (panelPlayWithFriends != null)
-            panelPlayWithFriends.SetActive(true);
+        // New flow: open the Modes panel FIRST. The seat (Play-with-Friends) panel
+        // opens later, after the host taps Play on the modes screen.
+        OpenModePanelInternal(true);
     }
 
     public void OnClick_ClosePlayWithFriends()
@@ -522,51 +572,76 @@ public class ModeManager : MonoBehaviourPunCallbacks
         UiSafeLookup.TryGetImage("Button_LogicC", out btnLogicC);
     }
 
+    void ResolveModeToggles()
+    {
+        if (deckToggle == null && UiSafeLookup.TryGet("DeckToggle", out GameObject dGo) && dGo != null)
+            deckToggle = dGo.GetComponent<SlidingModeToggle>();
+        if (handsToggle == null && UiSafeLookup.TryGet("HandsToggle", out GameObject hGo) && hGo != null)
+            handsToggle = hGo.GetComponent<SlidingModeToggle>();
+    }
+
     void UpdateModeSelectionUIColors()
     {
         ResolveModeButtonImages();
+        ResolveModeToggles();
 
-        Color selectedColor = Color.white;
-        Color unselectedColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+        if (deckToggle != null)
+            deckToggle.SetValue(currentTrickMode, animate: true, notify: false);
+        if (handsToggle != null)
+            handsToggle.SetValue(currentSarMode, animate: true, notify: false);
+
+        // Selected buttons tint (hex: CBA06B), unselected (hex: 6D360D)
+        Color selectedColor = ModeSelectedColor;
+        Color unselectedColor = ModeUnselectedColor;
 
         if (btn1Taash != null)
-            btn1Taash.color = currentTrickMode == 1 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btn1Taash, currentTrickMode == 1 ? selectedColor : unselectedColor);
 
         if (btn2Taash != null)
-            btn2Taash.color = currentTrickMode == 2 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btn2Taash, currentTrickMode == 2 ? selectedColor : unselectedColor);
 
         if (btn1Sar != null && SarModeSelector.Instance == null)
-            btn1Sar.color = currentSarMode == 1 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btn1Sar, currentSarMode == 1 ? selectedColor : unselectedColor);
 
         if (btn2Sar != null && SarModeSelector.Instance == null)
-            btn2Sar.color = currentSarMode == 2 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btn2Sar, currentSarMode == 2 ? selectedColor : unselectedColor);
 
         if (btnPresetTrump != null)
-            btnPresetTrump.color = currentTrumpMode == 1 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btnPresetTrump, currentTrumpMode == 1 ? selectedColor : unselectedColor);
 
         if (btn13thCard != null)
-            btn13thCard.color = currentTrumpMode == 2 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btn13thCard, currentTrumpMode == 2 ? selectedColor : unselectedColor);
 
         // Button_PlayFirstCut is repurposed to Hidden Trump (mode 5).
         if (btnFirstCut != null)
-            btnFirstCut.color = currentTrumpMode == 5 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btnFirstCut, currentTrumpMode == 5 ? selectedColor : unselectedColor);
 
         if (btnCut2Trump != null)
-            btnCut2Trump.color = currentTrumpMode == 4 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btnCut2Trump, currentTrumpMode == 4 ? selectedColor : unselectedColor);
 
         if (btnLogicA != null)
-            btnLogicA.color = currentLogicMode == 1 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btnLogicA, currentLogicMode == 1 ? selectedColor : unselectedColor);
 
         if (btnLogicB != null)
-            btnLogicB.color = currentLogicMode == 2 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btnLogicB, currentLogicMode == 2 ? selectedColor : unselectedColor);
 
         if (btnLogicC != null)
-            btnLogicC.color = currentLogicMode == 3 ? selectedColor : unselectedColor;
+            ApplyModeButtonColor(btnLogicC, currentLogicMode == 3 ? selectedColor : unselectedColor);
 
         Debug.Log($"[Mode UI] Trick={currentTrickMode} | Trump={currentTrumpMode} | Sar={currentSarMode} | Logic={currentLogicMode}");
 
         if (SarModeSelector.Instance != null)
             SarModeSelector.Instance.UpdateButtonVisuals();
+    }
+
+    static void ApplyModeButtonColor(Image img, Color color)
+    {
+        if (img == null) return;
+        img.color = color;
+
+        Button btn = img.GetComponent<Button>();
+        if (btn != null)
+            btn.transition = Selectable.Transition.None;
     }
 
     // Scene Mode-Panel Start button is wired to OnClick_FindMatch.
@@ -597,6 +672,25 @@ public class ModeManager : MonoBehaviourPunCallbacks
             : MatchType.OnlinePhoton;
 
         Debug.Log($"[StartRoute] MatchType = {(isPrivateFriends ? "PlayWithFriends (private room)" : matchType.ToString())} | isPlayBotsMode={isBots}");
+
+        // NEW FLOW: Friends mode chosen but no private room yet -> the host has just
+        // finished selecting modes. Open the seat/lobby panel so a room can be created
+        // and friends can join. The match starts later from that panel's Start button
+        // (enabled once all 4 seats are filled).
+        if (isFriendsMatchMode && !isPrivateFriends)
+        {
+            Debug.Log("[StartRoute] Friends mode -> opening seat panel (modes already chosen)");
+            SaveSelectedModes();
+            if (panelModes != null) panelModes.SetActive(false);
+            if (panelPlayWithFriends != null)
+            {
+                panelPlayWithFriends.SetActive(true);
+                panelPlayWithFriends.transform.SetAsLastSibling();
+            }
+            if (PlayWithFriendsManager.Instance != null)
+                PlayWithFriendsManager.Instance.OnSeatPanelOpened();
+            return;
+        }
 
         if (gameStartInProgress)
         {
@@ -720,11 +814,18 @@ public class ModeManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        if (!PhotonNetwork.InLobby && PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
+        if (!PhotonNetwork.InLobby)
         {
-            Debug.Log("[Photon] Attempt Join Lobby (before matchmaking)");
             findMatchAfterLobby = true;
-            PhotonNetwork.JoinLobby();
+            if (PhotonNetwork.NetworkClientState != ClientState.JoiningLobby)
+            {
+                Debug.Log("[Photon] Attempt Join Lobby (before matchmaking)");
+                PhotonNetwork.JoinLobby();
+            }
+            else
+            {
+                Debug.Log("[Photon] Waiting for lobby join before matchmaking");
+            }
             return;
         }
 
@@ -813,6 +914,13 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
+        StartCoroutine(HandleModeJoinedRoomDeferred());
+    }
+
+    IEnumerator HandleModeJoinedRoomDeferred()
+    {
+        yield return null;
+
         if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
             bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs1) && (bool)gs1;
@@ -820,7 +928,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
             {
                 Debug.Log("Private Room Joined. Waiting in Lobby...");
                 GameFlowState.SetPhase(GameFlowPhase.InRoom);
-                return;
+                yield break;
             }
         }
 

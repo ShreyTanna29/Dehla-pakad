@@ -9,55 +9,62 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Mockup-style Friends panel: My Friends tab (list + game INVITE) and Invite tab (search/add + requests).
-/// Wire tab buttons, containers, and row prefabs in Inspector after Unity AI builds the UI.
+/// Wooden Friends panel matching the approved mockup: two tabs (FRIENDS / REQUESTS).
+/// Rows are built programmatically — circular avatar, name, and circular icon buttons
+/// (red person-x = decline/remove, green person-plus = accept/invite). No row prefabs needed.
 /// </summary>
 public class FriendsPanelUIController : MonoBehaviour
 {
     public static FriendsPanelUIController Instance;
 
-    const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
-
     public enum PanelTab
     {
-        MyFriends,
-        Invite
+        Friends,
+        Requests
     }
 
     [Header("Tabs")]
-    public Button myFriendsTabButton;
-    public Button inviteTabButton;
-    public GameObject myFriendsTabContent;
-    public GameObject inviteTabContent;
-    public Image myFriendsTabHighlight;
-    public Image inviteTabHighlight;
-    public Color activeTabColor = Color.white;
-    public Color inactiveTabColor = new Color(0.55f, 0.55f, 0.55f, 1f);
+    public Button friendsTabButton;
+    public Button requestsTabButton;
+    public Image friendsTabBg;
+    public Image requestsTabBg;
+    public GameObject requestsBadge;
+    public TMP_Text requestsBadgeText;
 
-    [Header("My Friends Tab")]
-    public Transform myFriendsListContainer;
-    public GameObject friendListRowPrefab;
-
-    [Header("Invite Tab — Search & Add")]
-    public TMP_InputField searchInputField;
-    public TMP_InputField addByIdInputField;
-    public Button searchButton;
-    public Button addByIdButton;
-    public Transform searchResultsContainer;
-    public GameObject searchResultRowPrefab;
-
-    [Header("Invite Tab — Friend Requests")]
-    public GameObject requestsSection;
+    [Header("Content Roots")]
+    public GameObject friendsContent;
+    public GameObject requestsContent;
+    public Transform friendsListContainer;
     public Transform requestsListContainer;
-    public GameObject requestRowPrefab;
-    public TMP_Text requestsCountLabel;
+    public GameObject friendsEmptyLabel;
+    public GameObject requestsEmptyLabel;
 
-    [Header("Invite Button Colors")]
-    public Color inviteAvailableColor = new Color(0.2f, 0.75f, 0.25f, 1f);
-    public Color inviteSentColor = new Color(0.45f, 0.45f, 0.45f, 1f);
+    [Header("Search (in Friends tab)")]
+    public TMP_InputField searchInputField;
+    public Button searchButton;
+    public Button searchClearButton;
 
-    PanelTab _activeTab = PanelTab.MyFriends;
+    [Header("Theme (auto-loaded in editor if empty)")]
+    public Sprite circleFrameSprite;
+    public Sprite circleButtonSprite;
+    public Sprite acceptIconSprite;
+    public Sprite declineIconSprite;
+    public List<Sprite> avatarPool = new List<Sprite>();
+    public TMP_FontAsset customFont;
+
+    // Reference mockup colors
+    static readonly Color GreenBtn = Hex("#1ab26a");
+    static readonly Color RedBtn = Hex("#df0007");
+    static readonly Color ActiveTabTint = Color.white;
+    static readonly Color InactiveTabTint = new Color(0.55f, 0.55f, 0.55f, 1f);
+    static readonly Color DividerColor = new Color(0f, 0f, 0f, 0.28f);
+    static readonly Color HighlightLineColor = new Color(1f, 1f, 1f, 0.10f);
+
+    const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
+
+    PanelTab _activeTab = PanelTab.Friends;
     DatabaseReference _usersDb;
+    bool _searchActive;
 
     void Awake()
     {
@@ -67,6 +74,7 @@ public class FriendsPanelUIController : MonoBehaviour
             Destroy(this);
             return;
         }
+        ResolveThemeAssets();
     }
 
     void OnDestroy()
@@ -76,23 +84,46 @@ public class FriendsPanelUIController : MonoBehaviour
 
     void Start()
     {
-        _usersDb = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference;
+        try { _usersDb = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference; }
+        catch (System.Exception e) { Debug.LogWarning("[FriendsPanel] Firebase not ready: " + e.Message); }
         WireButtons();
-        ShowTab(PanelTab.MyFriends);
+        ShowTab(PanelTab.Friends);
+    }
+
+    void ResolveThemeAssets()
+    {
+#if UNITY_EDITOR
+        if (circleFrameSprite == null)
+            circleFrameSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/2D Cards Game Art Pack/Sprites/Characters/frame_circle.png");
+        if (circleButtonSprite == null)
+            circleButtonSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png");
+        if (acceptIconSprite == null)
+            acceptIconSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/Sprites/Images/NEW/Icon_AcceptFriend.png");
+        if (declineIconSprite == null)
+            declineIconSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/Sprites/Images/NEW/Icon_DeclineFriend.png");
+        if (avatarPool == null || avatarPool.Count == 0)
+        {
+            avatarPool = new List<Sprite>();
+            for (int i = 1; i <= 10; i++)
+            {
+                var s = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>($"Assets/_Project/Art/Sprites/Profile_Images/Profile{i}.png");
+                if (s != null) avatarPool.Add(s);
+            }
+        }
+#endif
     }
 
     void WireButtons()
     {
-        if (myFriendsTabButton != null)
+        if (friendsTabButton != null)
         {
-            myFriendsTabButton.onClick.RemoveAllListeners();
-            myFriendsTabButton.onClick.AddListener(() => ShowTab(PanelTab.MyFriends));
+            friendsTabButton.onClick.RemoveAllListeners();
+            friendsTabButton.onClick.AddListener(() => ShowTab(PanelTab.Friends));
         }
-
-        if (inviteTabButton != null)
+        if (requestsTabButton != null)
         {
-            inviteTabButton.onClick.RemoveAllListeners();
-            inviteTabButton.onClick.AddListener(() => ShowTab(PanelTab.Invite));
+            requestsTabButton.onClick.RemoveAllListeners();
+            requestsTabButton.onClick.AddListener(() => ShowTab(PanelTab.Requests));
         }
 
         if (searchButton != null)
@@ -100,11 +131,16 @@ public class FriendsPanelUIController : MonoBehaviour
             searchButton.onClick.RemoveAllListeners();
             searchButton.onClick.AddListener(SearchPlayersByName);
         }
-
-        if (addByIdButton != null)
+        if (searchClearButton != null)
         {
-            addByIdButton.onClick.RemoveAllListeners();
-            addByIdButton.onClick.AddListener(AddFriendById);
+            searchClearButton.onClick.RemoveAllListeners();
+            searchClearButton.onClick.AddListener(ClearSearch);
+            searchClearButton.gameObject.SetActive(false);
+        }
+        if (searchInputField != null)
+        {
+            searchInputField.onSubmit.RemoveAllListeners();
+            searchInputField.onSubmit.AddListener(_ => SearchPlayersByName());
         }
     }
 
@@ -112,15 +148,19 @@ public class FriendsPanelUIController : MonoBehaviour
     {
         _activeTab = tab;
 
-        if (myFriendsTabContent != null)
-            myFriendsTabContent.SetActive(tab == PanelTab.MyFriends);
-        if (inviteTabContent != null)
-            inviteTabContent.SetActive(tab == PanelTab.Invite);
+        // Leaving Friends tab cancels any active search.
+        if (tab != PanelTab.Friends && _searchActive)
+        {
+            _searchActive = false;
+            if (searchInputField != null) searchInputField.text = "";
+            if (searchClearButton != null) searchClearButton.gameObject.SetActive(false);
+        }
 
-        if (myFriendsTabHighlight != null)
-            myFriendsTabHighlight.color = tab == PanelTab.MyFriends ? activeTabColor : inactiveTabColor;
-        if (inviteTabHighlight != null)
-            inviteTabHighlight.color = tab == PanelTab.Invite ? activeTabColor : inactiveTabColor;
+        if (friendsContent != null) friendsContent.SetActive(tab == PanelTab.Friends);
+        if (requestsContent != null) requestsContent.SetActive(tab == PanelTab.Requests);
+
+        if (friendsTabBg != null) friendsTabBg.color = tab == PanelTab.Friends ? ActiveTabTint : InactiveTabTint;
+        if (requestsTabBg != null) requestsTabBg.color = tab == PanelTab.Requests ? ActiveTabTint : InactiveTabTint;
 
         RefreshAll();
     }
@@ -128,237 +168,404 @@ public class FriendsPanelUIController : MonoBehaviour
     /// <summary>Rebuild both tab lists from PlayWithFriendsManager data.</summary>
     public void RefreshAll()
     {
-        RefreshMyFriendsList();
+        RefreshFriendsList();
         RefreshRequestsList();
         UpdateRequestsBadge();
     }
 
-    void RefreshMyFriendsList()
+    void RefreshFriendsList()
     {
-        if (myFriendsListContainer == null || friendListRowPrefab == null) return;
-        if (PlayWithFriendsManager.Instance == null) return;
+        if (friendsListContainer == null) return;
+        if (_searchActive) return; // search results are showing; don't overwrite
+        ClearContainer(friendsListContainer);
 
-        ClearContainer(myFriendsListContainer);
-
-        foreach (string friendId in PlayWithFriendsManager.Instance.MyFriends)
+        int count = 0;
+        if (PlayWithFriendsManager.Instance != null)
         {
-            if (string.IsNullOrEmpty(friendId)) continue;
-
-            string displayName = PlayWithFriendsManager.Instance.GetFriendDisplayName(friendId);
-            FriendInfo photonInfo = PlayWithFriendsManager.Instance.GetFriendPhotonInfo(friendId);
-            bool inviteSent = PlayWithFriendsManager.Instance.IsGameInviteSent(friendId);
-
-            SpawnMyFriendRow(friendId, displayName, photonInfo, inviteSent);
-        }
-    }
-
-    void SpawnMyFriendRow(string friendId, string displayName, FriendInfo photonInfo, bool inviteSent)
-    {
-        GameObject row = Instantiate(friendListRowPrefab, myFriendsListContainer);
-
-        TMP_Text label = FindPrimaryLabel(row.transform);
-        string status = GetOnlineStatusText(photonInfo);
-        if (label != null)
-        {
-            label.text = $"{displayName}\n<size=16>{status}</size>";
-            label.color = photonInfo != null && photonInfo.IsOnline ? Color.white : new Color(0.75f, 0.75f, 0.75f);
+            foreach (string friendId in PlayWithFriendsManager.Instance.MyFriends)
+            {
+                if (string.IsNullOrEmpty(friendId)) continue;
+                string displayName = PlayWithFriendsManager.Instance.GetFriendDisplayName(friendId);
+                FriendInfo info = PlayWithFriendsManager.Instance.GetFriendPhotonInfo(friendId);
+                bool inviteSent = PlayWithFriendsManager.Instance.IsGameInviteSent(friendId);
+                BuildFriendRow(friendId, displayName, info, inviteSent);
+                count++;
+            }
         }
 
-        Button inviteBtn = FindNamedButton(row.transform, "InviteButton");
-        if (inviteBtn == null)
-        {
-            Button[] buttons = row.GetComponentsInChildren<Button>(true);
-            inviteBtn = buttons.Length > 0 ? buttons[buttons.Length - 1] : null;
-        }
-
-        if (inviteBtn == null) return;
-
-        TMP_Text inviteLabel = inviteBtn.GetComponentInChildren<TMP_Text>();
-        Image inviteImg = inviteBtn.GetComponent<Image>();
-
-        inviteBtn.onClick.RemoveAllListeners();
-
-        if (inviteSent)
-        {
-            if (inviteLabel != null) inviteLabel.text = "INVITED";
-            if (inviteImg != null) inviteImg.color = inviteSentColor;
-            inviteBtn.interactable = false;
-            return;
-        }
-
-        if (inviteLabel != null) inviteLabel.text = "INVITE";
-        if (inviteImg != null) inviteImg.color = inviteAvailableColor;
-        inviteBtn.interactable = true;
-        inviteBtn.onClick.AddListener(() =>
-        {
-            PlayWithFriendsManager.Instance.InviteFriendToGame(friendId, displayName);
-            PlayWithFriendsManager.Instance.MarkGameInviteSent(friendId);
-            RefreshMyFriendsList();
-        });
+        if (friendsEmptyLabel != null) friendsEmptyLabel.SetActive(count == 0);
     }
 
     void RefreshRequestsList()
     {
         if (requestsListContainer == null) return;
-        if (PlayWithFriendsManager.Instance == null) return;
-
         ClearContainer(requestsListContainer);
 
-        IReadOnlyDictionary<string, string> requests = PlayWithFriendsManager.Instance.IncomingRequests;
-        bool hasRequests = requests != null && requests.Count > 0;
-
-        if (requestsSection != null)
-            requestsSection.SetActive(hasRequests);
-
-        if (!hasRequests) return;
-
-        GameObject prefab = requestRowPrefab != null ? requestRowPrefab : friendListRowPrefab;
-        if (prefab == null) return;
-
-        foreach (KeyValuePair<string, string> kvp in requests)
+        int count = 0;
+        if (PlayWithFriendsManager.Instance != null)
         {
-            if (string.IsNullOrEmpty(kvp.Key)) continue;
-            SpawnRequestRow(prefab, kvp.Key, kvp.Value);
-        }
-    }
-
-    void SpawnRequestRow(GameObject prefab, string fromId, string fromName)
-    {
-        GameObject row = Instantiate(prefab, requestsListContainer);
-
-        TMP_Text label = FindPrimaryLabel(row.transform);
-        if (label != null)
-            label.text = $"{fromName}\n<size=16><color=#FFD479>Friend request</color></size>";
-
-        Button acceptBtn = FindNamedButton(row.transform, "AcceptButton");
-        Button declineBtn = FindNamedButton(row.transform, "DeclineButton");
-
-        if (acceptBtn == null || declineBtn == null)
-        {
-            Button[] buttons = row.GetComponentsInChildren<Button>(true);
-            if (buttons.Length >= 2)
+            IReadOnlyDictionary<string, string> requests = PlayWithFriendsManager.Instance.IncomingRequests;
+            if (requests != null)
             {
-                acceptBtn = acceptBtn ?? buttons[0];
-                declineBtn = declineBtn ?? buttons[1];
+                foreach (KeyValuePair<string, string> kvp in requests)
+                {
+                    if (string.IsNullOrEmpty(kvp.Key)) continue;
+                    BuildRequestRow(kvp.Key, kvp.Value);
+                    count++;
+                }
             }
         }
 
-        if (acceptBtn != null)
-        {
-            acceptBtn.onClick.RemoveAllListeners();
-            acceptBtn.onClick.AddListener(() =>
-            {
-                PlayWithFriendsManager.Instance.AcceptFriendRequest(fromId, fromName);
-                RefreshAll();
-            });
-        }
-
-        if (declineBtn != null)
-        {
-            declineBtn.onClick.RemoveAllListeners();
-            declineBtn.onClick.AddListener(() =>
-            {
-                PlayWithFriendsManager.Instance.DeclineFriendRequest(fromId);
-                RefreshAll();
-            });
-        }
+        if (requestsEmptyLabel != null) requestsEmptyLabel.SetActive(count == 0);
     }
 
     void UpdateRequestsBadge()
     {
-        if (requestsCountLabel == null || PlayWithFriendsManager.Instance == null) return;
-
-        int count = PlayWithFriendsManager.Instance.IncomingRequests.Count;
-        requestsCountLabel.gameObject.SetActive(count > 0);
-        requestsCountLabel.text = count > 0 ? count.ToString() : "";
+        if (PlayWithFriendsManager.Instance == null) return;
+        int count = PlayWithFriendsManager.Instance.IncomingRequests?.Count ?? 0;
+        if (requestsBadge != null) requestsBadge.SetActive(count > 0);
+        if (requestsBadgeText != null) requestsBadgeText.text = count > 0 ? count.ToString() : "";
     }
 
+    // ============================================================
+    // ROW BUILDERS (match approved mockup)
+    // ============================================================
+
+    /// <summary>Request row: avatar + name + red decline + green accept.</summary>
+    public GameObject BuildRequestRow(string fromId, string fromName)
+    {
+        string display = string.IsNullOrEmpty(fromName) ? "Player" : fromName;
+        GameObject row = BuildBaseRow(requestsListContainer, display, fromId);
+
+        // Green ACCEPT (far right)
+        Button accept = CreateCircleButton(row.transform, "AcceptButton", GreenBtn, acceptIconSprite, -16f);
+        // Red DECLINE (left of accept)
+        Button decline = CreateCircleButton(row.transform, "DeclineButton", RedBtn, declineIconSprite, -116f);
+
+        accept.onClick.RemoveAllListeners();
+        accept.onClick.AddListener(() =>
+        {
+            if (PlayWithFriendsManager.Instance == null) return;
+            PlayWithFriendsManager.Instance.AcceptFriendRequest(fromId, display);
+            RefreshAll();
+        });
+
+        decline.onClick.RemoveAllListeners();
+        decline.onClick.AddListener(() =>
+        {
+            if (PlayWithFriendsManager.Instance == null) return;
+            PlayWithFriendsManager.Instance.DeclineFriendRequest(fromId);
+            RefreshAll();
+        });
+
+        return row;
+    }
+
+    /// <summary>Friend row: avatar + name/status + green invite-to-game button.</summary>
+    public GameObject BuildFriendRow(string friendId, string displayName, FriendInfo info, bool inviteSent)
+    {
+        string status = GetOnlineStatusText(info);
+        GameObject row = BuildBaseRow(friendsListContainer, displayName, friendId, status);
+
+        Button invite = CreateCircleButton(row.transform, "InviteButton", inviteSent ? new Color(0.45f, 0.45f, 0.45f, 1f) : GreenBtn, acceptIconSprite, -18f);
+        invite.interactable = !inviteSent;
+        invite.onClick.RemoveAllListeners();
+        if (!inviteSent)
+        {
+            invite.onClick.AddListener(() =>
+            {
+                if (PlayWithFriendsManager.Instance == null) return;
+                PlayWithFriendsManager.Instance.InviteFriendToGame(friendId, displayName);
+                PlayWithFriendsManager.Instance.MarkGameInviteSent(friendId);
+                RefreshFriendsList();
+            });
+        }
+
+        return row;
+    }
+
+    GameObject BuildBaseRow(Transform parent, string displayName, string idForAvatar, string status = null)
+    {
+        if (parent == null) parent = friendsListContainer != null ? friendsListContainer : requestsListContainer;
+
+        GameObject row = NewRect("Row", parent);
+        RectTransform rowRt = row.GetComponent<RectTransform>();
+        rowRt.sizeDelta = new Vector2(0, 116);
+        LayoutElement le = row.AddComponent<LayoutElement>();
+        le.preferredHeight = 116;
+        le.minHeight = 116;
+
+        // Bottom divider groove — full-width horizontal line under each friend (matches mockup).
+        // Extend beyond the row's layout padding (left 16, right 60) to reach the panel inner edges.
+        GameObject divider = NewRect("Divider", row.transform);
+        RectTransform dvRt = divider.GetComponent<RectTransform>();
+        dvRt.anchorMin = new Vector2(0f, 0f); dvRt.anchorMax = new Vector2(1f, 0f);
+        dvRt.pivot = new Vector2(0.5f, 0f);
+        dvRt.offsetMin = new Vector2(-16f, 1f);
+        dvRt.offsetMax = new Vector2(60f, 5f);
+        var dvImg = divider.AddComponent<Image>();
+        dvImg.color = DividerColor;
+        dvImg.raycastTarget = false;
+
+        // Thin highlight just below the groove for an engraved plank edge
+        GameObject hi = NewRect("Highlight", row.transform);
+        RectTransform hiRt = hi.GetComponent<RectTransform>();
+        hiRt.anchorMin = new Vector2(0f, 0f); hiRt.anchorMax = new Vector2(1f, 0f);
+        hiRt.pivot = new Vector2(0.5f, 0f);
+        hiRt.offsetMin = new Vector2(-16f, -1f);
+        hiRt.offsetMax = new Vector2(60f, 1f);
+        var hiImg = hi.AddComponent<Image>();
+        hiImg.color = HighlightLineColor;
+        hiImg.raycastTarget = false;
+
+        // Avatar
+        GameObject avatar = NewRect("Avatar", row.transform);
+        RectTransform avRt = avatar.GetComponent<RectTransform>();
+        avRt.anchorMin = avRt.anchorMax = new Vector2(0f, 0.5f);
+        avRt.pivot = new Vector2(0f, 0.5f);
+        avRt.sizeDelta = new Vector2(86, 86);
+        avRt.anchoredPosition = new Vector2(20, 0);
+        var avImg = avatar.AddComponent<Image>();
+        avImg.preserveAspect = true;
+        avImg.color = Color.white;
+        Sprite av = GetAvatar(idForAvatar);
+        if (av != null) avImg.sprite = av;
+        else if (circleFrameSprite != null) { avImg.sprite = circleFrameSprite; avImg.color = new Color(0.3f, 0.55f, 0.85f, 1f); }
+
+        // Name (+ optional status)
+        GameObject nameGo = NewRect("Name", row.transform);
+        RectTransform nmRt = nameGo.GetComponent<RectTransform>();
+        nmRt.anchorMin = new Vector2(0f, 0.5f); nmRt.anchorMax = new Vector2(0f, 0.5f);
+        nmRt.pivot = new Vector2(0f, 0.5f);
+        nmRt.sizeDelta = new Vector2(300, 80);
+        nmRt.anchoredPosition = new Vector2(125, 0);
+        var nameTmp = nameGo.AddComponent<TextMeshProUGUI>();
+        nameTmp.text = string.IsNullOrEmpty(status) ? displayName : $"{displayName}\n<size=22><color=#FFE6B0>{status}</color></size>";
+        nameTmp.color = Color.white;
+        nameTmp.fontSize = 34;
+        nameTmp.fontStyle = FontStyles.Bold;
+        nameTmp.alignment = TextAlignmentOptions.Left;
+        nameTmp.overflowMode = TextOverflowModes.Ellipsis;
+        nameTmp.enableWordWrapping = false;
+        if (customFont != null) nameTmp.font = customFont;
+
+        return row;
+    }
+
+    Button CreateCircleButton(Transform rowParent, string name, Color bg, Sprite icon, float xOffset)
+    {
+        GameObject go = NewRect(name, rowParent);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0.5f);
+        rt.pivot = new Vector2(1f, 0.5f);
+        rt.sizeDelta = new Vector2(84, 84);
+        rt.anchoredPosition = new Vector2(xOffset, 0);
+
+        var img = go.AddComponent<Image>();
+        img.color = bg;
+        if (circleButtonSprite != null) { img.sprite = circleButtonSprite; img.type = Image.Type.Simple; }
+
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = img;
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(1.1f, 1.1f, 1.1f, 1f);
+        colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+        btn.colors = colors;
+
+        // White icon glyph
+        GameObject ic = NewRect("Icon", go.transform);
+        RectTransform icRt = ic.GetComponent<RectTransform>();
+        icRt.anchorMin = new Vector2(0.5f, 0.5f); icRt.anchorMax = new Vector2(0.5f, 0.5f);
+        icRt.pivot = new Vector2(0.5f, 0.5f);
+        icRt.sizeDelta = new Vector2(58, 58);
+        icRt.anchoredPosition = Vector2.zero;
+        var icImg = ic.AddComponent<Image>();
+        icImg.color = Color.white;
+        icImg.raycastTarget = false;
+        icImg.preserveAspect = true;
+        if (icon != null) icImg.sprite = icon;
+
+        return btn;
+    }
+
+    // ============================================================
+    // SEARCH (Friends tab)
+    // ============================================================
+
+    /// <summary>Search Firebase users by username and show add-able results in the Friends list area.</summary>
     public void SearchPlayersByName()
     {
-        if (searchInputField == null || searchResultsContainer == null || _usersDb == null) return;
+        if (searchInputField == null) return;
 
-        string searchText = searchInputField.text.Trim();
-        if (string.IsNullOrEmpty(searchText)) return;
+        string query = searchInputField.text.Trim();
+        if (string.IsNullOrEmpty(query))
+        {
+            ClearSearch();
+            return;
+        }
 
-        ClearContainer(searchResultsContainer);
-        ShowTab(PanelTab.Invite);
+        if (_usersDb == null)
+        {
+            try { _usersDb = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference; }
+            catch { }
+        }
+        if (_usersDb == null) return;
 
+        // Make sure we're on the Friends tab where results render.
+        if (_activeTab != PanelTab.Friends) ShowTab(PanelTab.Friends);
+
+        _searchActive = true;
+        if (searchClearButton != null) searchClearButton.gameObject.SetActive(true);
+
+        ClearContainer(friendsListContainer);
+        ShowEmpty(friendsEmptyLabel, false);
+
+        // A full 10-digit input is treated as a UID lookup (PUBG / Free Fire style).
+        // Anything else is a username search. UID lookups fall back to username if not found.
+        if (GameUidService.LooksLikeUid(query))
+            SearchByUid(query);
+        else
+            SearchByUsername(query);
+    }
+
+    /// <summary>Resolve a 10-digit UID to an account and show it as an add-able result.</summary>
+    void SearchByUid(string uid)
+    {
+        GameUidService.ResolveFirebaseUid(uid, firebaseUid =>
+        {
+            if (!_searchActive) return;
+
+            // Not a real UID — try treating the digits as a username instead.
+            if (string.IsNullOrEmpty(firebaseUid))
+            {
+                SearchByUsername(uid);
+                return;
+            }
+
+            string localUserId = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId;
+            if (!string.IsNullOrEmpty(localUserId) && firebaseUid == localUserId)
+            {
+                ClearContainer(friendsListContainer);
+                ShowEmpty(friendsEmptyLabel, true, "That's your own UID");
+                return;
+            }
+
+            _usersDb.Child("users").Child(firebaseUid).Child("username")
+                .GetValueAsync().ContinueWithOnMainThread(task =>
+                {
+                    if (!_searchActive) return;
+
+                    ClearContainer(friendsListContainer);
+
+                    string username = (task.Result != null && task.Result.Exists)
+                        ? task.Result.Value?.ToString()
+                        : null;
+                    if (string.IsNullOrEmpty(username)) username = "Player " + uid;
+
+                    BuildSearchRow(firebaseUid, username);
+                    ShowEmpty(friendsEmptyLabel, false);
+                });
+        });
+    }
+
+    /// <summary>Prefix search over usernames.</summary>
+    void SearchByUsername(string query)
+    {
         _usersDb.Child("users").OrderByChild("username")
-            .StartAt(searchText)
-            .EndAt(searchText + "\uf8ff")
+            .StartAt(query)
+            .EndAt(query + "\uf8ff")
             .GetValueAsync().ContinueWithOnMainThread(task =>
             {
+                if (!_searchActive) return; // user cleared meanwhile
                 if (task.IsFaulted || task.IsCanceled)
                 {
                     Debug.LogError("[FriendsPanel] Search failed.");
+                    ShowEmpty(friendsEmptyLabel, true, "Search failed");
                     return;
                 }
 
+                ClearContainer(friendsListContainer);
+
                 DataSnapshot snapshot = task.Result;
-                if (!snapshot.Exists) return;
-
                 string localUserId = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId;
+                int found = 0;
 
-                foreach (DataSnapshot userSnapshot in snapshot.Children)
+                if (snapshot != null && snapshot.Exists)
                 {
-                    string foundUserId = userSnapshot.Key;
-                    if (!userSnapshot.Child("username").Exists) continue;
+                    foreach (DataSnapshot userSnapshot in snapshot.Children)
+                    {
+                        string foundUserId = userSnapshot.Key;
+                        if (!userSnapshot.Child("username").Exists) continue;
+                        string foundUsername = userSnapshot.Child("username").Value?.ToString();
+                        if (string.IsNullOrEmpty(foundUsername)) continue;
+                        if (!string.IsNullOrEmpty(localUserId) && foundUserId == localUserId) continue;
 
-                    string foundUsername = userSnapshot.Child("username").Value?.ToString();
-                    if (string.IsNullOrEmpty(foundUsername)) continue;
-                    if (!string.IsNullOrEmpty(localUserId) && foundUserId == localUserId) continue;
-
-                    SpawnSearchRow(foundUserId, foundUsername);
+                        BuildSearchRow(foundUserId, foundUsername);
+                        found++;
+                    }
                 }
+
+                ShowEmpty(friendsEmptyLabel, found == 0, "No players found");
             });
     }
 
-    void SpawnSearchRow(string userId, string displayName)
+    public void ClearSearch()
     {
-        if (searchResultRowPrefab == null || searchResultsContainer == null) return;
+        _searchActive = false;
+        if (searchInputField != null) searchInputField.text = "";
+        if (searchClearButton != null) searchClearButton.gameObject.SetActive(false);
+        RefreshFriendsList();
+    }
 
-        GameObject row = Instantiate(searchResultRowPrefab, searchResultsContainer);
-
-        TMP_Text nameText = FindPrimaryLabel(row.transform);
-        if (nameText != null) nameText.text = displayName;
-
-        Button addBtn = FindNamedButton(row.transform, "AddButton");
-        if (addBtn == null)
-            addBtn = row.GetComponentInChildren<Button>();
-
-        if (addBtn == null) return;
+    /// <summary>Search result row: avatar + name + green ADD (sends friend request).</summary>
+    GameObject BuildSearchRow(string userId, string displayName)
+    {
+        GameObject row = BuildBaseRow(friendsListContainer, displayName, userId);
 
         bool alreadyFriend = PlayWithFriendsManager.Instance != null
             && PlayWithFriendsManager.Instance.MyFriends.Contains(userId);
 
-        TMP_Text btnLabel = addBtn.GetComponentInChildren<TMP_Text>();
-        if (alreadyFriend)
+        Button add = CreateCircleButton(row.transform, "AddButton",
+            alreadyFriend ? new Color(0.45f, 0.45f, 0.45f, 1f) : GreenBtn, acceptIconSprite, -16f);
+        add.interactable = !alreadyFriend;
+
+        add.onClick.RemoveAllListeners();
+        if (!alreadyFriend)
         {
-            if (btnLabel != null) btnLabel.text = "Added";
-            addBtn.interactable = false;
-            return;
+            add.onClick.AddListener(() =>
+            {
+                if (PlayWithFriendsManager.Instance == null) return;
+                PlayWithFriendsManager.Instance.SendFriendRequest(userId, displayName);
+                // Mark as sent: grey out the button.
+                var img = add.GetComponent<Image>();
+                if (img != null) img.color = new Color(0.45f, 0.45f, 0.45f, 1f);
+                add.interactable = false;
+            });
         }
 
-        addBtn.onClick.RemoveAllListeners();
-        addBtn.onClick.AddListener(() =>
-        {
-            if (PlayWithFriendsManager.Instance == null) return;
-            PlayWithFriendsManager.Instance.SendFriendRequest(userId, displayName);
-            if (btnLabel != null) btnLabel.text = "Sent";
-            addBtn.interactable = false;
-        });
+        return row;
     }
 
-    public void AddFriendById()
+    static void ShowEmpty(GameObject label, bool show, string text = null)
     {
-        if (addByIdInputField == null || PlayWithFriendsManager.Instance == null) return;
+        if (label == null) return;
+        if (text != null)
+        {
+            var tmp = label.GetComponent<TMP_Text>();
+            if (tmp != null) tmp.text = text;
+        }
+        label.SetActive(show);
+    }
 
-        string id = addByIdInputField.text.Trim();
-        if (string.IsNullOrEmpty(id)) return;
+    // ============================================================
+    // HELPERS
+    // ============================================================
 
-        PlayWithFriendsManager.Instance.SendFriendRequest(id, null);
-        addByIdInputField.text = "";
-        ShowTab(PanelTab.Invite);
+    Sprite GetAvatar(string id)
+    {
+        if (avatarPool == null || avatarPool.Count == 0) return null;
+        int hash = string.IsNullOrEmpty(id) ? 0 : Mathf.Abs(id.GetHashCode());
+        return avatarPool[hash % avatarPool.Count];
     }
 
     static string GetOnlineStatusText(FriendInfo info)
@@ -373,27 +580,53 @@ public class FriendsPanelUIController : MonoBehaviour
     {
         if (container == null) return;
         for (int i = container.childCount - 1; i >= 0; i--)
-            Destroy(container.GetChild(i).gameObject);
+        {
+            GameObject child = container.GetChild(i).gameObject;
+            if (Application.isPlaying) Destroy(child);
+            else DestroyImmediate(child);
+        }
     }
 
-    static TMP_Text FindPrimaryLabel(Transform root)
+    static GameObject NewRect(string name, Transform parent)
     {
-        TMP_Text[] labels = root.GetComponentsInChildren<TMP_Text>(true);
-        for (int i = 0; i < labels.Length; i++)
-        {
-            if (labels[i].GetComponentInParent<Button>() == null)
-                return labels[i];
-        }
-        return labels.Length > 0 ? labels[0] : null;
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        return go;
     }
 
-    static Button FindNamedButton(Transform root, string childName)
+    static Color Hex(string hex)
     {
-        foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
-        {
-            if (t.name == childName)
-                return t.GetComponent<Button>();
-        }
-        return null;
+        ColorUtility.TryParseHtmlString(hex, out Color c);
+        return c;
     }
+
+#if UNITY_EDITOR
+    /// <summary>Editor-only: build sample rows so the layout can be previewed without runtime data.</summary>
+    public void EditorPreviewPopulate()
+    {
+        ResolveThemeAssets();
+        if (requestsListContainer != null)
+        {
+            ClearContainer(requestsListContainer);
+            string[] names = { "Request_1", "Request_2", "Request_3", "Request_5", "Request_6" };
+            _activeTab = PanelTab.Requests;
+            foreach (var n in names) BuildRequestRow(n, n);
+            if (requestsEmptyLabel != null) requestsEmptyLabel.SetActive(false);
+        }
+        if (friendsListContainer != null)
+        {
+            ClearContainer(friendsListContainer);
+            string[] fnames = { "Aman", "Rohit", "Priya", "Kabir" };
+            _activeTab = PanelTab.Friends;
+            foreach (var n in fnames) BuildFriendRow(n, n, null, false);
+            if (friendsEmptyLabel != null) friendsEmptyLabel.SetActive(false);
+        }
+    }
+
+    public void EditorPreviewClear()
+    {
+        ClearContainer(requestsListContainer);
+        ClearContainer(friendsListContainer);
+    }
+#endif
 }

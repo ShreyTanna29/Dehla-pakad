@@ -14,6 +14,7 @@ using System.Collections.Generic;
 /// Handles Google Sign-In and Firebase Authentication.
 /// Optimized for Android builds.
 /// </summary>
+[DefaultExecutionOrder(-200)]
 public class GoogleLogin : MonoBehaviour
 {
     public static GoogleLogin Instance;
@@ -38,16 +39,55 @@ public class GoogleLogin : MonoBehaviour
     private const float RealLoginMinWait = 2.5f;
     private const float PhotonReadyMaxWait = 12f;
     private bool isFirebaseReady = false;
+    private bool _loginFlowStarted;
     public bool IsFirebaseReady { get { if(isFirebaseReady) {} return isFirebaseReady; } }
+
+    /// <summary>True only after login + profile setup (or existing profile load) finished.</summary>
+    public static bool HasCompletedLoginFlow { get; private set; }
+
+    public static void NotifyLoginFlowComplete()
+    {
+        HasCompletedLoginFlow = true;
+    }
+
+    public static void ResetLoginFlow()
+    {
+        HasCompletedLoginFlow = false;
+    }
 
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
 
-        ShowLoginPanel();
+        EnforceLoginScreen();
+    }
+
+    void EnforceLoginScreen()
+    {
+        ResetLoginFlow();
+        ClearDisplayedProfileName();
+
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideHomeUntilLogin();
+
+        if (homePanel != null)
+            homePanel.SetActive(false);
+
+        if (loginPanel != null)
+        {
+            loginPanel.SetActive(true);
+            loginPanel.transform.SetAsLastSibling();
+        }
+
+        if (PlayerProfileManager.Instance != null)
+            PlayerProfileManager.Instance.HideUntilLoginComplete();
+    }
+
+    void ClearDisplayedProfileName()
+    {
+        if (profileNameText != null)
+            profileNameText.text = string.Empty;
     }
 
     void Start()
@@ -85,31 +125,16 @@ public class GoogleLogin : MonoBehaviour
                 if (googleSignInButton != null)
                     googleSignInButton.interactable = true;
 
-                if (auth.CurrentUser != null)
-                {
-                    Debug.Log("[Login] Persistent User Found! Auto-login bypass...");
-                    CompleteLogin(auth.CurrentUser);
-                }
-                else
-                {
-                    ShowLoginPanel();
-                    UpdateStatus("Ready to Login");
-
-                    GoogleSignIn.DefaultInstance.SignInSilently().ContinueWithOnMainThread(silentTask =>
-                    {
-                        if (!silentTask.IsFaulted && !silentTask.IsCanceled && silentTask.Result != null)
-                        {
-                            Credential credential = GoogleAuthProvider.GetCredential(silentTask.Result.IdToken, null);
-                            auth.SignInWithCredentialAsync(credential).ContinueWithOnMainThread(OnFirebaseLoginFinished);
-                        }
-                    });
-                }
+                if (!_loginFlowStarted)
+                    EnforceLoginScreen();
+                UpdateStatus("Ready to Login");
             }
             else
             {
                 string error = "Firebase Error: " + status;
                 UpdateStatus(error);
-                ShowLoginPanel();
+                if (!_loginFlowStarted)
+                    EnforceLoginScreen();
             }
         });
     }
@@ -119,6 +144,7 @@ public class GoogleLogin : MonoBehaviour
     public void OnGoogleLoginButtonClick()
     {
         Debug.Log("Google Login Button Clicked! Starting explicit sign-in.");
+        _loginFlowStarted = true;
 
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
@@ -180,10 +206,6 @@ public class GoogleLogin : MonoBehaviour
             Debug.LogError("Google Result is null or IdToken is empty.");
             return;
         }
-
-        string googleAccountName = googleUser.DisplayName;
-        if (!string.IsNullOrEmpty(googleAccountName))
-            ApplyProfileName(googleAccountName);
 
         Debug.Log("Google Login Success. Authenticating with Firebase...");
         UpdateStatus("Firebase Auth...");
@@ -265,29 +287,39 @@ public class GoogleLogin : MonoBehaviour
         Debug.Log("✅ Authenticated: " + user.DisplayName);
         UpdateStatus("Welcome, " + user.DisplayName);
 
-        string nick = !string.IsNullOrEmpty(user.DisplayName) ? user.DisplayName :
-                     (!string.IsNullOrEmpty(user.Email) ? user.Email.Split('@')[0] : "Player_" + Random.Range(1000, 9999));
-
         string photonUserId = user.UserId;
-        ApplyProfileName(nick);
         ConnectPhotonAfterLogin(photonUserId);
-        SaveUserProfileToDatabase(photonUserId, nick);
 
-        BeginHomeWhenReady("Loading Player Profile...", RealLoginMinWait);
+        if (PlayerProfileManager.Instance != null)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ShowLoading("Fetching Profile...");
+                
+            PlayerProfileManager.Instance.CheckAndLoadUserProfile(photonUserId, user.DisplayName);
+        }
+        else
+        {
+            Debug.LogError("PlayerProfileManager.Instance is null! Cannot open profile setup.");
+            UpdateStatus("Profile setup unavailable.");
+        }
     }
 
-    void ShowLoginPanel()
+    void ShowLoginPanel() => EnforceLoginScreen();
+
+    public void ShowHomePanel_Internal()
     {
-        if (loginPanel != null) loginPanel.SetActive(true);
-        if (homePanel != null) homePanel.SetActive(false);
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.HideHomeUntilLogin();
+        ShowHomePanel();
     }
 
     void ShowHomePanel()
     {
         if (loginPanel != null) loginPanel.SetActive(false);
         if (homePanel != null) homePanel.SetActive(true);
+        
+        // Ensure Home Panel is visible if we are fading
+        var cg = homePanel.GetComponent<CanvasGroup>();
+        if (cg != null) cg.alpha = 1f;
+
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.UpdateUIState(true);
     }
@@ -321,10 +353,12 @@ public class GoogleLogin : MonoBehaviour
 
     private void TransitionToHome()
     {
-        ShowHomePanel();
+        NotifyLoginFlowComplete();
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
+
+        ShowHomePanel();
 
         if (PlayerProfileSync.Instance != null)
             PlayerProfileSync.Instance.UpdateAllNames();
@@ -336,24 +370,33 @@ public class GoogleLogin : MonoBehaviour
             + $" | PhotonReady={PhotonNetwork.IsConnectedAndReady} | InLobby={PhotonNetwork.InLobby}");
     }
 
-    const string SimulatedPhotonUserId = "simulate_roman_bhati_uid";
+    const string SimulatedPhotonUserId = "simulate_editor_uid";
 
     private void SimulateLogin()
     {
-        ApplyProfileName("Roman Bhati");
+        UpdateStatus("Signing in...");
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowLoading("Signing in...");
+
+        // Ensure we don't have stale local data if we want a fresh start
+        // PlayerPrefs.DeleteKey("PlayerUsername"); 
+
         ConnectPhotonAfterLogin(SimulatedPhotonUserId);
-        SaveUserProfileToDatabase(SimulatedPhotonUserId, "Roman Bhati");
-        UpdateStatus("Simulated Login Success");
-        BeginHomeWhenReady("Simulating Login...\nConnecting to server...", SimulatedLoginMinWait);
+
+        if (PlayerProfileManager.Instance != null)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ShowLoading("Loading profile setup...");
+            PlayerProfileManager.Instance.CheckAndLoadUserProfile(SimulatedPhotonUserId, null);
+        }
+        else
+            UpdateStatus("Profile manager missing");
     }
 
     public void SimulateLoginME()
     {
-        ApplyProfileName("Roman Bhati");
-        ConnectPhotonAfterLogin(SimulatedPhotonUserId);
-        SaveUserProfileToDatabase(SimulatedPhotonUserId, "Roman Bhati");
-        UpdateStatus("Simulated Login Success");
-        BeginHomeWhenReady("Simulating Login...\nConnecting to server...", SimulatedLoginMinWait);
+        OnGoogleLoginButtonClick();
     }
 
     private void UpdateStatus(string message)
@@ -363,8 +406,14 @@ public class GoogleLogin : MonoBehaviour
 
     public void SignOut()
     {
+        _loginFlowStarted = false;
+        ResetLoginFlow();
+
         if (auth != null) auth.SignOut();
         if (GoogleSignIn.DefaultInstance != null) GoogleSignIn.DefaultInstance.SignOut();
+
+        if (PlayerProfileManager.Instance != null)
+            PlayerProfileManager.Instance.HideUntilLoginComplete();
 
         ShowLoginPanel();
         UpdateStatus("Signed Out");

@@ -3,7 +3,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using DG.Tweening;
 
-public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class CardInteract : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public bool isPlayed = false;
     public bool isValidToPlay = false;
@@ -27,8 +27,6 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
     private bool isInitialized = false;
     private bool blockedVisualsCreated = false;
 
-    private Vector2 pointerDownPos;
-
     private Vector2 dragStartPointerLocalPos;
     private Vector2 dragStartCardAnchoredPos;
     private const float SwipePlayThreshold = 100f;
@@ -43,9 +41,13 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
 
         myDisplay = GetComponent<CardDisplay>() ?? GetComponentInParent<CardDisplay>();
 
+        // Raise/hover animations must move the inner Visuals rect only — not the hand slot root.
+        visualRect = GetComponent<RectTransform>();
+        if (visualRect == null && myDisplay != null)
+            visualRect = myDisplay.GetComponent<RectTransform>();
+
         if (myDisplay != null)
         {
-            visualRect = myDisplay.GetComponent<RectTransform>();
             if (myDisplay.cardBackgroundImage != null)
                 myDisplay.cardBackgroundImage.raycastTarget = true;
         }
@@ -70,7 +72,7 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
 
     static bool UsesHandLayoutGroup()
     {
-        return PlayerHand.LocalInstance == null || PlayerHand.LocalInstance.myCards.Count <= 13;
+        return PlayerHand.LocalInstance == null || PlayerHand.LocalInstance.myCards.Count <= HandLayoutHelper.CardsPerRow;
     }
 
     Vector2 GetRaisedPos(float yOffset) => originalPos + new Vector2(0f, yOffset);
@@ -135,6 +137,18 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         }
     }
 
+    public void ResetVisualOffset()
+    {
+        Init();
+        isAutoRaised = false;
+        isSelected = false;
+        if (visualRect != null)
+        {
+            visualRect.DOKill();
+            visualRect.anchoredPosition = originalPos;
+        }
+    }
+
     public void ApplyNotMyTurnVisual()
     {
         isValidToPlay = false;
@@ -151,6 +165,8 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
     public void ApplyBlockedOnTurnVisual()
     {
         isValidToPlay = false;
+        if (isSelected) DeselectThisCard();
+        ResetVisualOffset();
     }
 
     public static void ClearGlobalSelection()
@@ -267,29 +283,6 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
 
     void Start() { Init(); }
 
-    public void OnPointerDown(PointerEventData eventData)
-    {
-        pointerDownPos = eventData.position;
-    }
-
-    public void OnPointerClick(PointerEventData eventData)
-    {
-        if (isPlayed || !canPlayCards || !isValidToPlay || isPlayingCard || PlayerHand.IsGameplayInputBlocked
-            || (DeckManager.Instance != null && !DeckManager.Instance.IsDealingComplete)
-            || !GameStabilityAudit.CanAcceptPlayerInput())
-        {
-            return;
-        }
-
-        if (Vector2.Distance(pointerDownPos, eventData.position) > 15f)
-            return;
-
-        if (isSelected)
-            PlayThisCard();
-        else
-            SelectThisCard();
-    }
-
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (isPlayed || !canPlayCards || !isValidToPlay || isPlayingCard || PlayerHand.IsGameplayInputBlocked)
@@ -357,21 +350,6 @@ public class CardInteract : MonoBehaviour, IPointerClickHandler, IPointerDownHan
         visualRect.DOKill();
         Vector2 targetPos = (isAutoRaised && isValidToPlay) ? GetRaisedPos(28f) : originalPos;
         visualRect.DOAnchorPos(targetPos, 0.2f).SetEase(Ease.OutSine);
-    }
-
-    private void SelectThisCard()
-    {
-        if (currentSelected != null && currentSelected != this)
-            currentSelected.DeselectThisCard();
-
-        currentSelected = this;
-        isSelected = true;
-
-        if (visualRect != null)
-        {
-            visualRect.DOKill();
-            visualRect.DOAnchorPos(GetRaisedPos(50f), 0.25f).SetEase(Ease.OutBack);
-        }
     }
 
     public void DeselectThisCard()

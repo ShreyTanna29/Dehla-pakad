@@ -38,7 +38,7 @@ public class DehlaPakadAI : MonoBehaviour
 
         HandContext ctx = BuildContext(botHand, currentTrick, trumpSuit, isTrumpRevealed, botActorNumber, mode, isTwoTaash, isDoubleSar, isLeading);
 
-        List<CardData> legalMoves = PlayerHand.GetValidCards(botHand, currentTrick);
+        List<CardData> legalMoves = PlayerHand.GetValidCards(botHand, currentTrick, botActorNumber);
 
         if (legalMoves.Count == 0)
             return botHand[0];

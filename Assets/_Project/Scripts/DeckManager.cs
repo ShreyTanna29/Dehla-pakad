@@ -503,10 +503,17 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
+        StartCoroutine(HandleDeckJoinedRoomDeferred());
+    }
+
+    IEnumerator HandleDeckJoinedRoomDeferred()
+    {
+        yield return null;
+
         if (gameStarted)
         {
             StartCoroutine(RejoinStateRoutine());
-            return;
+            yield break;
         }
 
         bool rejoining = PhotonNetwork.CurrentRoom != null
@@ -516,7 +523,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (IsPrivateFriendsRoom() && !rejoining)
         {
             Debug.Log("Private Room Joined. Waiting in Lobby...");
-            return;
+            yield break;
         }
 
         if (!rejoining) ResetMatchState();
@@ -844,6 +851,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (seats.Count != MaxTableSeats)
             Debug.LogError($"[DeckManager] RPC_InitializeMatch: invalid seat count {seats.Count}, expected {MaxTableSeats}.");
 
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.EnsureLocalNetworkPlayer();
+        PlayerHand.ResolveLocalHand();
         NetworkManager.InitializeGameplayScene();
 
         Debug.Log($"🤖 [Bot Mode] RPC Match initialized with {botActorNumbers.Count} bot actor(s).");
@@ -934,6 +944,8 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         while (PlayerHand.LocalInstance == null && timeout > 0)
         {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.EnsureLocalNetworkPlayer();
             PlayerHand.ResolveLocalHand();
             yield return null;
             timeout -= Time.deltaTime;
@@ -965,7 +977,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
             Debug.Log($"[DeckManager] Deal round {currentDealBatch}/{dealBatches.Length}");
             photonView.RPC("RPC_PlayDealAnimation", RpcTarget.All, cardsThisBatch);
 
-            yield return new WaitForSeconds(PlayerHand.GetDealBatchDuration(cardsThisBatch) + 0.1f);
+            // FIX: GetDealBatchDuration now equals the real animation runtime; add a fixed 0.5s
+            // gap between batches (previously the overestimated duration produced a ~1s idle gap).
+            yield return new WaitForSeconds(PlayerHand.GetDealBatchDuration(cardsThisBatch) + 0.5f);
         }
 
         Debug.Log("[DeckManager] Distributing cards manually now...");
