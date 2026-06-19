@@ -1262,4 +1262,45 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (PlayerHand.LocalInstance != null)
             PlayerHand.LocalInstance.AssignFullHandLocal(targetActor, suitIndices, rankIndices);
     }
+
+    // PlayWithFriendsPanel's PhotonView often has ViewID 0 while inactive — forward lobby RPCs here.
+    [PunRPC]
+    void RPC_StartGameForEveryone()
+    {
+        PlayWithFriendsManager mgr = PlayWithFriendsManager.Instance;
+        if (mgr == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<PlayWithFriendsManager>();
+            foreach (var m in all)
+            {
+                if (m == null || !m.gameObject.scene.IsValid()) continue;
+                mgr = m;
+                break;
+            }
+        }
+
+        if (mgr != null)
+            mgr.ExecuteFriendsGameStart();
+        else
+            Debug.LogError("[Friends] RPC_StartGameForEveryone received but PlayWithFriendsManager is missing.");
+    }
+
+    [PunRPC]
+    void RPC_ShowModesPanelToClients()
+    {
+        PlayWithFriendsManager mgr = PlayWithFriendsManager.Instance;
+        if (mgr == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<PlayWithFriendsManager>();
+            foreach (var m in all)
+            {
+                if (m == null || !m.gameObject.scene.IsValid()) continue;
+                mgr = m;
+                break;
+            }
+        }
+
+        if (mgr != null)
+            mgr.ExecuteShowModesPanelToClients();
+    }
 }

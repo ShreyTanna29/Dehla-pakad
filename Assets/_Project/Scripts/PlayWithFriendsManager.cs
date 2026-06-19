@@ -91,6 +91,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     Coroutine _retryFriendServicesCoroutine;
     Coroutine _findFriendsCoroutine;
     bool _firebaseAuthHooked;
+    bool _friendsGameStartTriggered;
 
     public IReadOnlyList<string> MyFriends => myFriends;
     public IReadOnlyDictionary<string, string> IncomingRequests => incomingRequests;
@@ -196,12 +197,59 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (_photonView == null)
             _photonView = GetComponent<PhotonView>();
+    }
 
-        if (_photonView == null)
+    /// <summary>
+    /// PlayWithFriendsPanel is often inactive, so its scene PhotonView may stay at ViewID 0.
+    /// Route friend-lobby RPCs through DeckManager's always-active scene view instead.
+    /// </summary>
+    static PhotonView GetReliableRpcView()
+    {
+        if (DeckManager.Instance != null)
         {
-            _photonView = gameObject.AddComponent<PhotonView>();
-            _photonView.Synchronization = ViewSynchronization.Off;
+            PhotonView deckPv = DeckManager.Instance.photonView;
+            if (deckPv != null && deckPv.ViewID > 0)
+                return deckPv;
         }
+
+        PlayWithFriendsManager mgr = Instance != null ? Instance : ResolveManagerInstance();
+        if (mgr == null) return null;
+
+        PhotonView localPv = mgr.photonView;
+        if (localPv == null) return null;
+        if (localPv.ViewID > 0) return localPv;
+
+        if (localPv.sceneViewId > 0)
+        {
+            localPv.ViewID = localPv.sceneViewId;
+            if (localPv.ViewID > 0)
+                return localPv;
+        }
+
+        return null;
+    }
+
+    static PlayWithFriendsManager ResolveManagerInstance()
+    {
+        var all = Resources.FindObjectsOfTypeAll<PlayWithFriendsManager>();
+        foreach (var m in all)
+        {
+            if (m == null || !m.gameObject.scene.IsValid()) continue;
+            return m;
+        }
+        return null;
+    }
+
+    void SendFriendsRpc(string methodName, RpcTarget target)
+    {
+        PhotonView rpcView = GetReliableRpcView();
+        if (rpcView == null || rpcView.ViewID < 1)
+        {
+            Debug.LogError($"[Friends] Cannot send {methodName}: no valid PhotonView (panel view id is 0).");
+            return;
+        }
+
+        rpcView.RPC(methodName, target);
     }
 
     void OnDestroy()
@@ -575,6 +623,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
+        _friendsGameStartTriggered = false;
         if (PhotonNetwork.CurrentRoom == null) return;
 
         // Online matchmaking: this panel is the lobby — fill seats with real players.
@@ -1041,7 +1090,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         // RPC pehle — panel band karne se pehle clients ko notify karo
-        photonView.RPC(nameof(RPC_ShowModesPanelToClients), RpcTarget.Others);
+        SendFriendsRpc(nameof(RPC_ShowModesPanelToClients), RpcTarget.Others);
 
         if (PhotonNetwork.CurrentRoom != null)
             PhotonNetwork.CurrentRoom.IsOpen = false;
@@ -1050,7 +1099,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     }
 
     [PunRPC]
-    void RPC_ShowModesPanelToClients()
+    void RPC_ShowModesPanelToClients() => ExecuteShowModesPanelToClients();
+
+    public void ExecuteShowModesPanelToClients()
     {
         ResolveModesPanel();
         if (modesPanel != null)
@@ -1227,12 +1278,17 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         PhotonNetwork.CurrentRoom.IsOpen = false;
         PhotonNetwork.CurrentRoom.IsVisible = false;
 
-        photonView.RPC(nameof(RPC_StartGameForEveryone), RpcTarget.All);
+        SendFriendsRpc(nameof(RPC_StartGameForEveryone), RpcTarget.All);
     }
 
     [PunRPC]
-    void RPC_StartGameForEveryone()
+    void RPC_StartGameForEveryone() => ExecuteFriendsGameStart();
+
+    public void ExecuteFriendsGameStart()
     {
+        if (_friendsGameStartTriggered) return;
+        _friendsGameStartTriggered = true;
+
         Debug.Log("[GameStart] Friends RPC_StartGameForEveryone received");
 
         ResolveModesPanel();
@@ -1299,11 +1355,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             && propertiesThatChanged["ModesLocked"] is bool locked
             && locked)
         {
-            if (ModeManager.Instance != null)
-                ModeManager.Instance.SyncModesFromRoom();
-            HidePrivateFriendsLobbyUI();
-            if (TrumpManager.Instance != null)
-                TrumpManager.ApplyTrumpForCurrentGameMode(false);
+            // Backup path if the RPC was missed; ExecuteFriendsGameStart is idempotent.
+            ExecuteFriendsGameStart();
             Debug.Log("Host locked the modes!");
             return;
         }
