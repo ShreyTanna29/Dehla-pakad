@@ -665,15 +665,23 @@ public class PlayerProfileManager : MonoBehaviour
         if (panelProfileSetup != null)
             panelProfileSetup.SetActive(false);
 
-        if (panelPlayerProfile != null)
-            panelPlayerProfile.SetActive(false);
-
-        GameObject home = ResolveHomePanel();
-        if (home != null)
-            home.SetActive(true);
-
+        // Refresh the cached/home display first.
         UpdateProfileUI();
         WireHomeProfileAvatarClick();
+
+        // Return to the Player Profile panel (NOT Home) so the user sees the updated profile.
+        // Re-activating the panel fires its binder/tab OnEnable which re-reads name, avatar and email.
+        if (panelPlayerProfile != null)
+        {
+            panelPlayerProfile.SetActive(true);
+            panelPlayerProfile.transform.SetAsLastSibling();
+
+            CanvasGroup cg = panelPlayerProfile.GetComponent<CanvasGroup>();
+            if (cg == null) cg = panelPlayerProfile.AddComponent<CanvasGroup>();
+            cg.alpha = 1f;
+            cg.interactable = true;
+            cg.blocksRaycasts = true;
+        }
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.UpdateUIState(true);
@@ -725,6 +733,12 @@ public class PlayerProfileManager : MonoBehaviour
             GoogleLogin.Instance.loginPanel.SetActive(false);
 
         WireHomeProfileAvatarClick();
+
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.EnsureFriendServicesStarted();
+
+        if (PlayerProfileSync.Instance != null)
+            PlayerProfileSync.Instance.UpdateAllNames();
     }
 
     public void OpenPlayerProfile()
@@ -745,10 +759,10 @@ public class PlayerProfileManager : MonoBehaviour
         cg.interactable = true;
         cg.blocksRaycasts = true;
 
-        if (textTotalMatches != null) textTotalMatches.text = "Total Matches: 0";
-        if (textWins != null) textWins.text = "Wins: 0";
-        if (textWinRatio != null) textWinRatio.text = "Win Ratio: 0%";
-        if (textTotalKOT != null) textTotalKOT.text = "Total KOTs: 0";
+        if (textTotalMatches != null) textTotalMatches.text = "0";
+        if (textWins != null) textWins.text = "0";
+        if (textWinRatio != null) textWinRatio.text = "0%";
+        if (textTotalKOT != null) textTotalKOT.text = "0";
     }
 
     public void OnEditProfileClicked()

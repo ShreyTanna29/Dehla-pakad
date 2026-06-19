@@ -376,6 +376,11 @@ public class GoogleLogin : MonoBehaviour
     {
         UpdateStatus("Signing in...");
 
+        // Editor-only: no real Google account, so seed a placeholder email so the profile panel's
+        // "Synced with" line can be verified. On device the real email from CompleteLogin is used.
+        if (string.IsNullOrEmpty(PlayerPrefs.GetString("PlayerEmail", "")))
+            PlayerPrefs.SetString("PlayerEmail", "editor.test@gmail.com");
+
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.ShowLoading("Signing in...");
 

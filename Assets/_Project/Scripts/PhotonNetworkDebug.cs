@@ -14,7 +14,8 @@ public class PhotonNetworkDebug : MonoBehaviour
     public Canvas debugCanvas;
 
     [Header("Settings")]
-    public bool showOnAndroid = true;
+    [Tooltip("Keep OFF for release builds — this overlay rebuilds a status string every frame.")]
+    public bool showOnAndroid = false;
     public bool showInEditor = false;
 
     void Awake()

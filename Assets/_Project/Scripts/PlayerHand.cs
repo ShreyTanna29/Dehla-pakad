@@ -84,6 +84,15 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     private void OnDestroy()
     {
+        // Stop any in-flight deal/animation coroutines and kill tweens targeting this object or its
+        // children, so queued OnComplete callbacks never run on the destroyed NetworkPlayer (which
+        // caused MissingReferenceExceptions when leaving a match or reconnecting).
+        StopAllCoroutines();
+        DG.Tweening.DOTween.Kill(transform);
+        Transform[] owned = GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < owned.Length; i++)
+            if (owned[i] != null) DG.Tweening.DOTween.Kill(owned[i]);
+
         if (LocalInstance == this)
         {
             LocalInstance = null;

@@ -446,7 +446,9 @@ public class FriendsPanelUIController : MonoBehaviour
                 return;
             }
 
-            string localUserId = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId;
+            string localUserId = PlayWithFriendsManager.Instance != null
+                ? PlayWithFriendsManager.Instance.GetAccountUserId()
+                : Firebase.Auth.FirebaseAuth.DefaultInstance?.CurrentUser?.UserId;
             if (!string.IsNullOrEmpty(localUserId) && firebaseUid == localUserId)
             {
                 ClearContainer(friendsListContainer);
@@ -493,7 +495,9 @@ public class FriendsPanelUIController : MonoBehaviour
                 ClearContainer(friendsListContainer);
 
                 DataSnapshot snapshot = task.Result;
-                string localUserId = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId;
+                string localUserId = PlayWithFriendsManager.Instance != null
+                    ? PlayWithFriendsManager.Instance.GetAccountUserId()
+                    : Firebase.Auth.FirebaseAuth.DefaultInstance?.CurrentUser?.UserId;
                 int found = 0;
 
                 if (snapshot != null && snapshot.Exists)
@@ -542,11 +546,13 @@ public class FriendsPanelUIController : MonoBehaviour
             add.onClick.AddListener(() =>
             {
                 if (PlayWithFriendsManager.Instance == null) return;
-                PlayWithFriendsManager.Instance.SendFriendRequest(userId, displayName);
-                // Mark as sent: grey out the button.
-                var img = add.GetComponent<Image>();
-                if (img != null) img.color = new Color(0.45f, 0.45f, 0.45f, 1f);
-                add.interactable = false;
+                PlayWithFriendsManager.Instance.SendFriendRequest(userId, displayName, success =>
+                {
+                    if (!success) return;
+                    var img = add.GetComponent<Image>();
+                    if (img != null) img.color = new Color(0.45f, 0.45f, 0.45f, 1f);
+                    add.interactable = false;
+                });
             });
         }
 

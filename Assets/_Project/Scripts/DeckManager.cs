@@ -459,8 +459,10 @@ public class DeckManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("[DeckManager] Resetting match state for a fresh game.");
         
-        // 🚀 Authoritative Reset
-        if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
+        // 🚀 Authoritative Reset — only when fully joined. During a LeaveRoom teardown InRoom is
+        // still true but writing properties is rejected/logged, so require ClientState == Joined.
+        if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient
+            && PhotonNetwork.NetworkClientState == Photon.Realtime.ClientState.Joined)
         {
             ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable 
             { 

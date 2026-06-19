@@ -7,6 +7,7 @@ using TMPro;
 using System.Collections.Generic;
 using Firebase.Database;
 using Firebase.Extensions;
+using Firebase.Auth;
 
 public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 {
@@ -87,6 +88,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     readonly HashSet<string> _gameInvitesSent = new HashSet<string>();
     bool _pendingCreatePrivateRoom;
     Coroutine _createRoomCoroutine;
+    Coroutine _retryFriendServicesCoroutine;
+    Coroutine _findFriendsCoroutine;
+    bool _firebaseAuthHooked;
 
     public IReadOnlyList<string> MyFriends => myFriends;
     public IReadOnlyDictionary<string, string> IncomingRequests => incomingRequests;
@@ -97,6 +101,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     void NotifyRequestsChanged() => RequestsChanged?.Invoke();
 
     public string GetFriendDisplayName(string friendId) => GetFriendDisplayNameInternal(friendId);
+
+    /// <summary>Firebase account id used for friend requests / invites (same as MyUserId).</summary>
+    public string GetAccountUserId() => MyUserId;
 
     public FriendInfo GetFriendPhotonInfo(string friendId) =>
         friendPhotonStatus.TryGetValue(friendId, out FriendInfo info) ? info : null;
@@ -125,15 +132,59 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         EnsureNickname();
         EnsurePhotonView();
         PhotonNetwork.AddCallbackTarget(this);
+        TryHookFirebaseAuth();
     }
 
-    public override void OnDisable()
+    void OnEnable() => TryHookFirebaseAuth();
+
+    void OnDisable()
     {
-        // Keep receiving room property updates while this panel is hidden.
+        UnhookFirebaseAuth();
+        if (_retryFriendServicesCoroutine != null)
+        {
+            StopCoroutine(_retryFriendServicesCoroutine);
+            _retryFriendServicesCoroutine = null;
+        }
+    }
+
+    void TryHookFirebaseAuth()
+    {
+        if (_firebaseAuthHooked) return;
+        if (FirebaseAuth.DefaultInstance == null) return;
+
+        FirebaseAuth.DefaultInstance.StateChanged += OnFirebaseAuthStateChanged;
+        _firebaseAuthHooked = true;
+
+        if (FirebaseAuth.DefaultInstance.CurrentUser != null)
+            EnsureFriendServicesStarted();
+    }
+
+    void UnhookFirebaseAuth()
+    {
+        if (!_firebaseAuthHooked || FirebaseAuth.DefaultInstance == null) return;
+        FirebaseAuth.DefaultInstance.StateChanged -= OnFirebaseAuthStateChanged;
+        _firebaseAuthHooked = false;
+    }
+
+    void OnFirebaseAuthStateChanged(object sender, System.EventArgs e)
+    {
+        if (FirebaseAuth.DefaultInstance?.CurrentUser != null)
+        {
+            EnsurePhotonUserId();
+            EnsureFriendServicesStarted();
+        }
     }
 
     void EnsureNickname()
     {
+        string profileName = PlayerPrefs.GetString("PlayerUsername", string.Empty).Trim();
+        if (!string.IsNullOrEmpty(profileName))
+        {
+            if (PhotonNetwork.NickName != profileName)
+                PhotonNetwork.NickName = profileName;
+            return;
+        }
+
         if (string.IsNullOrEmpty(PhotonNetwork.NickName))
         {
             PhotonNetwork.NickName = "Player_" + Random.Range(100, 999);
@@ -155,6 +206,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     void OnDestroy()
     {
+        UnhookFirebaseAuth();
         PhotonNetwork.RemoveCallbackTarget(this);
 
         if (requestDbRef != null)
@@ -195,8 +247,23 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     /// <summary>Call after login / Photon ready so Firebase listeners use the real user id.</summary>
     public void EnsureFriendServicesStarted()
     {
+        EnsurePhotonUserId();
+
         string myId = MyUserId;
-        if (string.IsNullOrEmpty(myId)) return;
+        if (string.IsNullOrEmpty(myId))
+        {
+            // StartCoroutine throws if this panel's GameObject is inactive (headless boot).
+            // In that case SocialServiceBootstrap drives the retry instead.
+            if (isActiveAndEnabled && _retryFriendServicesCoroutine == null)
+                _retryFriendServicesCoroutine = StartCoroutine(RetryFriendServicesWhenReady());
+            return;
+        }
+
+        if (_retryFriendServicesCoroutine != null)
+        {
+            StopCoroutine(_retryFriendServicesCoroutine);
+            _retryFriendServicesCoroutine = null;
+        }
 
         if (_listenersBoundUserId != myId)
         {
@@ -210,6 +277,51 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         StartInviteListener();
         RefreshFriendsListUI();
         CheckFriendsOnlineStatus();
+    }
+
+    bool _headlessFriendsLoaded;
+
+    /// <summary>
+    /// Brings the Firebase friend-request / accept / invite listeners online even though this
+    /// panel's GameObject is INACTIVE on the home screen. Without this, a player who never opens
+    /// the matchmaking / play-with-friends panel never binds the listeners, so incoming friend
+    /// requests and game invites are silently dropped (and the manager's Instance stays null, so
+    /// the "Add Friend" buttons do nothing / throw). Called by SocialServiceBootstrap; safe to
+    /// call repeatedly — every internal bind is guarded.
+    /// </summary>
+    public void StartSocialServicesHeadless()
+    {
+        if (Instance == null) Instance = this;
+
+        if (!_headlessFriendsLoaded)
+        {
+            LoadFriends();
+            if (myFriends == null) myFriends = new List<string>();
+            _headlessFriendsLoaded = true;
+        }
+
+        // Subscribe to Firebase auth so the listeners rebind to the real account id once the
+        // user finishes signing in (the normal Awake/OnEnable hook never runs while inactive).
+        TryHookFirebaseAuth();
+        EnsureFriendServicesStarted();
+    }
+
+    IEnumerator RetryFriendServicesWhenReady()
+    {
+        const int maxAttempts = 30;
+        for (int i = 0; i < maxAttempts; i++)
+        {
+            yield return new WaitForSeconds(0.5f);
+            if (FirebaseAuth.DefaultInstance?.CurrentUser != null || !string.IsNullOrEmpty(MyUserId))
+            {
+                _retryFriendServicesCoroutine = null;
+                EnsureFriendServicesStarted();
+                yield break;
+            }
+        }
+
+        _retryFriendServicesCoroutine = null;
+        Debug.LogWarning("[Friends] Could not start friend services — no Firebase user id yet.");
     }
 
     void StopFriendListeners()
@@ -242,10 +354,23 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.AuthValues == null)
             PhotonNetwork.AuthValues = new AuthenticationValues();
 
+        string firebaseUid = FirebaseAuth.DefaultInstance?.CurrentUser?.UserId;
+        if (!string.IsNullOrEmpty(firebaseUid))
+        {
+            if (PhotonNetwork.AuthValues.UserId != firebaseUid)
+            {
+                PhotonNetwork.AuthValues.UserId = firebaseUid;
+                PlayerPrefs.SetString("PhotonUserId", firebaseUid);
+                PlayerPrefs.Save();
+            }
+            return;
+        }
+
         if (string.IsNullOrEmpty(PhotonNetwork.AuthValues.UserId))
         {
             string uid = PlayerPrefs.GetString("PhotonUserId", System.Guid.NewGuid().ToString());
             PlayerPrefs.SetString("PhotonUserId", uid);
+            PlayerPrefs.Save();
             PhotonNetwork.AuthValues.UserId = uid;
         }
     }
@@ -361,6 +486,13 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             if (errorText != null) errorText.gameObject.SetActive(false);
             DoCreatePrivateRoom();
         }
+
+        CheckFriendsOnlineStatus();
+    }
+
+    public override void OnJoinedLobby()
+    {
+        CheckFriendsOnlineStatus();
     }
 
     // ==========================================
@@ -1257,7 +1389,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (string.IsNullOrEmpty(friendUserId)) return;
 
-        string myId = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
+        string myId = MyUserId;
         if (!string.IsNullOrEmpty(myId) && friendUserId == myId)
         {
             ShowUIError("You cannot add yourself!");
@@ -1285,8 +1417,54 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public void CheckFriendsOnlineStatus()
     {
         EnsurePhotonUserId();
-        if (myFriends.Count > 0 && PhotonNetwork.IsConnectedAndReady)
-            PhotonNetwork.FindFriends(myFriends.ToArray());
+        if (myFriends == null || myFriends.Count == 0)
+            return;
+
+        if (!CanCallFindFriends())
+        {
+            ScheduleFindFriendsWhenReady();
+            return;
+        }
+
+        PhotonNetwork.FindFriends(myFriends.ToArray());
+    }
+
+    static bool CanCallFindFriends()
+    {
+        if (PhotonNetwork.OfflineMode) return false;
+        if (!PhotonNetwork.IsConnectedAndReady) return false;
+        if (PhotonNetwork.Server != ServerConnection.MasterServer) return false;
+
+        ClientState state = PhotonNetwork.NetworkClientState;
+        return state == ClientState.ConnectedToMasterServer || state == ClientState.JoinedLobby;
+    }
+
+    void ScheduleFindFriendsWhenReady()
+    {
+        if (_findFriendsCoroutine != null) return;
+
+        if (isActiveAndEnabled)
+            _findFriendsCoroutine = StartCoroutine(WaitForPhotonThenFindFriends());
+        else if (SocialServiceBootstrap.Instance != null)
+            _findFriendsCoroutine = SocialServiceBootstrap.Instance.StartCoroutine(WaitForPhotonThenFindFriends());
+    }
+
+    IEnumerator WaitForPhotonThenFindFriends()
+    {
+        var wait = new WaitForSeconds(0.25f);
+        for (int i = 0; i < 80; i++)
+        {
+            if (CanCallFindFriends())
+            {
+                _findFriendsCoroutine = null;
+                if (myFriends != null && myFriends.Count > 0)
+                    PhotonNetwork.FindFriends(myFriends.ToArray());
+                yield break;
+            }
+            yield return wait;
+        }
+
+        _findFriendsCoroutine = null;
     }
 
     /// <summary>
@@ -1315,14 +1493,47 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     // FRIEND REQUEST SYSTEM (Accept / Decline)
     // ==========================================
 
-    string MyUserId => PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
-    string MyDisplayName => string.IsNullOrEmpty(PhotonNetwork.NickName) ? "Player" : PhotonNetwork.NickName;
+    string MyUserId
+    {
+        get
+        {
+            if (FirebaseAuth.DefaultInstance?.CurrentUser != null)
+                return FirebaseAuth.DefaultInstance.CurrentUser.UserId;
+
+            return PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
+        }
+    }
+
+    string MyDisplayName
+    {
+        get
+        {
+            string savedName = PlayerPrefs.GetString("PlayerUsername", "");
+            if (!string.IsNullOrEmpty(savedName)) return savedName;
+
+            return string.IsNullOrEmpty(PhotonNetwork.NickName) ? "Player" : PhotonNetwork.NickName;
+        }
+    }
 
     /// <summary>Sends a friend request to the target user (they get Accept/Decline).</summary>
-    public void SendFriendRequest(string targetUserId, string targetName)
+    public void SendFriendRequest(string targetUserId, string targetName, System.Action<bool> onComplete = null)
     {
-        if (string.IsNullOrEmpty(targetUserId)) return;
+        if (string.IsNullOrEmpty(targetUserId))
+        {
+            onComplete?.Invoke(false);
+            return;
+        }
         targetUserId = targetUserId.Trim();
+
+        if (FirebaseAuth.DefaultInstance?.CurrentUser == null && !Application.isEditor)
+        {
+            ShowUIError("Sign in required to send friend requests.");
+            onComplete?.Invoke(false);
+            return;
+        }
+
+        EnsurePhotonUserId();
+        EnsureFriendServicesStarted();
 
         // The whole friend system keys on the account id (Firebase uid / Photon UserId).
         // But the UID users see and type is the short 10-digit public GameUid. If the caller
@@ -1335,9 +1546,10 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                 if (string.IsNullOrEmpty(resolved))
                 {
                     ShowUIError("No player found with that UID.");
+                    onComplete?.Invoke(false);
                     return;
                 }
-                SendFriendRequest(resolved, targetName);
+                SendFriendRequest(resolved, targetName, onComplete);
             });
             return;
         }
@@ -1346,24 +1558,28 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (!string.IsNullOrEmpty(myId) && targetUserId == myId)
         {
             ShowUIError("You cannot add yourself!");
+            onComplete?.Invoke(false);
             return;
         }
 
         if (myFriends.Contains(targetUserId))
         {
             ShowUIError("Already in your friends list.");
+            onComplete?.Invoke(false);
             return;
         }
 
         if (incomingRequests.ContainsKey(targetUserId))
         {
             AcceptFriendRequest(targetUserId, incomingRequests[targetUserId]);
+            onComplete?.Invoke(true);
             return;
         }
 
         if (string.IsNullOrEmpty(myId))
         {
             ShowUIError("Not connected yet. Try again.");
+            onComplete?.Invoke(false);
             return;
         }
 
@@ -1373,6 +1589,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         var requestData = new Dictionary<string, object>
         {
+            { "fromUserId", myId },
             { "fromName", MyDisplayName },
             { "createdAt", System.DateTime.UtcNow.Ticks }
         };
@@ -1385,10 +1602,12 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                 {
                     Debug.LogError("[FriendReq] Send failed: " + task.Exception);
                     ShowUIError("Request failed. Try again.");
+                    onComplete?.Invoke(false);
                     return;
                 }
                 ShowUIError(string.IsNullOrEmpty(targetName) ? "Friend request sent!" : $"Request sent to {targetName}!");
-                Debug.Log($"[FriendReq] Sent request to {targetUserId}");
+                Debug.Log($"[FriendReq] Sent request to {targetUserId} from {myId}");
+                onComplete?.Invoke(true);
             });
     }
 
@@ -1413,7 +1632,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             {
                 string fromId = child.Key;
                 if (string.IsNullOrEmpty(fromId) || myFriends.Contains(fromId)) continue;
-                string fromName = child.Child("fromName").Value?.ToString() ?? fromId;
+                string fromName = child.Child("fromName").Value?.ToString();
+                if (string.IsNullOrEmpty(fromName))
+                    fromName = child.Child("fromUserId").Value?.ToString() ?? fromId;
+                if (string.IsNullOrEmpty(fromName))
+                    fromName = fromId;
                 incomingRequests[fromId] = fromName;
             }
 
@@ -1428,11 +1651,18 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         string fromId = args.Snapshot.Key;
         if (string.IsNullOrEmpty(fromId) || myFriends.Contains(fromId)) return;
 
-        string fromName = args.Snapshot.Child("fromName").Value?.ToString() ?? fromId;
+        string fromName = args.Snapshot.Child("fromName").Value?.ToString();
+        if (string.IsNullOrEmpty(fromName))
+            fromName = args.Snapshot.Child("fromUserId").Value?.ToString() ?? fromId;
+        if (string.IsNullOrEmpty(fromName))
+            fromName = fromId;
         incomingRequests[fromId] = fromName;
         Debug.Log($"[FriendReq] Incoming request from {fromName} ({fromId})");
         RefreshFriendsListUI();
         NotifyRequestsChanged();
+
+        if (FriendsPanelUIController.Instance != null)
+            FriendsPanelUIController.Instance.ShowTab(FriendsPanelUIController.PanelTab.Requests);
     }
 
     void OnFriendRequestRemoved(object sender, ChildChangedEventArgs args)
@@ -1688,15 +1918,34 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             ? GetFriendDisplayNameInternal(friendUserId)
             : friendDisplayName;
 
-        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
+        // Offline practice tables are local-only — a real friend can never join them.
+        if (PhotonNetwork.OfflineMode)
         {
-            TrySendPendingInvite();
+            ShowUIError("Can't invite friends in practice mode.");
+            _pendingInviteFriendId = null;
+            _pendingInviteFriendName = null;
             return;
         }
 
-        if (PhotonNetwork.InRoom)
-            PhotonNetwork.LeaveRoom();
+        // Already seated at a real Photon table (online matchmaking room OR a private friends
+        // room): invite the friend straight into THIS table. We must NOT leave the room here —
+        // LeaveRoom fires OnLeftRoom -> ReturnToHomeScreen and drops the host back to the home
+        // screen. That was the old REPLACE -> homepage bug.
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null)
+        {
+            // The table may have been closed when the match started; reopen it so the invited
+            // friend can join and take a bot seat (DeckManager.OnPlayerEnteredRoom hands it over).
+            if (!PhotonNetwork.CurrentRoom.IsOpen)
+                PhotonNetwork.CurrentRoom.IsOpen = true;
 
+            SendFirebaseInvite(_pendingInviteFriendId, PhotonNetwork.CurrentRoom.Name, _pendingInviteFriendName);
+            _pendingInviteFriendId = null;
+            _pendingInviteFriendName = null;
+            return;
+        }
+
+        // Not in any room (inviting from the home screen): spin up a private room. The pending
+        // invite is sent automatically once we join it (OnJoinedRoom -> TrySendPendingInvite).
         CreatePrivateRoom();
         ShowUIError("Creating room for invite...");
     }
@@ -1715,8 +1964,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (string.IsNullOrEmpty(targetUserId) || string.IsNullOrEmpty(roomPin)) return;
 
-        string fromId = PhotonNetwork.AuthValues?.UserId ?? "";
-        string fromName = PhotonNetwork.NickName ?? "Friend";
+        string fromId = MyUserId;
+        string fromName = MyDisplayName;
 
         var inviteData = new Dictionary<string, object>
         {
@@ -1800,17 +2049,12 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     void ShowIncomingInvite(string fromName, string roomPin)
     {
+        // Keep the PIN prefilled as a harmless fallback for the manual JOIN path.
         if (pinInputField != null)
             pinInputField.text = roomPin;
 
-        if (errorText != null)
-        {
-            errorText.text = $"{fromName} invited you! PIN: {roomPin}";
-            errorText.gameObject.SetActive(true);
-        }
-
-        if (FriendsDrawerController.Instance != null)
-            FriendsDrawerController.Instance.OpenDrawer();
+        // Free-Fire / PUBG style slide-in popup with ACCEPT (joins instantly) / DECLINE.
+        IncomingInvitePopup.ShowInvite(fromName, roomPin);
 
         Debug.Log($"[Invite] Incoming from {fromName} — room {roomPin}");
     }

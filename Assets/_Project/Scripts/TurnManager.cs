@@ -174,7 +174,8 @@ public class TurnManager : MonoBehaviourPunCallbacks
 
         if (timerText != null)
         {
-            if (PhotonNetwork.LocalPlayer.ActorNumber == currentActorTurn)
+            int localActorNum = PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : -1;
+            if (localActorNum == currentActorTurn)
             {
                 timerText.color = Color.white;
                 timerText.text = $"YOUR TURN: {currentTime}s";
@@ -195,7 +196,7 @@ public class TurnManager : MonoBehaviourPunCallbacks
         if (!GameStabilityAudit.CanAcceptPlayerInput() || PlayerHand.IsTrickLocked)
             return;
         
-        if (PhotonNetwork.LocalPlayer.ActorNumber == actorNumber)
+        if (PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.ActorNumber == actorNumber)
         {
             Debug.Log("⏳ Time Up! Forcefully auto-playing a valid card...");
             AutoPlayValidCard();

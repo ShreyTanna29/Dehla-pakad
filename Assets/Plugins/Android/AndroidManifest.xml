@@ -11,11 +11,8 @@
         android:fullBackupContent="false"
         tools:replace="android:allowBackup,android:fullBackupContent">
         <activity android:name="com.unity3d.player.UnityPlayerActivity"
-                  android:theme="@style/UnityThemeSelector">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+                  android:theme="@style/UnityThemeSelector"
+                  android:exported="false">
             <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
         </activity>
         <activity android:name="com.unity3d.player.UnityPlayerGameActivity"

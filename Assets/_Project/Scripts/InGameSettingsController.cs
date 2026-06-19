@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using DG.Tweening;
 using Photon.Pun;
+using Photon.Realtime;
 
 /// <summary>
 /// Controls the in-game settings panel on the game table:
@@ -227,9 +228,26 @@ public class InGameSettingsController : MonoBehaviour
     {
         GameFlowState.SetPhase(GameFlowPhase.Home);
 
-        if (PhotonNetwork.InRoom)
-            PhotonNetwork.LeaveRoom();           // NetworkManager.OnLeftRoom -> ReturnToHomeScreen
-        else if (NetworkManager.Instance != null)
+        // Guard against a double-leave (e.g. Back pressed twice): LeaveRoom while already leaving
+        // makes Photon log an operation error. Only leave when actually in a room and not mid-leave.
+        bool leaving = PhotonNetwork.NetworkClientState == ClientState.Leaving;
+        if (PhotonNetwork.InRoom && !leaving)
+        {
+            PhotonNetwork.LeaveRoom();            // NetworkManager.OnLeftRoom -> ReturnToHomeScreen
+        }
+        else if (!PhotonNetwork.InRoom && !leaving && NetworkManager.Instance != null)
+        {
             NetworkManager.Instance.ReturnToHomeScreen();
+        }
+    }
+
+    /// <summary>
+    /// Entry point for the Android hardware Back button while in a match: shows the same
+    /// "Exit Game?" confirmation as the gear menu instead of letting the OS quit the app.
+    /// </summary>
+    public void RequestExitFromBack()
+    {
+        if (confirmExitPanel != null && confirmExitPanel.activeSelf) return; // already asking
+        OnExitGameClicked();
     }
 }

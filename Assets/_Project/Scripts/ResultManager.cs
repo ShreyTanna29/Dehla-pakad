@@ -48,7 +48,30 @@ public class ResultManager : MonoBehaviourPunCallbacks
     private Image _dimOverlay;
     private readonly List<GameObject> _dynamicRows = new List<GameObject>();
     private bool _isShowingResult;
+    private bool _statsRecorded;
+    private bool _resultActionTaken;
     private static bool _resultPanelResolveWarned;
+
+    /// <summary>
+    /// Records the local player's finished match into <see cref="ProfileStatsStore"/>, split by
+    /// Vs Bots / Vs Online. Guarded so it only counts once per match.
+    /// </summary>
+    void RecordMatchStats()
+    {
+        if (_statsRecorded) return;
+        _statsRecorded = true;
+
+        PlayerResult me = playerResults != null && playerResults.Length > 0 ? playerResults[0] : null;
+        if (me == null) return;
+
+        bool vsBots = PhotonNetwork.OfflineMode ||
+                      (DeckManager.botActorNumbers != null && DeckManager.botActorNumbers.Count > 0);
+        int rank = me.rank <= 0 ? 4 : me.rank;
+        bool kot = me.dehlasCollected >= GetKotThreshold();
+
+        ProfileStatsStore.RecordCompletedGame(vsBots, rank, me.score, me.bid, kot);
+        Debug.Log($"[Stats] Recorded {(vsBots ? "VsBots" : "Online")} game: rank={rank} score={me.score} bid={me.bid} kot={kot}");
+    }
 
     const int RoundsPerMatch = 3;
     const int KotDehlasOneTaash = 4;
@@ -227,15 +250,15 @@ public class ResultManager : MonoBehaviourPunCallbacks
         if (propertiesThatChanged.ContainsKey("SW") &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("SW", out object tricksObj))
         {
-            int[] tricks = (int[])tricksObj;
-            for (int i = 0; i < 4 && i < tricks.Length; i++)
+            int[] tricks = tricksObj as int[];
+            for (int i = 0; tricks != null && i < 4 && i < tricks.Length; i++)
                 playerResults[i].tricksWon = tricks[i];
         }
         if (propertiesThatChanged.ContainsKey("DL") &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("DL", out object dehlaObj))
         {
-            int[] dehlas = (int[])dehlaObj;
-            for (int i = 0; i < 4 && i < dehlas.Length; i++)
+            int[] dehlas = dehlaObj as int[];
+            for (int i = 0; dehlas != null && i < 4 && i < dehlas.Length; i++)
                 playerResults[i].dehlasCollected = dehlas[i];
         }
     }
@@ -272,6 +295,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
         }
 
         _isShowingResult = true;
+        _resultActionTaken = false;
         Debug.Log("Result Panel Opening");
         EnsurePlayerResults();
         EnsurePanelHierarchyActive();
@@ -288,6 +312,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
             Debug.Log("Winner Determined: (none)");
 
         FinalizeCurrentRoundScores();
+        RecordMatchStats();
         BuildResultPanelUI();
         Debug.Log("Result Data Loaded");
 
@@ -886,15 +911,19 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     void OnHomeClicked()
     {
+        if (_resultActionTaken) return;   // ignore rapid double-taps
+        _resultActionTaken = true;
+
         Debug.Log("[UI] Button Clicked: Home (from results)");
         HideResultPanelImmediate();
         ResetMatchStats();
 
-        if (PhotonNetwork.InRoom)
+        bool leaving = PhotonNetwork.NetworkClientState == Photon.Realtime.ClientState.Leaving;
+        if (PhotonNetwork.InRoom && !leaving)
             PhotonNetwork.LeaveRoom();
         else if (PhotonNetwork.OfflineMode)
         {
-            PhotonNetwork.LeaveRoom();
+            if (!leaving) PhotonNetwork.LeaveRoom();
             PhotonNetwork.OfflineMode = false;
         }
 
@@ -907,6 +936,14 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     void OnRestartClicked()
     {
+        if (_resultActionTaken) return;   // ignore rapid double-taps
+        if (!PhotonNetwork.OfflineMode && !(PhotonNetwork.InRoom && PhotonNetwork.IsConnectedAndReady))
+        {
+            Debug.LogWarning("[Result] Play Again ignored — not in a valid room state.");
+            return;
+        }
+        _resultActionTaken = true;
+
         Debug.Log("[UI] Button Clicked: Play Again");
         HideResultPanelImmediate();
         ResetMatchStats();
@@ -929,6 +966,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     void ResetMatchStats()
     {
+        _statsRecorded = false;
         _currentRoundIndex = 0;
         for (int r = 0; r < RoundsPerMatch; r++)
         {

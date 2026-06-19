@@ -997,9 +997,20 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
         }
 
+        // A reconnect/rejoin is in flight: do NOT pull the client into the lobby here, or we cancel
+        // PhotonNetwork.ReconnectAndRejoin() and drop the match. Let OnJoinedRoom resume the game.
+        if (isAttemptingRejoin)
+        {
+            Debug.Log("[Photon] Connected during rejoin — waiting for OnJoinedRoom to resume the match.");
+            return;
+        }
+
         EnsureJoinLobby();
         RefreshPlayOnlineButtonState();
     }
+
+    /// <summary>True while a disconnect-during-match reconnect/rejoin attempt is in progress.</summary>
+    public bool IsAttemptingRejoin => isAttemptingRejoin;
 
     void OnApplicationPause(bool paused)
     {

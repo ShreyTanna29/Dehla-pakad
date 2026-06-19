@@ -49,9 +49,9 @@ public class SafeArea : MonoBehaviour
         anchorMax.y /= Screen.height;
 
         // Apply to my RectTransform
-        // rectTransform.anchorMin = anchorMin;
-        // rectTransform.anchorMax = anchorMax;
-
-        Debug.LogFormat("Safe Area Logic Calculated: [{0}, {1}] to [{2}, {3}] (Not applied to RectTransform per request)", anchorMin.x, anchorMin.y, anchorMax.x, anchorMax.y);
+        rectTransform.anchorMin = anchorMin;
+        rectTransform.anchorMax = anchorMax;
+        rectTransform.offsetMin = Vector2.zero;
+        rectTransform.offsetMax = Vector2.zero;
     }
 }
