@@ -2189,8 +2189,18 @@ private static bool _resultPanelShown = false;
 
     public void OnDealingComplete(int starterActor)
     {
-        if (isDealingComplete) return;
         if (LocalInstance != null && LocalInstance != this) { LocalInstance.OnDealingComplete(starterActor); return; }
+
+        // Reconnect / re-sync path: dealing was already marked complete (e.g. RPC_SyncGameState
+        // set the flag before the hand-restore RPC arrived). Don't replay the deal animation —
+        // just rebuild turn ownership and re-enable card input against the restored hand so the
+        // reconnecting player can interact with their cards again. Without this the player gets
+        // stuck with every card un-playable (isValidToPlay == false) and the game looks frozen.
+        if (isDealingComplete)
+        {
+            ResumePlayAfterReconnect(starterActor);
+            return;
+        }
 
         bool matchInProgress = false;
         if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object started))
@@ -2203,6 +2213,35 @@ private static bool _resultPanelShown = false;
 
         float turnDelay = matchInProgress ? 0.15f : 1.1f;
         StartCoroutine(HandRevealThenStartGame(starterActor, turnDelay, matchInProgress));
+    }
+
+    /// <summary>
+    /// Re-enables gameplay for the local player after a reconnect when dealing was already
+    /// complete. Rebuilds the seat order, restores the current turn actor, refreshes the hand
+    /// UI and re-applies per-card play rules so the player can play cards again. Idempotent —
+    /// safe to call multiple times as restore RPCs arrive in any order.
+    /// </summary>
+    void ResumePlayAfterReconnect(int starterActor)
+    {
+        if (GameFlowState.Current != GameFlowPhase.InGame)
+            GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
+
+        BuildTableTurnOrder();
+        currentTurnActor = starterActor;
+
+        if (!IsDealAnimationRunning && !_isDealAnimRunning)
+            RefreshHandUI(animate: false, force: true);
+
+        bool isMyTurn = PhotonNetwork.LocalPlayer.ActorNumber == starterActor;
+        CardInteract.isPlayingCard = false;
+        CardInteract.canPlayCards = isMyTurn;
+        ApplyRules(isMyTurn);
+
+        // Master must still drive bot turns / the turn timer for the active actor.
+        if (PhotonNetwork.IsMasterClient)
+            ProcessTurn(starterActor);
+
+        Debug.Log($"[Reconnect] Resumed play after rejoin. Starter actor: {starterActor}, My turn: {isMyTurn}");
     }
 
     IEnumerator HandRevealThenStartGame(int starterActor, float turnDelay, bool matchInProgress)

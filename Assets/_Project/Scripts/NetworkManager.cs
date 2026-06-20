@@ -10,6 +10,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 {
     public static NetworkManager Instance;
 
+    // Set during application quit / scene teardown. Photon callbacks (e.g. OnLeftRoom)
+    // can fire from ConnectionHandler.OnDisable while the hierarchy is being destroyed,
+    // where calling GameObject.Find triggers a 'go.IsActive()' assertion.
+    private static bool isQuitting;
+
     [Header("UI Panels (Canvas Groups)")]
     public CanvasGroup homeCanvasGroup; 
     public CanvasGroup gameCanvasGroup;
@@ -83,6 +88,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (HasInternet())
             ConnectToPhoton();
+    }
+
+    void OnApplicationQuit()
+    {
+        isQuitting = true;
     }
 
     void Start()
@@ -740,6 +750,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     void ResolveGameTablePanel()
     {
         if (gameTablePanel != null) return;
+        // GameObject.Find is unsafe during application quit / scene teardown
+        // (triggers a 'go.IsActive()' assertion when the hierarchy is being destroyed).
+        if (isQuitting || !Application.isPlaying) return;
         gameTablePanel = GameObject.Find("Panel_Game");
         if (gameTablePanel == null)
             gameTablePanel = GameObject.Find("[Panel_Game]");
@@ -1336,6 +1349,14 @@ yield return new WaitForSeconds(1f);
     public override void OnLeftRoom()
     {
         Debug.Log("[Photon] LeftRoom");
+
+        // During application quit / scene teardown this callback can fire from
+        // ConnectionHandler.OnDisable. Touching the UI hierarchy here is unsafe.
+        if (isQuitting || !Application.isPlaying)
+        {
+            Debug.Log("[Photon] LeftRoom ignored during teardown.");
+            return;
+        }
 
         if (pendingOfflineMatch)
         {

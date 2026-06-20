@@ -572,11 +572,16 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         yield return new WaitForSeconds(0.6f);
 
-        if (PhotonNetwork.IsMasterClient && IsDealingComplete && PlayerHand.LocalInstance != null)
+        // Self-restore play state from authoritative room properties (CTA = current turn actor).
+        // Runs on every reconnecting client, not just the master, so a non-master client can
+        // re-enable card input even if the master's pushed sync RPCs are delayed or missed.
+        // OnDealingComplete is idempotent on reconnect, so overlapping with the master push is safe.
+        if (IsDealingComplete && PlayerHand.LocalInstance != null)
         {
             int currentActor = PlayerHand.LocalInstance.currentTurnActor;
             PlayerHand.LocalInstance.OnDealingComplete(currentActor);
-            if (TurnManager.Instance != null) TurnManager.Instance.StartTurn(currentActor);
+            if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
+                TurnManager.Instance.StartTurn(currentActor);
         }
     }
 
