@@ -30,8 +30,52 @@ public class PlayerProfilePanelBinder : MonoBehaviour
         SetText("Text_ProfileName", username);
         SetSprite("Img_CurrentAvatar", avatar);
 
-        // Email ("Synced with")
-        SetText("Email", ResolveEmail());
+        // "Synced with" — guests see a "Bind with Google" button; linked/Google users see their email.
+        UpdateSyncedWithSection();
+    }
+
+    /// <summary>
+    /// Guest (anonymous) sessions show a "Bind with Google" button instead of an email address.
+    /// Once the guest links their Google account, this switches back to displaying the Gmail address.
+    /// </summary>
+    void UpdateSyncedWithSection()
+    {
+        bool isGuest = GoogleLogin.IsGuestSession();
+
+        Transform email = FindDeep(transform, "Email");
+        Transform linkBtn = FindDeep(transform, "Btn_LinkGoogle");
+
+        if (isGuest)
+        {
+            if (email != null) email.gameObject.SetActive(false);
+            if (linkBtn != null)
+            {
+                linkBtn.gameObject.SetActive(true);
+                WireLinkButton(linkBtn);
+            }
+        }
+        else
+        {
+            if (linkBtn != null) linkBtn.gameObject.SetActive(false);
+            if (email != null) email.gameObject.SetActive(true);
+            SetText("Email", ResolveEmail());
+        }
+    }
+
+    void WireLinkButton(Transform linkBtn)
+    {
+        Button btn = linkBtn.GetComponent<Button>();
+        if (btn == null) return;
+        btn.onClick.RemoveListener(OnLinkGoogleClicked);
+        btn.onClick.AddListener(OnLinkGoogleClicked);
+    }
+
+    void OnLinkGoogleClicked()
+    {
+        if (GoogleLogin.Instance != null)
+            GoogleLogin.Instance.LinkGuestWithGoogle();
+        else
+            Debug.LogWarning("[ProfileBinder] GoogleLogin.Instance is null — cannot bind Google.");
     }
 
     Sprite ResolveAvatar(int index)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 using Firebase;
@@ -25,6 +26,7 @@ public class GoogleLogin : MonoBehaviour
 
     [Header("UI References")]
     public UnityEngine.UI.Button googleSignInButton;
+    public UnityEngine.UI.Button btnGuestLogin;
     public TMPro.TMP_Text statusText;
 
     [Header("Profile UI Elements")]
@@ -104,6 +106,15 @@ public class GoogleLogin : MonoBehaviour
         if (googleSignInButton != null)
             googleSignInButton.interactable = false;
 
+        // Guest / Anonymous login button. Bound here so it lives alongside the Google button
+        // without touching the existing Google sign-in wiring.
+        if (btnGuestLogin != null)
+        {
+            btnGuestLogin.interactable = false;
+            btnGuestLogin.onClick.RemoveListener(SignInAsGuest);
+            btnGuestLogin.onClick.AddListener(SignInAsGuest);
+        }
+
         InitializeFirebase();
     }
 
@@ -124,6 +135,16 @@ public class GoogleLogin : MonoBehaviour
 
                 if (googleSignInButton != null)
                     googleSignInButton.interactable = true;
+                if (btnGuestLogin != null)
+                    btnGuestLogin.interactable = true;
+
+                // Auto-login: if a Firebase session already exists (Google OR Guest/Anonymous),
+                // skip the login screen and go straight to profile loading.
+                if (TryAutoLogin())
+                {
+                    UpdateStatus("Welcome back...");
+                    return;
+                }
 
                 if (!_loginFlowStarted)
                     EnforceLoginScreen();
@@ -164,8 +185,39 @@ public class GoogleLogin : MonoBehaviour
         }
 
         UpdateStatus("Signing in with Google...");
-        GoogleSignIn.DefaultInstance.SignIn().ContinueWithOnMainThread(OnAuthenticationFinished);
+        StartGoogleSignInInteractive(forceAccountPicker: true, OnAuthenticationFinished);
 #endif
+    }
+
+    /// <summary>
+    /// Starts an interactive Google sign-in and, when requested, clears any cached account so
+    /// Android shows the full account picker instead of silently reusing the last Gmail.
+    /// </summary>
+    void StartGoogleSignInInteractive(bool forceAccountPicker, Action<Task<GoogleSignInUser>> onFinished)
+    {
+        configuration.AccountName = null;
+        configuration.ForceTokenRefresh = forceAccountPicker;
+        GoogleSignIn.Configuration = configuration;
+
+        if (forceAccountPicker)
+        {
+            try
+            {
+                GoogleSignIn.DefaultInstance.SignOut();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning("[Google] SignOut before account picker: " + ex.Message);
+            }
+        }
+
+        GoogleSignIn.DefaultInstance.SignIn().ContinueWithOnMainThread(task =>
+        {
+            configuration.ForceTokenRefresh = false;
+            configuration.AccountName = null;
+            GoogleSignIn.Configuration = configuration;
+            onFinished?.Invoke(task);
+        });
     }
 
     private void OnAuthenticationFinished(Task<GoogleSignInUser> task)
@@ -284,8 +336,15 @@ public class GoogleLogin : MonoBehaviour
 
     private void CompleteLogin(FirebaseUser user)
     {
-        Debug.Log("✅ Authenticated: " + user.DisplayName);
-        UpdateStatus("Welcome, " + user.DisplayName);
+        // Anonymous (guest) accounts have no DisplayName, so seed a random guest name.
+        // Google accounts keep their existing DisplayName-based flow unchanged.
+        bool isGuest = user.IsAnonymous;
+        string defaultName = isGuest
+            ? "Guest_" + UnityEngine.Random.Range(1000, 9999)
+            : user.DisplayName;
+
+        Debug.Log($"✅ Authenticated: {(isGuest ? "Guest" : user.DisplayName)} (anonymous={isGuest})");
+        UpdateStatus(isGuest ? "Welcome, Guest" : "Welcome, " + user.DisplayName);
 
         string photonUserId = user.UserId;
         ConnectPhotonAfterLogin(photonUserId);
@@ -294,14 +353,288 @@ public class GoogleLogin : MonoBehaviour
         {
             if (NetworkManager.Instance != null)
                 NetworkManager.Instance.ShowLoading("Fetching Profile...");
-                
-            PlayerProfileManager.Instance.CheckAndLoadUserProfile(photonUserId, user.DisplayName);
+
+            PlayerProfileManager.Instance.CheckAndLoadUserProfile(photonUserId, defaultName);
         }
         else
         {
             Debug.LogError("PlayerProfileManager.Instance is null! Cannot open profile setup.");
             UpdateStatus("Profile setup unavailable.");
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  GUEST (ANONYMOUS) LOGIN  —  added alongside Google login, does not modify it.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Editor-only flag so the profile UI can show the guest "Bind Google" option while simulating.</summary>
+    private static bool _editorSimGuest;
+
+    /// <summary>
+    /// True when the current session is an anonymous/guest account. Used by the profile panel to
+    /// show "Bind with Google" instead of an email. Works under the editor simulation too.
+    /// </summary>
+    public static bool IsGuestSession()
+    {
+        try
+        {
+            FirebaseUser u = FirebaseAuth.DefaultInstance != null ? FirebaseAuth.DefaultInstance.CurrentUser : null;
+            if (u != null) return u.IsAnonymous;
+        }
+        catch { /* Firebase not ready — fall through */ }
+
+#if UNITY_EDITOR
+        return _editorSimGuest;
+#else
+        return false;
+#endif
+    }
+
+    /// <summary>Bound to the "Play as Guest" button. Signs in anonymously and reuses the profile flow.</summary>
+    public void SignInAsGuest()
+    {
+        Debug.Log("Guest Login Button Clicked! Starting anonymous sign-in.");
+        _loginFlowStarted = true;
+
+        if (Application.internetReachability == NetworkReachability.NotReachable)
+        {
+            UpdateStatus("No Internet Connection!");
+            return;
+        }
+
+#if UNITY_EDITOR
+        Debug.LogWarning("Editor Mode: Simulating Guest Login...");
+        SimulateGuestLogin();
+#else
+        if (!isFirebaseReady || auth == null)
+        {
+            UpdateStatus("Firebase Initializing...");
+            InitializeFirebase();
+            return;
+        }
+
+        UpdateStatus("Signing in as Guest...");
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowLoading("Signing in as Guest...");
+
+        auth.SignInAnonymouslyAsync().ContinueWithOnMainThread(OnGuestSignInFinished);
+#endif
+    }
+
+    private void OnGuestSignInFinished(Task<FirebaseUser> task)
+    {
+        if (task.IsFaulted || task.IsCanceled)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.HideLoading();
+
+            Debug.LogError("❌ Guest Login Failed: " + task.Exception);
+            UpdateStatus("Guest Login Failed");
+            ShowLoginPanel();
+            return;
+        }
+
+        FirebaseUser user = task.Result;
+        if (user == null)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.HideLoading();
+
+            UpdateStatus("Guest Login Failed");
+            ShowLoginPanel();
+            return;
+        }
+
+        CompleteLogin(user);
+    }
+
+    /// <summary>
+    /// Auto-login: if a Firebase session already exists (returning Google OR Guest user), bypass the
+    /// login screen and go straight to <see cref="PlayerProfileManager.CheckAndLoadUserProfile"/>.
+    /// </summary>
+    private bool TryAutoLogin()
+    {
+#if UNITY_EDITOR
+        return false; // Editor uses simulated login; no persisted Firebase session to restore.
+#else
+        if (auth == null || auth.CurrentUser == null)
+            return false;
+
+        FirebaseUser user = auth.CurrentUser;
+        Debug.Log($"[Auth] Auto-login: existing session found (anonymous={user.IsAnonymous}).");
+        _loginFlowStarted = true;
+        CompleteLogin(user);
+        return true;
+#endif
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  GUEST → GOOGLE BINDING  —  upgrades an anonymous account to a Google account.
+    //  Same Firebase UserId is preserved, so all profile/progress data carries over.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Called from the Player Profile panel when a guest taps "Bind with Google".</summary>
+    public void LinkGuestWithGoogle()
+    {
+        if (Application.internetReachability == NetworkReachability.NotReachable)
+        {
+            UpdateStatus("No Internet Connection!");
+            return;
+        }
+
+#if UNITY_EDITOR
+        Debug.LogWarning("Editor Mode: Simulating Google bind...");
+        SimulateLinkGoogle();
+#else
+        if (auth == null || auth.CurrentUser == null)
+        {
+            Debug.LogError("[Link] No current user to link.");
+            return;
+        }
+
+        if (!auth.CurrentUser.IsAnonymous)
+        {
+            Debug.Log("[Link] Account already linked to Google.");
+            RefreshProfileBinder();
+            return;
+        }
+
+        UpdateStatus("Binding Google account...");
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowLoading("Choose Google account...");
+
+        StartGoogleSignInInteractive(forceAccountPicker: true, OnGoogleLinkAuthFinished);
+#endif
+    }
+
+#if !UNITY_EDITOR
+    private void OnGoogleLinkAuthFinished(Task<GoogleSignInUser> task)
+    {
+        if (task.IsCanceled)
+        {
+            if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+            Debug.LogWarning("[Link] Google account picker cancelled.");
+            UpdateStatus("Bind Cancelled");
+            return;
+        }
+
+        if (task.IsFaulted)
+        {
+            if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+            Debug.LogError("[Link] Google sign-in for binding failed: " + task.Exception);
+            UpdateStatus("Bind Cancelled");
+            return;
+        }
+
+        GoogleSignInUser googleUser = task.Result;
+        if (googleUser == null || string.IsNullOrEmpty(googleUser.IdToken))
+        {
+            if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+            UpdateStatus("Auth Token Missing!");
+            return;
+        }
+
+        if (auth == null || auth.CurrentUser == null)
+        {
+            if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+            return;
+        }
+
+        Credential credential = GoogleAuthProvider.GetCredential(googleUser.IdToken, null);
+        auth.CurrentUser.LinkWithCredentialAsync(credential).ContinueWithOnMainThread(OnGoogleLinkFinished);
+    }
+
+    private void OnGoogleLinkFinished(Task<FirebaseUser> task)
+    {
+        if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+
+        if (task.IsFaulted || task.IsCanceled)
+        {
+            string message = "Bind Failed";
+            if (task.Exception != null)
+            {
+                foreach (System.Exception ex in task.Exception.Flatten().InnerExceptions)
+                {
+                    if (ex is FirebaseAccountLinkException linkEx &&
+                        linkEx.UserInfo != null &&
+                        linkEx.UserInfo.Reason == AuthError.CredentialAlreadyInUse)
+                    {
+                        message = "This Google account is already linked to another profile.";
+                        break;
+                    }
+                }
+            }
+
+            Debug.LogError("[Link] LinkWithCredential failed: " + task.Exception);
+            UpdateStatus(message);
+            return;
+        }
+
+        FirebaseUser user = task.Result;
+        string email = user != null ? user.Email : null;
+        if (!string.IsNullOrEmpty(email))
+        {
+            PlayerPrefs.SetString("PlayerEmail", email);
+            PlayerPrefs.Save();
+        }
+
+        if (user != null && !string.IsNullOrEmpty(user.DisplayName))
+            ApplyProfileName(user.DisplayName);
+
+        Debug.Log("[Link] Guest successfully bound to Google: " + email);
+        UpdateStatus("Google account linked!");
+        RefreshProfileBinder();
+    }
+#endif
+
+#if UNITY_EDITOR
+    const string SimulatedGuestUserId = "simulate_guest_uid";
+
+    private void SimulateGuestLogin()
+    {
+        _editorSimGuest = true;
+        UpdateStatus("Signing in as Guest...");
+
+        // Clear any cached email so the profile shows the "Bind with Google" option in the editor.
+        PlayerPrefs.DeleteKey("PlayerEmail");
+        PlayerPrefs.Save();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowLoading("Signing in as Guest...");
+
+        ConnectPhotonAfterLogin(SimulatedGuestUserId);
+
+        if (PlayerProfileManager.Instance != null)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ShowLoading("Loading profile setup...");
+
+            PlayerProfileManager.Instance.CheckAndLoadUserProfile(
+                SimulatedGuestUserId, "Guest_" + UnityEngine.Random.Range(1000, 9999));
+        }
+        else
+        {
+            UpdateStatus("Profile manager missing");
+        }
+    }
+
+    private void SimulateLinkGoogle()
+    {
+        _editorSimGuest = false;
+        PlayerPrefs.SetString("PlayerEmail", "linked.guest@gmail.com");
+        PlayerPrefs.Save();
+        UpdateStatus("Google account linked!");
+        Debug.Log("[Link] (Editor) Simulated Google bind. Email = linked.guest@gmail.com");
+        RefreshProfileBinder();
+    }
+#endif
+
+    private void RefreshProfileBinder()
+    {
+        PlayerProfilePanelBinder binder =
+            UnityEngine.Object.FindFirstObjectByType<PlayerProfilePanelBinder>(FindObjectsInactive.Include);
+        if (binder != null)
+            binder.Refresh();
     }
 
     void ShowLoginPanel() => EnforceLoginScreen();
@@ -374,6 +707,7 @@ public class GoogleLogin : MonoBehaviour
 
     private void SimulateLogin()
     {
+        _editorSimGuest = false;
         UpdateStatus("Signing in...");
 
         // Editor-only: no real Google account, so seed a placeholder email so the profile panel's
@@ -412,6 +746,7 @@ public class GoogleLogin : MonoBehaviour
     public void SignOut()
     {
         _loginFlowStarted = false;
+        _editorSimGuest = false;
         ResetLoginFlow();
 
         if (auth != null) auth.SignOut();
