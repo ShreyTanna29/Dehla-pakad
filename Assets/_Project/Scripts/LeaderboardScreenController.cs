@@ -19,6 +19,7 @@ public class LeaderboardScreenController : MonoBehaviour
     static readonly Color LabelActive = Color.white;
     static readonly Color LabelInactive = new Color(1f, 0.93f, 0.82f, 0.62f);
     static readonly Color ToggleActive = new Color(0.69f, 0.27f, 0.11f, 1f);
+    static readonly Color ToggleInactiveBg = new Color(0f, 0f, 0f, 0.18f);
     static readonly Color ToggleInactiveText = new Color(0.40f, 0.22f, 0.08f, 1f);
 
     class Entry { public string name; public float skill; public float high; public int region; }
@@ -126,16 +127,11 @@ public class LeaderboardScreenController : MonoBehaviour
         Style(_tCountryBg, _tCountryL, _tab == "Country");
         Style(_tFriendsBg, _tFriendsL, _tab == "Friends");
 
-        // toggle styling
-        if (_botsBg) _botsBg.color = _vsBots ? ToggleActive : new Color(0, 0, 0, 0);
-        if (_onlineBg) _onlineBg.color = _vsBots ? new Color(0, 0, 0, 0) : ToggleActive;
-        if (_botsL) _botsL.color = _vsBots ? LabelActive : ToggleInactiveText;
-        if (_onlineL) _onlineL.color = _vsBots ? ToggleInactiveText : LabelActive;
-
-        if (_skillBg) _skillBg.color = _bySkill ? ToggleActive : new Color(0, 0, 0, 0);
-        if (_highBg) _highBg.color = _bySkill ? new Color(0, 0, 0, 0) : ToggleActive;
-        if (_skillL) _skillL.color = _bySkill ? LabelActive : ToggleInactiveText;
-        if (_highL) _highL.color = _bySkill ? ToggleInactiveText : LabelActive;
+        // toggle styling — clean two-cell segmented look (filled selected, faint unselected)
+        StyleSeg(_botsBg, _botsL, _vsBots);
+        StyleSeg(_onlineBg, _onlineL, !_vsBots);
+        StyleSeg(_skillBg, _skillL, _bySkill);
+        StyleSeg(_highBg, _highL, !_bySkill);
 
         List<Entry> list = BuildEntries();
         list.Sort((a, b) => Value(b).CompareTo(Value(a)));
@@ -153,6 +149,19 @@ public class LeaderboardScreenController : MonoBehaviour
     {
         if (bg) bg.color = active ? TabActive : TabInactive;
         if (label) label.color = active ? LabelActive : LabelInactive;
+    }
+
+    // Styles one cell of a two-option segmented control: filled accent when selected,
+    // faint translucent when not, with a centered label for clean alignment.
+    void StyleSeg(Image bg, TMP_Text label, bool active)
+    {
+        if (bg) bg.color = active ? ToggleActive : ToggleInactiveBg;
+        if (label)
+        {
+            label.color = active ? LabelActive : ToggleInactiveText;
+            label.alignment = TextAlignmentOptions.Center;
+            label.fontStyle = active ? FontStyles.Bold : FontStyles.Normal;
+        }
     }
 
     float Value(Entry e) => _bySkill ? e.skill : e.high;

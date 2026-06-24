@@ -1,0 +1,14 @@
+<linker>
+  <assembly fullname="Firebase.App" preserve="all"/>
+  <assembly fullname="Firebase.Auth" preserve="all"/>
+  <assembly fullname="Firebase.Database" preserve="all"/>
+  <assembly fullname="Firebase.Platform" preserve="all"/>
+  <assembly fullname="Firebase.TaskExtension" preserve="all"/>
+  <assembly fullname="Google.MiniJson" preserve="all"/>
+  <assembly fullname="Photon3Unity3D" preserve="all"/>
+  <assembly fullname="PhotonRealtime" preserve="all"/>
+  <assembly fullname="PhotonUnityNetworking" preserve="all"/>
+  <assembly fullname="PhotonUnityNetworking.Utilities" preserve="all"/>
+  <assembly fullname="PhotonChat" preserve="all"/>
+  <assembly fullname="PhotonWebSocket" preserve="all"/>
+</linker>

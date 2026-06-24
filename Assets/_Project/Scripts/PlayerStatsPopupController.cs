@@ -252,10 +252,10 @@ public class PlayerStatsPopupController : MonoBehaviour
 
         bool isHost = PhotonNetwork.IsMasterClient;
 
-        // ---- HOST: seat management ----
-        // Bot seat  -> REPLACE (invite a real friend to take the seat)
-        // Player seat -> REMOVE (kick the player; a bot takes over their hand)
-        if (isHost)
+        bool friendsPrivate = DeckManager.IsPrivateFriendsRoom();
+
+        // Host seat management (REPLACE / REMOVE) — friends matches only.
+        if (isHost && friendsPrivate)
         {
             if (isBot)
             {
@@ -269,6 +269,14 @@ public class PlayerStatsPopupController : MonoBehaviour
                 _addImg.color = RemoveBtn;
                 _addBtn.onClick.AddListener(OnRemovePlayerClicked);
             }
+            return;
+        }
+
+        if (isHost)
+        {
+            _addLabel.text = isBot ? "BOT" : "PLAYER";
+            _addImg.color = DisabledBtn;
+            _addBtn.interactable = false;
             return;
         }
 
@@ -327,9 +335,10 @@ public class PlayerStatsPopupController : MonoBehaviour
 
         if (_currentPlayer != null && !_currentPlayer.IsLocal)
         {
-            // Kicking triggers DeckManager.OnPlayerLeftRoom -> RPC_MarkPlayerAsBot,
-            // so a bot immediately takes over the seat and the dealt hand.
-            PhotonNetwork.CloseConnection(_currentPlayer);
+            // Tasks 8 & 24: reflect the seat->bot swap on the host's UI IMMEDIATELY (local-first),
+            // then fire the network kick, then refresh the replaced player's online/in-game status.
+            if (DeckManager.Instance != null)
+                DeckManager.Instance.HostReplacePlayerWithBot(_currentPlayer);
         }
 
         Close();

@@ -3,8 +3,11 @@ using UnityEngine.UI;
 using UnityEngine.Serialization;
 using TMPro;
 using System.Collections.Generic;
+using Firebase;
+using Firebase.Auth;
 using Firebase.Database;
 using Firebase.Extensions;
+using Google;
 using Photon.Pun;
 using DG.Tweening;
 
@@ -61,6 +64,9 @@ public class PlayerProfileManager : MonoBehaviour
 
     /// <summary>The avatar index the local user selected during profile setup (-1 if none).</summary>
     public static int GetSavedAvatarIndex() => PlayerPrefs.GetInt(PREFS_AVATAR_INDEX, -1);
+
+    /// <summary>Username saved during profile setup (PlayerPrefs + Firebase).</summary>
+    public static string GetSavedUsername() => PlayerPrefs.GetString(PREFS_USERNAME, string.Empty).Trim();
 
     private void Awake()
     {
@@ -453,8 +459,123 @@ public class PlayerProfileManager : MonoBehaviour
         PlayerPrefs.Save();
         if (GoogleLogin.Instance != null)
             GoogleLogin.Instance.SignOut();
+        else if (FirebaseAuth.DefaultInstance != null)
+            FirebaseAuth.DefaultInstance.SignOut();
         
         Debug.Log("[ProfileManager] Local data cleared. Signed out.");
+    }
+
+    /// <summary>Deletes the Firebase account, clears local data, and returns to the login screen.</summary>
+    public void DeleteAccount(System.Action<bool, string> onComplete = null)
+    {
+#if !UNITY_EDITOR
+        // ---- Real device (Android) flow: deletes DB data + the Firebase Auth user,
+        // re-authenticating via Google first if Firebase requires a recent login. ----
+        var user = FirebaseAuth.DefaultInstance?.CurrentUser;
+        if (user == null)
+        {
+            ClearAllDataAndSignOut();
+            onComplete?.Invoke(true, null);
+            return;
+        }
+
+        string uid = user.UserId;
+        DeleteFirebaseUserData(uid, () => AttemptFirebaseAccountDelete(user, false, onComplete));
+#else
+        // ---- Editor: the native Google/Firebase SDK runs mobile-only code here and throws a
+        // "typeof signature not found"/reflection error. Simulate a successful delete instead so
+        // the flow can be tested in the Editor without touching native code. Works perfectly on Android. ----
+        Debug.Log("Account deleted simulated in Editor");
+        PlayerPrefs.DeleteAll();
+        PlayerPrefs.Save();
+        onComplete?.Invoke(true, null);
+#endif
+    }
+
+    void DeleteFirebaseUserData(string uid, System.Action onDone)
+    {
+        if (string.IsNullOrEmpty(uid))
+        {
+            onDone?.Invoke();
+            return;
+        }
+
+        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("users").Child(uid)
+            .RemoveValueAsync()
+            .ContinueWithOnMainThread(_ => onDone?.Invoke());
+    }
+
+    void AttemptFirebaseAccountDelete(FirebaseUser user, bool alreadyReauthed, System.Action<bool, string> onComplete)
+    {
+        user.DeleteAsync().ContinueWithOnMainThread(task =>
+        {
+            if (task.IsCompleted && !task.IsFaulted && !task.IsCanceled)
+            {
+                ClearAllDataAndSignOut();
+                onComplete?.Invoke(true, null);
+                return;
+            }
+
+            string msg = task.Exception?.GetBaseException()?.Message ?? "Could not delete account.";
+            bool needsReauth = !alreadyReauthed && NeedsRecentLogin(task.Exception);
+
+            if (needsReauth)
+            {
+                ReauthenticateGoogleUser(user, reauthOk =>
+                {
+                    if (!reauthOk)
+                    {
+                        onComplete?.Invoke(false, "Please sign in again, then try deleting your account.");
+                        return;
+                    }
+                    AttemptFirebaseAccountDelete(user, true, onComplete);
+                });
+                return;
+            }
+
+            Debug.LogWarning("[ProfileManager] Delete account failed: " + msg);
+            onComplete?.Invoke(false, msg);
+        });
+    }
+
+    static bool NeedsRecentLogin(System.AggregateException ex)
+    {
+        if (ex == null) return false;
+        foreach (var inner in ex.Flatten().InnerExceptions)
+        {
+            if (inner is FirebaseException fex && (AuthError)fex.ErrorCode == AuthError.RequiresRecentLogin)
+                return true;
+            if (inner.Message != null && inner.Message.IndexOf("RECENT_LOGIN", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+        return false;
+    }
+
+    void ReauthenticateGoogleUser(FirebaseUser user, System.Action<bool> onDone)
+    {
+        const string webClientId = "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com";
+        var config = new GoogleSignInConfiguration
+        {
+            WebClientId = webClientId,
+            RequestIdToken = true,
+            RequestEmail = true
+        };
+        GoogleSignIn.Configuration = config;
+
+        GoogleSignIn.DefaultInstance.SignIn().ContinueWithOnMainThread(signTask =>
+        {
+            if (signTask.IsFaulted || signTask.IsCanceled || signTask.Result == null
+                || string.IsNullOrEmpty(signTask.Result.IdToken))
+            {
+                onDone?.Invoke(false);
+                return;
+            }
+
+            var credential = GoogleAuthProvider.GetCredential(signTask.Result.IdToken, null);
+            user.ReauthenticateAsync(credential).ContinueWithOnMainThread(reauthTask =>
+                onDone?.Invoke(reauthTask.IsCompleted && !reauthTask.IsFaulted && !reauthTask.IsCanceled));
+        });
     }
 
     private void OnClick_EnterGame()

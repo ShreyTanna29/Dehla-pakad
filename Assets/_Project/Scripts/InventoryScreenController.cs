@@ -87,4 +87,24 @@ public class InventoryScreenController : MonoBehaviour
     {
         return PlayerPrefs.GetString("InvSelected_" + category, fallback);
     }
+
+    /// <summary>
+    /// Opens the Player Profile panel and navigates straight to the Inventory screen.
+    /// Used by the settings spades/deck button so players can jump to their decks.
+    /// </summary>
+    public static void OpenInventoryScreen()
+    {
+        if (PlayerProfileManager.Instance != null)
+            PlayerProfileManager.Instance.OpenPlayerProfile();
+
+        ProfilePanelTabController[] tabs = Resources.FindObjectsOfTypeAll<ProfilePanelTabController>();
+        foreach (ProfilePanelTabController c in tabs)
+        {
+            if (c == null || !c.gameObject.scene.IsValid()) continue;
+            if (!c.gameObject.activeSelf) c.gameObject.SetActive(true);
+            c.transform.SetAsLastSibling();
+            c.ShowTab("Inventory");
+            return;
+        }
+    }
 }

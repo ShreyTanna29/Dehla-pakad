@@ -134,6 +134,27 @@ public class CurrencyAndInventoryManager : MonoBehaviour
 
     #region Coins
 
+    /// <summary>
+    /// Task 43 — Placeholder for signup / first-login / daily currency rewards.
+    /// Grants a one-time signup bonus, guarded by a PlayerPrefs flag so it only happens once.
+    /// Extend with daily-login, win-streak, or referral rewards as needed.
+    /// </summary>
+    public void ProcessRewardsLogic()
+    {
+        const string SignupRewardKey = "Reward_SignupGranted";
+        const int SignupBonus = 500;
+
+        if (PlayerPrefs.GetInt(SignupRewardKey, 0) == 1)
+            return; // already granted — do nothing
+
+        AddCoins(SignupBonus);
+        PlayerPrefs.SetInt(SignupRewardKey, 1);
+        PlayerPrefs.Save();
+        Debug.Log($"[Rewards] Signup bonus granted: +{SignupBonus} coins.");
+
+        // TODO: daily-login reward, win-streak reward, referral reward, etc.
+    }
+
     /// <summary>Adds coins (e.g. from an IAP) and syncs the new balance to Firebase.</summary>
     public void AddCoins(int amount)
     {

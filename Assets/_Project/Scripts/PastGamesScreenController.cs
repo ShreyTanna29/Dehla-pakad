@@ -70,6 +70,9 @@ public class PastGamesScreenController : MonoBehaviour
                 img.color = (i % 2 == 0) ? b : a;
             }
         }
+
+        if (content != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
 
     static string FormatDate(long ticks)

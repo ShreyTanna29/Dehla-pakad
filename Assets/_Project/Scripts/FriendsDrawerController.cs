@@ -24,6 +24,7 @@ public class FriendsDrawerController : MonoBehaviour
     int _homeSiblingIndex;
     bool _openedFromGame;
     Image _inGameDimOverlay;
+    Image _homeDimOverlay;
 
     void Awake()
     {
@@ -68,16 +69,19 @@ public class FriendsDrawerController : MonoBehaviour
         isOpen = true;
         Debug.Log("[Drawer] Friendlist opened. Refreshing status...");
 
+        if (!_openedFromGame)
+            ShowHomeDimOverlay();
+
         if (_openedFromGame)
             ShowInGameCloseUi();
 
         if (FriendsPanelUIController.Instance != null)
             FriendsPanelUIController.Instance.RefreshAll();
-        else if (PlayWithFriendsManager.Instance != null)
-        {
-            PlayWithFriendsManager.Instance.RefreshFriendsListUI();
-            PlayWithFriendsManager.Instance.CheckFriendsOnlineStatus();
-        }
+
+        // Tasks 9/18/25: pull live online/in-game status from Firebase presence + Photon and
+        // repaint the rows whenever the drawer opens (works in-room too).
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.RefreshFriendsStatus();
     }
 
     public void CloseDrawer()
@@ -103,6 +107,7 @@ public class FriendsDrawerController : MonoBehaviour
         isOpen = false;
         Debug.Log("[Drawer] Friendlist closed.");
 
+        HideHomeDimOverlay();
         HideInGameCloseUi();
         if (_openedFromGame)
             RestoreToHomeHierarchy();
@@ -266,5 +271,43 @@ public class FriendsDrawerController : MonoBehaviour
 
         if (_inGameDimOverlay != null)
             _inGameDimOverlay.gameObject.SetActive(false);
+    }
+
+    void ShowHomeDimOverlay()
+    {
+        Transform root = friendListPanel != null ? friendListPanel.parent : transform;
+        if (root == null) return;
+
+        if (_homeDimOverlay == null)
+        {
+            var go = new GameObject("HomeFriendListDimOverlay", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(root, false);
+            go.transform.SetAsLastSibling();
+
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+
+            _homeDimOverlay = go.GetComponent<Image>();
+            _homeDimOverlay.color = new Color(0f, 0f, 0f, 0.45f);
+            _homeDimOverlay.raycastTarget = true;
+
+            var btn = go.GetComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.onClick.AddListener(CloseDrawer);
+        }
+
+        _homeDimOverlay.transform.SetAsLastSibling();
+        if (friendListPanel != null)
+            friendListPanel.SetAsLastSibling();
+        _homeDimOverlay.gameObject.SetActive(true);
+    }
+
+    void HideHomeDimOverlay()
+    {
+        if (_homeDimOverlay != null)
+            _homeDimOverlay.gameObject.SetActive(false);
     }
 }

@@ -162,6 +162,30 @@ public class GoogleLogin : MonoBehaviour
 
     public void SignInWithGoogle() => OnGoogleLoginButtonClick();
 
+    /// <summary>
+    /// TASK 3 — Safe wrapper around the Google sign-in entry point.
+    /// Google login can fail silently (cancelled picker, missing SHA-1 / Error 10,
+    /// Firebase not ready, or an unexpected native exception). This wrapper guarantees
+    /// that any *synchronous* failure is logged and surfaced to the user instead of
+    /// disappearing. Asynchronous SDK failures are already handled inside
+    /// OnAuthenticationFinished() via UpdateStatus().
+    /// Hook your Google Sign-In button's OnClick to this method instead of OnGoogleLoginButtonClick.
+    /// </summary>
+    public void AttemptGoogleLogin()
+    {
+        try
+        {
+            OnGoogleLoginButtonClick();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[GoogleLogin] AttemptGoogleLogin failed: {ex}");
+            // Reuse the existing status label as the UI Text element.
+            UpdateStatus("Login Failed, try again.");
+            _loginFlowStarted = false;
+        }
+    }
+
     public void OnGoogleLoginButtonClick()
     {
         Debug.Log("Google Login Button Clicked! Starting explicit sign-in.");
@@ -263,7 +287,7 @@ public class GoogleLogin : MonoBehaviour
         UpdateStatus("Firebase Auth...");
 
         Credential credential = GoogleAuthProvider.GetCredential(googleUser.IdToken, null);
-        auth.SignInWithCredentialAsync(credential).ContinueWithOnMainThread(OnFirebaseLoginFinished);
+        auth.SignInAndRetrieveDataWithCredentialAsync(credential).ContinueWithOnMainThread(OnFirebaseLoginFinished);
     }
 
     void ApplyProfileName(string displayName)
@@ -307,7 +331,13 @@ public class GoogleLogin : MonoBehaviour
         }
     }
 
-    private void OnFirebaseLoginFinished(Task<FirebaseUser> task)
+    static FirebaseUser GetUserFromAuthTask(Task<AuthResult> task)
+    {
+        if (task == null || task.IsFaulted || task.IsCanceled) return null;
+        return task.Result != null ? task.Result.User : null;
+    }
+
+    private void OnFirebaseLoginFinished(Task<AuthResult> task)
     {
         if (task.IsFaulted)
         {
@@ -324,7 +354,7 @@ public class GoogleLogin : MonoBehaviour
             return;
         }
 
-        FirebaseUser user = task.Result;
+        FirebaseUser user = GetUserFromAuthTask(task);
         if (user == null)
         {
             ShowLoginPanel();
@@ -421,7 +451,7 @@ public class GoogleLogin : MonoBehaviour
 #endif
     }
 
-    private void OnGuestSignInFinished(Task<FirebaseUser> task)
+    private void OnGuestSignInFinished(Task<AuthResult> task)
     {
         if (task.IsFaulted || task.IsCanceled)
         {
@@ -434,7 +464,7 @@ public class GoogleLogin : MonoBehaviour
             return;
         }
 
-        FirebaseUser user = task.Result;
+        FirebaseUser user = GetUserFromAuthTask(task);
         if (user == null)
         {
             if (NetworkManager.Instance != null)
@@ -544,7 +574,7 @@ public class GoogleLogin : MonoBehaviour
         auth.CurrentUser.LinkWithCredentialAsync(credential).ContinueWithOnMainThread(OnGoogleLinkFinished);
     }
 
-    private void OnGoogleLinkFinished(Task<FirebaseUser> task)
+    private void OnGoogleLinkFinished(Task<AuthResult> task)
     {
         if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
 
@@ -556,8 +586,7 @@ public class GoogleLogin : MonoBehaviour
                 foreach (System.Exception ex in task.Exception.Flatten().InnerExceptions)
                 {
                     if (ex is FirebaseAccountLinkException linkEx &&
-                        linkEx.UserInfo != null &&
-                        linkEx.UserInfo.Reason == AuthError.CredentialAlreadyInUse)
+                        linkEx.ErrorCode == (int)AuthError.CredentialAlreadyInUse)
                     {
                         message = "This Google account is already linked to another profile.";
                         break;
@@ -570,7 +599,7 @@ public class GoogleLogin : MonoBehaviour
             return;
         }
 
-        FirebaseUser user = task.Result;
+        FirebaseUser user = GetUserFromAuthTask(task);
         string email = user != null ? user.Email : null;
         if (!string.IsNullOrEmpty(email))
         {

@@ -3,16 +3,11 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DG.Tweening;
-using Photon.Pun;
 
 /// <summary>
 /// Free-Fire / PUBG style incoming GAME INVITE popup that slides in from the left edge with
 /// ACCEPT / DECLINE buttons. Tapping ACCEPT joins the inviter's table immediately; the popup
 /// also auto-hides after a few seconds if ignored.
-///
-/// Fully self-contained: it builds its own UI under the top-most Canvas the first time it is
-/// shown (no scene wiring required). Driven by PlayWithFriendsManager.ShowIncomingInvite via
-/// the static <see cref="ShowInvite"/> entry point.
 /// </summary>
 public class IncomingInvitePopup : MonoBehaviour
 {
@@ -28,15 +23,18 @@ public class IncomingInvitePopup : MonoBehaviour
     RectTransform _card;
     TMP_Text _messageText;
     string _roomPin;
+    string _inviteId;
     Coroutine _autoHide;
 
-    // ============================================================
-    // STATIC ENTRY
-    // ============================================================
-    public static void ShowInvite(string fromName, string roomPin)
+    public static void ShowInvite(string fromName, string roomPin, string inviteId = null)
     {
         EnsureInstance();
-        if (Instance != null) Instance.Show(fromName, roomPin);
+        if (Instance != null) Instance.Show(fromName, roomPin, inviteId);
+    }
+
+    public static void Dismiss()
+    {
+        if (Instance != null) Instance.Hide();
     }
 
     static void EnsureInstance()
@@ -74,9 +72,6 @@ public class IncomingInvitePopup : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    // ============================================================
-    // BUILD
-    // ============================================================
     void Build()
     {
         var selfRt = GetComponent<RectTransform>();
@@ -84,11 +79,6 @@ public class IncomingInvitePopup : MonoBehaviour
         selfRt.anchorMax = Vector2.one;
         selfRt.offsetMin = Vector2.zero;
         selfRt.offsetMax = Vector2.zero;
-
-        // The popup itself never blocks the rest of the screen; only its card is interactive.
-        var rootGroup = gameObject.AddComponent<CanvasGroup>();
-        rootGroup.blocksRaycasts = false;
-        rootGroup.interactable = true;
 
         GameObject cardGo = NewRect("Card", transform);
         _card = cardGo.GetComponent<RectTransform>();
@@ -105,7 +95,10 @@ public class IncomingInvitePopup : MonoBehaviour
         shadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
         shadow.effectDistance = new Vector2(6f, -6f);
 
-        // Left accent strip.
+        var cardGroup = cardGo.AddComponent<CanvasGroup>();
+        cardGroup.blocksRaycasts = true;
+        cardGroup.interactable = true;
+
         GameObject strip = NewRect("Accent", cardGo.transform);
         RectTransform stripRt = strip.GetComponent<RectTransform>();
         stripRt.anchorMin = new Vector2(0f, 0f);
@@ -115,7 +108,6 @@ public class IncomingInvitePopup : MonoBehaviour
         stripRt.anchoredPosition = Vector2.zero;
         strip.AddComponent<Image>().color = GreenBtn;
 
-        // Title.
         TMP_Text title = AddTmp(cardGo.transform, "GAME INVITE", TitleGold, 32, TextAlignmentOptions.Left, FontStyles.Bold);
         RectTransform tRt = title.rectTransform;
         tRt.anchorMin = new Vector2(0f, 1f);
@@ -124,7 +116,6 @@ public class IncomingInvitePopup : MonoBehaviour
         tRt.offsetMin = new Vector2(40f, -62f);
         tRt.offsetMax = new Vector2(-20f, -16f);
 
-        // Message.
         _messageText = AddTmp(cardGo.transform, "", Color.white, 26, TextAlignmentOptions.TopLeft, FontStyles.Normal);
         RectTransform mRt = _messageText.rectTransform;
         mRt.anchorMin = new Vector2(0f, 0f);
@@ -133,23 +124,19 @@ public class IncomingInvitePopup : MonoBehaviour
         mRt.offsetMin = new Vector2(40f, 92f);
         mRt.offsetMax = new Vector2(-20f, -70f);
 
-        // Decline (bottom-left).
         CreateButton(cardGo.transform, "DECLINE", RedBtn,
             new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(40f, 18f), OnDecline);
 
-        // Accept (bottom-right).
         CreateButton(cardGo.transform, "ACCEPT", GreenBtn,
             new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-20f, 18f), OnAccept);
 
         gameObject.SetActive(false);
     }
 
-    // ============================================================
-    // SHOW / HIDE
-    // ============================================================
-    void Show(string fromName, string roomPin)
+    void Show(string fromName, string roomPin, string inviteId)
     {
         _roomPin = roomPin;
+        _inviteId = string.IsNullOrEmpty(inviteId) ? roomPin : inviteId;
         if (string.IsNullOrEmpty(fromName)) fromName = "A friend";
 
         if (_messageText != null)
@@ -173,7 +160,7 @@ public class IncomingInvitePopup : MonoBehaviour
         Hide();
     }
 
-    void Hide()
+    public void Hide()
     {
         if (_autoHide != null) { StopCoroutine(_autoHide); _autoHide = null; }
         if (_card == null) { gameObject.SetActive(false); return; }
@@ -184,36 +171,24 @@ public class IncomingInvitePopup : MonoBehaviour
             .OnComplete(() => { if (this != null) gameObject.SetActive(false); });
     }
 
-    // ============================================================
-    // ACTIONS
-    // ============================================================
     void OnAccept()
     {
-        string pin = _roomPin;
-        Hide();
-        if (string.IsNullOrEmpty(pin)) return;
-
-        if (!PhotonNetwork.IsConnectedAndReady)
-        {
-            if (NetworkManager.Instance != null) NetworkManager.Instance.ConnectToPhoton();
-            return;
-        }
-
-        // Already seated at a table — joining another would fail. Ignore (accepts normally
-        // happen from the home screen).
-        if (PhotonNetwork.InRoom) return;
-
+        string inviteId = _inviteId;
         if (PlayWithFriendsManager.Instance != null)
-            PlayWithFriendsManager.Instance.JoinRoomWithPINText(pin);
+            PlayWithFriendsManager.Instance.AcceptInvite(inviteId);
         else
-            PhotonNetwork.JoinRoom(pin);
+            Hide();
     }
 
-    void OnDecline() => Hide();
+    void OnDecline()
+    {
+        string inviteId = _inviteId;
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.DeclineInvite(inviteId);
+        else
+            Hide();
+    }
 
-    // ============================================================
-    // UI HELPERS
-    // ============================================================
     void CreateButton(Transform parent, string label, Color color,
         Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPos, UnityEngine.Events.UnityAction onClick)
     {
@@ -227,9 +202,11 @@ public class IncomingInvitePopup : MonoBehaviour
 
         Image img = go.AddComponent<Image>();
         img.color = color;
+        img.raycastTarget = true;
 
         Button btn = go.AddComponent<Button>();
         btn.targetGraphic = img;
+        btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(onClick);
 
         TMP_Text txt = AddTmp(go.transform, label, Color.white, 28, TextAlignmentOptions.Center, FontStyles.Bold);

@@ -814,6 +814,9 @@ private static bool _resultPanelShown = false;
         _lastProcessTurnActor = -1;
         _lastProcessTurnTrickCount = -1;
         _resultPanelShown = false;
+        _autoLastCardScheduledActor = -1;
+        dealRevealLimit = -1;
+        dealAnimateFromIndex = 0;
         isDealingComplete = false;
         tableTurnOrder.Clear();
         botActorsThinking.Clear();
@@ -1106,11 +1109,10 @@ private static bool _resultPanelShown = false;
 
         if (TurnManager.Instance != null && PhotonNetwork.IsMasterClient)
         {
-            Player turnPlayer = PhotonNetwork.CurrentRoom.GetPlayer(actorNumber);
-            if (turnPlayer != null && turnPlayer.IsInactive)
-                TurnManager.Instance.StopTimer();
-            else
-                TurnManager.Instance.StartTurn(actorNumber);
+            // Task 10: never stop the timer just because a player is flagged inactive.
+            // Always run the 18s timer so that on timeout a valid card is auto-played,
+            // instead of stalling the match or dropping the player "offline".
+            TurnManager.Instance.StartTurn(actorNumber);
         }
 
         bool isMyTurn = (PhotonNetwork.LocalPlayer.ActorNumber == actorNumber);
@@ -1123,8 +1125,69 @@ private static bool _resultPanelShown = false;
 
         ApplyRules(isMyTurn);
 
+        if (isMyTurn)
+            AutoPlayLastCardIfApplicable(actorNumber);
+
         if (PhotonNetwork.IsMasterClient && IsBotActor(actorNumber) && !ActorInCurrentTrick(actorNumber))
             TriggerBotTurnIfApplicable(actorNumber);
+    }
+
+    // Task 21: when the local player has exactly one card left and it becomes their turn,
+    // automatically play that final card (no manual tap needed).
+    private int _autoLastCardScheduledActor = -1;
+
+    void AutoPlayLastCardIfApplicable(int actorNumber)
+    {
+        if (PhotonNetwork.LocalPlayer == null || PhotonNetwork.LocalPlayer.ActorNumber != actorNumber) return;
+        if (myCards == null || myCards.Count != 1) return;
+        if (IsGameplayInputBlocked || IsTrickLocked) return;
+        if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber)) return;
+        if (_autoLastCardScheduledActor == actorNumber) return;
+
+        _autoLastCardScheduledActor = actorNumber;
+        StartCoroutine(AutoPlayLastCardRoutine(actorNumber));
+    }
+
+    IEnumerator AutoPlayLastCardRoutine(int actorNumber)
+    {
+        // Brief pause so the player can see the final card before it is played automatically.
+        yield return new WaitForSeconds(0.6f);
+
+        _autoLastCardScheduledActor = -1;
+
+        if (PhotonNetwork.LocalPlayer == null || PhotonNetwork.LocalPlayer.ActorNumber != actorNumber) yield break;
+        if (currentTurnActor != actorNumber) yield break;
+        if (myCards == null || myCards.Count != 1) yield break;
+        if (IsTrickLocked || IsGameplayInputBlocked || CardInteract.isPlayingCard) yield break;
+        if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber)) yield break;
+
+        CardData last = myCards[0];
+        GameObject cardObj = FindLocalCardObject(last);
+        if (cardObj == null) yield break;
+
+        CardInteract.canPlayCards = true;
+        CardInteract.isPlayingCard = true;
+        OnLocalPlayerPlayedCard(last, cardObj);
+    }
+
+    GameObject FindLocalCardObject(CardData card)
+    {
+        if (handAreaTransform == null) return null;
+        foreach (Transform child in handAreaTransform)
+        {
+            CardDisplay disp = child.GetComponent<CardDisplay>();
+            if (disp == null) disp = child.GetComponentInChildren<CardDisplay>(true);
+            if (disp != null
+                && disp.myCardData.cardSuit == card.cardSuit
+                && disp.myCardData.cardRank == card.cardRank)
+            {
+                CardInteract interact = child.GetComponent<CardInteract>();
+                if (interact == null) interact = child.GetComponentInChildren<CardInteract>(true);
+                if (interact != null && interact.isPlayed) continue;
+                return child.gameObject;
+            }
+        }
+        return null;
     }
 
     public void TriggerBotTurnIfApplicable(int actorNumber)
@@ -1798,11 +1861,12 @@ private static bool _resultPanelShown = false;
 
             if (newTrickCount >= tricksToWin)
             {
-                GameFlowState.SetPhase(GameFlowPhase.GameFinished, forceRecovery: true);
                 botActorsThinking.Clear();
                 CardInteract.canPlayCards = false;
-                Debug.Log($"[PlayerHand] Game finished (trick {newTrickCount}/{tricksToWin}). Broadcasting result panel.");
-                if (photonView != null)
+                Debug.Log($"[PlayerHand] Round complete (trick {newTrickCount}/{tricksToWin}).");
+                if (ResultManager.Instance != null)
+                    ResultManager.Instance.TriggerRoundCompletedFromMaster();
+                else if (photonView != null)
                     photonView.RPC("RPC_ShowGameResult", RpcTarget.All);
                 else
                     ShowGameResultLocal();
@@ -1825,7 +1889,18 @@ private static bool _resultPanelShown = false;
     public static bool IsDealAnimationRunning { get; private set; }
     const float DealFlyTargetBlend = 1.0f;
 
-    public void PlayDealAnimationOnly(int cardsInBatch)
+    // Tasks 23/26: progressive deal reveal. dealRevealLimit caps how many of the local player's
+    // (sorted) cards are currently rendered; -1 means render all. dealAnimateFromIndex animates
+    // only the newly revealed cards in a batch (earlier cards snap to their final position so the
+    // hand fills in left-to-right without re-running the whole deal animation = no flicker).
+    private int dealRevealLimit = -1;
+    private int dealAnimateFromIndex = 0;
+    // Task 23: identities (suit+rank) of cards whose deal fly-in has already played this round.
+    // Cards are destroyed/re-instantiated on every RefreshHandUI, so a per-instance flag cannot
+    // survive — this hand-level set guarantees the deal Tween runs strictly once per card.
+    private readonly System.Collections.Generic.HashSet<string> _dealtCardKeys = new System.Collections.Generic.HashSet<string>();
+
+    public void PlayDealAnimationOnly(int cardsInBatch, int revealUpTo)
     {
         if (isDealingComplete) return;
 
@@ -1833,9 +1908,11 @@ private static bool _resultPanelShown = false;
         CardInteract.canPlayCards = false;
         CardInteract.isPlayingCard = false;
         botActorsThinking.Clear();
-        if (!IsDealAnimationRunning && handAreaTransform != null)
+        // Only clear the hand before the first batch (nothing revealed yet). Later batches keep
+        // the already-dealt cards visible and append the new ones — no full re-deal / flicker.
+        if (dealRevealLimit <= 0 && handAreaTransform != null)
             ClearHandUI();
-        StartCoroutine(DealAnimationOnlyRoutine(cardsInBatch));
+        StartCoroutine(DealAnimationOnlyRoutine(cardsInBatch, revealUpTo));
     }
 
     public const float DealFlyDuration = 0.35f;
@@ -1936,7 +2013,7 @@ private static bool _resultPanelShown = false;
         cardTransform.SetSiblingIndex(targetIndex);
     }
 
-    IEnumerator DealAnimationOnlyRoutine(int cardsInBatch)
+    IEnumerator DealAnimationOnlyRoutine(int cardsInBatch, int revealUpTo)
     {
         while (_isDealAnimRunning) yield return null;
         _isDealAnimRunning = true;
@@ -2001,11 +2078,59 @@ private static bool _resultPanelShown = false;
         }
 
         yield return new WaitForSeconds(0.2f);
+
+        // Task 26: progressively reveal the local player's hand as each batch is dealt — the
+        // newly dealt cards fan in horizontally beside the previously dealt ones.
+        if (revealUpTo > 0 && !isDealingComplete)
+        {
+            int prevRevealed = dealRevealLimit < 0 ? 0 : dealRevealLimit;
+            dealRevealLimit = revealUpTo;
+            dealAnimateFromIndex = prevRevealed;
+            // force:true so the reveal runs even though the deal animation flag is still set.
+            RefreshHandUI(animate: true, force: true);
+            dealAnimateFromIndex = 0;
+        }
+
         _isDealAnimRunning = false;
         IsDealAnimationRunning = false;
     }
 
-    private int SuitOrder(CardSuit suit)
+    static readonly Dictionary<CardSuit, int> SingleDeckSuitWeights = new Dictionary<CardSuit, int>
+    {
+        { CardSuit.Spades, 1 },
+        { CardSuit.Hearts, 2 },
+        { CardSuit.Clubs, 3 },
+        { CardSuit.Diamonds, 4 }
+    };
+
+    /// <summary>
+    /// Sorts a player hand in-place. Single-deck (1 Taash): Spades, Hearts, Clubs, Diamonds.
+    /// Double-deck (2 Taash): preserves the legacy suit order (Hearts, Clubs, Spades, Diamonds).
+    /// Within each suit, rank is descending (Ace high).
+    /// </summary>
+    public static void SortPlayerHand(List<CardData> playerHand, bool isSingleDeckMode)
+    {
+        if (playerHand == null || playerHand.Count <= 1) return;
+
+        if (isSingleDeckMode)
+        {
+            playerHand.Sort((a, b) =>
+            {
+                int suitCmp = SingleDeckSuitWeights[a.cardSuit].CompareTo(SingleDeckSuitWeights[b.cardSuit]);
+                return suitCmp != 0 ? suitCmp : CompareRankDescending(a.cardRank, b.cardRank);
+            });
+        }
+        else
+        {
+            playerHand.Sort((a, b) =>
+            {
+                int suitCmp = LegacyTwoTaashSuitOrder(a.cardSuit).CompareTo(LegacyTwoTaashSuitOrder(b.cardSuit));
+                return suitCmp != 0 ? suitCmp : CompareRankDescending(a.cardRank, b.cardRank);
+            });
+        }
+    }
+
+    static int LegacyTwoTaashSuitOrder(CardSuit suit)
     {
         switch (suit)
         {
@@ -2017,10 +2142,11 @@ private static bool _resultPanelShown = false;
         }
     }
 
-    private int RankOrder(CardRank rank)
-    {
-        return -(int)rank; // Ace highest if enum Two=0 ... Ace=12
-    }
+    static int CompareRankDescending(CardRank a, CardRank b) => -((int)a).CompareTo((int)b);
+
+    private int SuitOrder(CardSuit suit) => LegacyTwoTaashSuitOrder(suit);
+
+    private int RankOrder(CardRank rank) => -((int)rank);
 
     public void RefreshHandUI(bool animate = true, bool force = false)
     {
@@ -2065,13 +2191,14 @@ private static bool _resultPanelShown = false;
                 }
             }
 
-            sortedCards = sortedCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
+            SortPlayerHand(sortedCards, !TaashRules.IsTwoTaashMode);
             if (pinnedHidden.HasValue)
                 sortedCards.Add(pinnedHidden.Value);
         }
         else
         {
-            sortedCards = myCards.OrderBy(c => SuitOrder(c.cardSuit)).ThenBy(c => RankOrder(c.cardRank)).ToList();
+            sortedCards = new List<CardData>(myCards);
+            SortPlayerHand(sortedCards, !TaashRules.IsTwoTaashMode);
         }
 
         myCards = sortedCards;
@@ -2094,7 +2221,14 @@ private static bool _resultPanelShown = false;
             row1Layout = HandLayoutHelper.GetLayout(row1Count, handWidthPx, prefabWidth);
         }
 
-        for (int i = 0; i < myCards.Count; i++)
+        // Task 26: during the initial deal, only render the cards dealt so far. Layout positions
+        // are still computed from the full hand count below, so revealed cards keep their final
+        // slots and newly dealt cards simply appear in the next free slots (left-to-right fan).
+        int renderCount = myCards.Count;
+        if (dealRevealLimit >= 0 && dealRevealLimit < myCards.Count)
+            renderCount = dealRevealLimit;
+
+        for (int i = 0; i < renderCount; i++)
         {
             GameObject newCardUI = Object.Instantiate(cardUIPrefab, handAreaTransform);
             CardDisplay display = newCardUI.GetComponent<CardDisplay>();
@@ -2164,10 +2298,25 @@ private static bool _resultPanelShown = false;
 
             rt.anchoredPosition = new Vector2(xPos, yPos);
 
-            if (animate)
+            // Task 23: each card's deal fly-in runs strictly once. Track by card identity
+            // (suit+rank) so a later RefreshHandUI cannot replay the Tween (the flicker bug).
+            string dealKey = ((int)myCards[i].cardSuit) + "_" + ((int)myCards[i].cardRank);
+            bool alreadyDealt = _dealtCardKeys.Contains(dealKey);
+
+            if (animate && i >= dealAnimateFromIndex && !alreadyDealt)
             {
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yPos - 100f);
-                rt.DOAnchorPosY(yPos, 0.35f).SetEase(Ease.OutBack).SetDelay(i * 0.02f).SetUpdate(true);
+                int animOrder = i - dealAnimateFromIndex;
+                rt.DOAnchorPosY(yPos, 0.35f).SetEase(Ease.OutBack).SetDelay(animOrder * 0.02f).SetUpdate(true);
+                _dealtCardKeys.Add(dealKey);
+                if (cardInteract != null) cardInteract.isDealt = true;
+            }
+            else
+            {
+                // Already dealt, or a non-animated render: card is already at its final slot —
+                // no replay. Keep it marked dealt so future refreshes never re-animate it.
+                _dealtCardKeys.Add(dealKey);
+                if (cardInteract != null) cardInteract.isDealt = true;
             }
 
             if (cardInteract != null)
@@ -2182,6 +2331,18 @@ private static bool _resultPanelShown = false;
         if (suitIndices == null || rankIndices == null || suitIndices.Length != rankIndices.Length) return;
         for (int i = 0; i < suitIndices.Length; i++)
             myCards.Add(new CardData { cardSuit = (CardSuit)suitIndices[i], cardRank = (CardRank)rankIndices[i] });
+
+        if (!isDealingComplete)
+        {
+            // Fresh deal: the full hand is assigned up-front but kept hidden. The per-batch deal
+            // animation reveals the cards progressively (Task 26) and prevents the double-deal
+            // flicker (Task 23). Render 0 cards now so the hand area starts empty.
+            dealRevealLimit = 0;
+            dealAnimateFromIndex = 0;
+            if (!IsDealAnimationRunning && !_isDealAnimRunning)
+                RefreshHandUI(animate: false, force: true);
+            return;
+        }
 
         if (!IsDealAnimationRunning && !_isDealAnimRunning)
             RefreshHandUI(animate: false, force: true);
@@ -2221,7 +2382,7 @@ private static bool _resultPanelShown = false;
     /// UI and re-applies per-card play rules so the player can play cards again. Idempotent —
     /// safe to call multiple times as restore RPCs arrive in any order.
     /// </summary>
-    void ResumePlayAfterReconnect(int starterActor)
+    public void ResumePlayAfterReconnect(int starterActor)
     {
         if (GameFlowState.Current != GameFlowPhase.InGame)
             GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
@@ -2244,6 +2405,22 @@ private static bool _resultPanelShown = false;
         Debug.Log($"[Reconnect] Resumed play after rejoin. Starter actor: {starterActor}, My turn: {isMyTurn}");
     }
 
+    /// <summary>
+    /// Final reconnect step: read authoritative turn from room props and resume local play.
+    /// Safe to call after hand/table restore RPCs or room property sync.
+    /// </summary>
+    public void FinishReconnectFromRoom()
+    {
+        int starterActor = currentTurnActor;
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("CTA", out object cta))
+            starterActor = (int)cta;
+
+        if (starterActor < 0)
+            return;
+
+        OnDealingComplete(starterActor);
+    }
+
     IEnumerator HandRevealThenStartGame(int starterActor, float turnDelay, bool matchInProgress)
     {
         CardInteract.canPlayCards = false;
@@ -2254,15 +2431,11 @@ private static bool _resultPanelShown = false;
 
         isDealingComplete = true;
 
-        if (!matchInProgress)
-        {
-            yield return new WaitForSeconds(DealFlyDuration + 0.1f);
-            RefreshHandUI(animate: true, force: true);
-        }
-        else
-        {
-            RefreshHandUI(animate: false, force: true);
-        }
+        // The hand was already revealed progressively per deal batch. Just ensure the full hand
+        // is shown (snap, no animation) so we don't replay the whole deal animation = no flicker.
+        dealRevealLimit = -1;
+        dealAnimateFromIndex = 0;
+        RefreshHandUI(animate: false, force: true);
 
         ShowOpponentFansWithAnimation();
         yield return new WaitForSeconds(turnDelay);

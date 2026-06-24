@@ -3,6 +3,7 @@ using UnityEngine;
 using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine.UI;
+using TMPro;
 using DG.Tweening;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 
@@ -322,7 +323,97 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         ResetButtonScales();
         WireCut2TrumpButton();
+        ApplyModePanelRules();
         UpdateModeSelectionUIColors();
+    }
+
+    /// <summary>
+    /// Bots/Online: 1v1v1v1 only, hide Join Table. Friends: 2v2 only, show Join Table.
+    /// </summary>
+    void ApplyModePanelRules()
+    {
+        EnsureUiSearchRoot();
+
+        if (UiSafeLookup.TryGet("JoinTablePanel", out GameObject joinTable))
+            joinTable.SetActive(isFriendsMatchMode);
+
+        if (isFriendsMatchMode)
+        {
+            currentLogicMode = 2;
+            SetLogicButtonVisible("Button_LogicA", false);
+            SetLogicButtonVisible("Button_LogicB", true);
+            SetLogicButtonVisible("Button_LogicC", false);
+        }
+        else
+        {
+            currentLogicMode = 1;
+            SetLogicButtonVisible("Button_LogicA", true);
+            SetLogicButtonVisible("Button_LogicB", false);
+            SetLogicButtonVisible("Button_LogicC", false);
+        }
+
+        SaveSelectedModes();
+        UpdateModeTitleLabel();
+    }
+
+    void SetLogicButtonVisible(string buttonName, bool visible)
+    {
+        if (UiSafeLookup.TryGet(buttonName, out GameObject go) && go != null)
+            go.SetActive(visible);
+    }
+
+    /// <summary>
+    /// Tasks 27/30 — Update both top-banner labels at once: the Mode label on the Modes screen
+    /// (e.g. "MODE: ONLINE") and the Round label next to the Trump display (e.g. "Round 2").
+    /// This is a direct, explicit setter; UpdateModeTitleLabel() and TrumpManager.UpdateRoundLabel()
+    /// remain the automatic sync paths.
+    /// </summary>
+    public void UpdateTopBannerTexts(string currentMode, int currentRound)
+    {
+        // ---- Mode label (Modes screen) ----
+        EnsureUiSearchRoot();
+        string modeText = "MODE: " + (string.IsNullOrEmpty(currentMode) ? "" : currentMode.ToUpper());
+
+        if (UiSafeLookup.TryGet("Text_ModesTitle", out GameObject titleGo) && titleGo != null)
+        {
+            var tmp = titleGo.GetComponent<TMP_Text>();
+            if (tmp != null) tmp.text = modeText;
+        }
+        if (UiSafeLookup.TryGet("ModesTitle", out GameObject altTitle) && altTitle != null)
+        {
+            var tmp = altTitle.GetComponent<TMP_Text>();
+            if (tmp != null) tmp.text = modeText;
+        }
+
+        // ---- Round label (next to Trump) ----
+        if (TrumpManager.Instance != null && TrumpManager.Instance.roundText != null)
+        {
+            TrumpManager.Instance.roundText.gameObject.SetActive(true);
+            TrumpManager.Instance.roundText.text = $"Round {Mathf.Max(1, currentRound)}";
+        }
+    }
+
+    void UpdateModeTitleLabel()
+    {
+        string modeLabel = "MODE: ";
+        if (isFriendsMatchMode)
+            modeLabel += "FRIENDS";
+        else if (NetworkManager.Instance != null && NetworkManager.Instance.isPlayBotsMode)
+            modeLabel += "BOTS";
+        else
+            modeLabel += "ONLINE";
+
+        if (UiSafeLookup.TryGet("Text_ModesTitle", out GameObject titleGo) && titleGo != null)
+        {
+            var tmp = titleGo.GetComponent<TMP_Text>();
+            if (tmp != null) tmp.text = modeLabel;
+        }
+
+        if (UiSafeLookup.TryGet("ModesTitle", out GameObject altTitle) && altTitle != null)
+        {
+            var tmp = altTitle.GetComponent<TMP_Text>();
+            if (tmp != null) tmp.text = modeLabel;
+        }
     }
 
     void EnsureUiSearchRootForModes()
@@ -344,11 +435,15 @@ public class ModeManager : MonoBehaviourPunCallbacks
         isFriendsMatchMode = false;
         gameStartInProgress = false;
 
-        if (panelModes != null && panelModes.activeSelf)
-            panelModes.SetActive(false);
-
-        if (panelHomeScreen != null && !panelHomeScreen.activeSelf)
+        // Show Home FIRST, then hide Modes — guarantees no blank (blue) frame where no panel is active.
+        if (panelHomeScreen != null)
+        {
             panelHomeScreen.SetActive(true);
+            panelHomeScreen.transform.SetAsLastSibling();
+        }
+
+        if (panelModes != null)
+            panelModes.SetActive(false);
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.UpdateUIState(true);
@@ -703,10 +798,16 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("[UI] Button Clicked: Find Match");
 
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.HideLoading();
-
         bool isBots = NetworkManager.Instance != null && NetworkManager.Instance.isPlayBotsMode;
+
+        if (NetworkManager.Instance != null)
+        {
+            if (isBots)
+                NetworkManager.Instance.ShowLoading("Loading game...");
+            else
+                NetworkManager.Instance.HideLoading();
+        }
+
         if (GameSettings.Instance != null)
         {
             if (isBots)
@@ -754,10 +855,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         PhotonNetwork.OfflineMode = true;
 
         if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.UpdateUIState(false);
-            NetworkManager.Instance.HideLoading();
-        }
+            NetworkManager.Instance.ShowLoading("Loading game...");
 
         string roomName = "Local_Bot_" + Random.Range(1000, 9999);
         PhotonNetwork.CreateRoom(roomName, BuildRoomOptions());
@@ -803,20 +901,20 @@ public class ModeManager : MonoBehaviourPunCallbacks
         }
 
         Debug.Log("[Photon] Attempt Join Room (JoinRandomRoom)");
-        Hashtable expected = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode }, { "SM", currentSarMode } };
+        Hashtable expected = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode }, { "SM", currentSarMode }, { "LM", currentLogicMode } };
         PhotonNetwork.JoinRandomRoom(expected, 4);
     }
 
     RoomOptions BuildRoomOptions(bool friendsRoom = false)
     {
-        Hashtable roomProperties = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode }, { "SM", currentSarMode } };
+        Hashtable roomProperties = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode }, { "SM", currentSarMode }, { "LM", currentLogicMode } };
         return new RoomOptions
         {
             MaxPlayers = 4,
             IsOpen = true,
             IsVisible = !PhotonNetwork.OfflineMode && !friendsRoom,
             CustomRoomProperties = roomProperties,
-            CustomRoomPropertiesForLobby = new string[] { "TM", "RM", "SM" },
+            CustomRoomPropertiesForLobby = new string[] { "TM", "RM", "SM", "LM" },
             PlayerTtl = 30000,
             EmptyRoomTtl = 30000,
             // Required so other players can read each other's AuthValues.UserId (account id).

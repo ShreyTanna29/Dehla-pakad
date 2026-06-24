@@ -1,0 +1,1052 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: Art Assets
+  m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
+  m_GroupName: Art Assets
+  m_GUID: 25b1341b29e74e1449b06ab5c3a65893
+  m_SerializeEntries:
+  - m_GUID: 000d1edd79139f7488cc02522d7134e5
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_3.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 023645d96f59783409529c964f320358
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_4.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 023cb64173538b24ca03ec083ccb26a1
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/10diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 02d955eb92cace64c8794e0db5acdf84
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_K.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 039d0cadb0b15eb4f870723a10fb23c6
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/4_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 048c7297c535dc6458056f01072795fc
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/7club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 04b5036c16ed6e447a064bb782972fd1
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/13_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0578083d8ed58634cb9bc06c87933186
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_2.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 06cf0e971ab597c4baa1d5ebc85f9092
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_2.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 07a5da6b7637dd74483b16673bb72462
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/10_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 08227049f02280446a0370c31a7f1bf1
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_6.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0a4fc5f8091e60a4ba08cba944a59e37
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile7.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0ab585cab5763b041a34f44d96da21ad
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Backgrounds/background_1.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0bba9dc835b66e14199990fdcdd5b4d3
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/Kdiamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0c2423bd2db245642bd78e71574f2dd8
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/Jheart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0f34b3184f0197b46b419995df4e51de
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Tables/table_red.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 120a160f250fe384584f4ebce13d3554
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/2_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1268696fddb078e43823fe7a9195fbd5
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/Aheart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 128a2e5feee227a42850e341726c71e5
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/2spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 13e5f3ccdda2fd747820cc4bf72d3e8f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_4.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 14127f26d5f8b3f4482c0407bf17958d
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Card
+      Back/card_back.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 146ca64799f0feb41a54a1b5f84d1cf6
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/3_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 156330a1849656844bd3d5f0311c6f8d
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/2_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 15a9eefeb3562b24e8b4f6f20e0a00c0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_10.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 15f8e8a8beb0f38409ecef0674a2fd3e
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_7.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1756de90be05e77489fd476232ad8e65
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/2_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 177220bcfbb7e1c4e9ec7ff73f0a0099
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/3spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1805ae8f3d7cd8f43b32f68e38311a72
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/6_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 19fe715cb5d68b34a917bf16b1261431
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile4.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 212c730576f695747a11a4924c5d8b4b
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/Aspade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 23a497b14a2fa564a83f68205cf7642d
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/13_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 241d4f0f3ad76a949bc5daed30271947
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/5_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 267d75fb6676c074b8cd3dda13ac75ed
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/2club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 27ac25b40d884084086bee1dd4d49048
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_5.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 28d61cb7ccbaaa849a172737786210e9
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/5spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2a54914d0596ba948b9876eff2c9f72a
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/7spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2a9f3d6a49dd2d74786d0968cacfcf2d
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/7_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2d07bf33f244ef448a89c4723924138f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_6.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2d386e5f7929531468cc9258ef78dd6b
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_8.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2dced3849355f2b4ab11b62d18abca0d
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_K.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2fabccb904506934eb2eb3d77bb27361
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/Q.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2fb58afdb8a556246856adbea1ddfa24
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile2.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 31ff26b713fd8d344a215fd79ac9ca45
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/8heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 32754f0ac3977d740a8755c04b20ae61
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/3diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 33d594337916a5a45a5ecbec5e90daf0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/4_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 350b8df3474ca10479a1fa3263a4033c
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/1_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 35905c6482817044c809202585d22de1
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile8.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3756114cac74e4248a919f88fd59ee6a
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile9.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 39013cabbf42b2f409b33a3eac47db09
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_J.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 39bb389d19a6d7d46b2074740a4ddf86
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_4.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3d8afebcec17c564dbdc2fab461c1b69
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/3heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3e16ba994190e244595207a63b19d866
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_7.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3eec1c1c5ff9fbb469f2a9195c6a0bbf
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/8spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 40bb000e7fd29094d9bc51c5373cbf60
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/11_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4109b53e39902c444b4c365173e727f8
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile3.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4324bc57527587c409ea189b181baded
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/9_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4354af9c23529874c9a3168a51c5f84f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_7.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 436afa7c054685f48bc8b692c30b0bf2
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_Q.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 453b73ef0d5d2474c95f20349a41374f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/7_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4599c3535e60bfd4aab36d9c0f47bc2b
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/9_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 48217fbfa17fdaa47a633def5e3a8ce8
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile10.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 492c1229cee1acd4690ad86cd200a6f5
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_J.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 49d4522f114289e4ca566eb2d4aefbc0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_7.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4aeb15a2b5b9edd47875f16c79e782a5
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_9.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4c3942ae0f6330641a8d4c2dfb1fe8ab
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/9club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4e68dbfed743e3b4ea868d7e1a71e7b5
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_5.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5012a46df25579949bcf05260e703b24
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_10.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 508e53279e12f9a4081ccecd36ffab32
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/10_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 51746843d8814764cb03b0b0458f4105
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_J.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 53c5800c8807aef4faca1b5cd6627dc7
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_8.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5566b00a9c7a5254782e26de91b82b4f
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile5.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 56d3710c4f172e345a7f8caeadf2c023
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/Qdiamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 581a7018aa7e0cc449d26ea7ba5c68ae
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/13_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5a5ab60aedf8cbb4e90349c64fbabb18
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Backgrounds/background_2.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5c844d7e2bb0acc4b830226fc4b990ab
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/Qspade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5fb626575e9b4b14ea88ae3d4ee0dadd
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/Kclub.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5ff8b14cd6d76ac4091621865caf9770
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/4_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 61d8a6f2059beb24d9914dabc3793e7a
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_5.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 61fbcc063df51854fb569568321b135b
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/6club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 64c71f0797c91564da761a069e21a172
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/8_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6572695cff069d244b5d6c438738696a
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_K.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 667bbda77efdc7643af1ba3f7a57c731
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_3.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 68a69c5b709295c4d949b29fe5d72159
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/10_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 696608852f6874c4794b620c396a1520
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_12.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6a16bcfbad6e06e41bef4ada25cf14ca
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/Jdiamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6a6560d74ac574c4f90a30b55353c54a
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/Adiamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6a89b11412472bd488b867ae73af4275
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/10spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6bdf4b41ed4b131498023bd5e963c946
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/Kspade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6d0248b776c18e24db50f351ca84a88f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/1_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6d2b8ecba8bb12d428ce1ef6fab25ee7
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Card Back/cardBackBlue.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6f0e100845ee22246846e6b1299b6d58
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/9_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6f81de8ced10b0444b8cbc342f4f5329
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/9diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6ff2764853012e742973ce25d55f2c34
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_2.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 709c06977168b98498301f980b03cf30
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_6.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7255c5c8f342487489b2f8b45871f544
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/13_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 72c75b3d868da94459e34eba13d756fe
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Card
+      Back/card_back_rect_1.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 753ccdf36afdf0c4d82b924468d0c8fd
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/5club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 759663feb3148df429c6cffa1bd7e161
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/10heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 762ea1d4733625c4cbba2c22cf061880
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/8club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 767087b8e01b60d449193b08981ed0b4
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_8.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 76ab4ce42ce5a2a41816ebc6715d42b0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_8.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 76c82ac319f959947a5b3b312ff0a139
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/Jclub.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 79a82832e03cc954a8a90ac3fe38a5ed
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/Qheart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7a08b392c9cecb9468285513baa42344
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_11.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7a138ea833179664f95ca5f4802e25fe
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/5diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7afedf71b088ed145b2c376f06805c24
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/9spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7c8187597186f574ca23a39da8c2e4d7
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_9.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7cebfeb50d234524bb0f1a248d7d87f9
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_A.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7d3a56cd4376cc141824f8b32ded03a0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/7heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7f6daa558f814804687d49e06b6e3f6e
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_A.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7fc0a4c06efd0b643b125a685f40ff1d
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/Aclub.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8088a262f3c89fd4a97425b39109147e
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/6diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 82a0e59bd173c9f4fa2455d7f037c5d2
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/4spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 82d6029e45b525341ac6c0fa70022289
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/1_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 87ba300eb2b0f794fb71c2e2b2fe9a1f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Card
+      Back/card_back_rect_2.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8a16745eceee0fa4e954aa099b1e17f2
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/12_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8a4dc963fb43dad4faed3c59e1b66b58
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/7diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8d73fc8cdc606f44bbcd2bc80d5f76d6
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/5_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 90666266e36bf0742813dd3dc3193315
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/12_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 919bb6d8e262dbb4da2f99567debabc8
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_4.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 92f1ec9d49ffd82409d0a0236dfcc4f8
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_6.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 92f4f4f85619b3b42bfda7212fd2daba
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_13.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 936da86d113d4e8408bda1c0ad1948d0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/12_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9424100a0e258a449a199347654589b3
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_4.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 955384ef79f599a4eb1ca9947b01b2ed
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_9.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9678e13785aefb743aacd553472f45b4
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_3.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 96d5236b96933c34b991c2c27ab2a8f0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/8_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 972f0f9ce81ca214a8237e308198b656
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_10.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 997aa58b7aac3104ba0c686fdf1733f9
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_Q.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9a6ede85622c8b243bb3e2700667f4ef
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_A.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9b24b2ce0955e3f4ca05fc6f7d93567c
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/10_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9d3976bd76a9e3c44969cbc90af6c33f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_2.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9d8b9658bb59644428d3acba82f06b8f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/7_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9e04ef4e745c5dd4d8d1dc62f3ff6ab9
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/6_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9e1ef9a64aa856d4591265a4059d0270
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/5heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9f806d2a58159824182304f3fc67a534
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_7.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9f8778bf8ccc43e428da40eb0571c5bf
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/2diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9fb50a87893b3494b8e77dbbddf1b18b
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_J.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a27a0fa5ca561f9428d2f3da0a16c822
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/9heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a4fc6b6199c42a444a334a1a36d2aa6b
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_A.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a562ddd7e4ddd6e49888a1c27a967a2c
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/frame_circle.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a6556f595204d15468b3e6fc9fd29d70
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/8_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: acd4ab2f5451cac428408bb7a3d96095
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Card Back/cardBackGreen.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: afc33674693c6d24fa525252ba31ae08
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/3_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: afcdb896c14d1d24e8377019a2cddb2e
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/6_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b2f38fc7ad9244a4e966458cc29e36bf
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/3_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b3105140c36cdfe40b94cb992837feb2
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/6spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b4a2e35469b4a294db2660ad423424ec
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/2heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b7ac8d6de5877a84699b7fd4ad629fb3
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Card Back/cardBackRed.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b8b33fd1bba8e824488d5d04b2186236
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/11_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b90d4d4a995bdc2439cd4114d403d341
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/frame_quad.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ba6f3e6e1fe344f49b6b6728eb4d46a7
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/11_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bcce26fb26f9bf6468680c97e42852c5
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/10club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: be17c9ce17a37db4780345ee861bf3d9
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/3club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bf24aee8bdb4d9c498e7442ececf024a
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile1.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bf3c58b2a3ab60d458d54500fdb61945
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_6.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bfd9461e6af0f674aad0e218d985d8cf
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/8diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c09e8116df0f4d74ca07cec48afc5684
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/3_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c229537c2fb0eb84999b26e5f529c9cb
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/Kheart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c36daba31eae05b44b0a140af8e1f622
+    m_Address: Assets/_Project/Art/Sprites/Profile_Images/Profile6.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c5ef5d2567a103440acaed78da371ea4
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/6heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c64e84dcee254094f96adde2a9be7582
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/11_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c705567f9d0bdb649850d54bbf6f480f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/1_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c8554c7b342467e4f846c2484de04c77
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Hearts/7_heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cb8cf84111c3f9b49bb61209f4c032ab
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Hearts/4heart.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cd0cd9ed5992d22438f5ec3104dfdb0e
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_K.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d01f7b03bedcd58488c6de7d82dae3e9
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/5_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d0b331d5ee7857240811213cf5d645a0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_3.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d17dc73ffc7680a4e873a560924205b1
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/2_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d23885fe13c48eb41beb5db5e008a348
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_Q.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d445747c9566f7244b03b305340a0695
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_10.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d4ba321364d842c448943613736c7f1e
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Tables/table_blue.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d909ccfc9e58b3049970d8cf03940e9f
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_2.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d9169613d3e2b8b42b64a0fbfdf819e4
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Diamonds/cardDiamonds_10.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d98b4a9623f19d44ab22521dd7656e80
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Backgrounds/background_3.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: da161e602de5da74fb8e0397318d8a03
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Hearts/cardHearts_5.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: dbe83f7ae03d70c4daf2decc201348c7
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Tables/table_green.png.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e0a2fc547b0194d46a79c4f930224c15
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/9_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e53e9df87601fa3499a475dc6cd3f146
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Spades/cardSpades_8.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e6c7574260e6a2640a1b61a877083ba4
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_Q.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e81b613415a79ed4eb39cb5a8d47c2d5
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_9.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e87e6b9aa65160e41bd64ef55947d5f6
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Rounded
+      Cards/Clubs/cardClubs_3.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: eb33b05b49b954f4caedddc08ca255cf
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_1.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: eb9de5e45282efa4eb40bb5e956b8ed9
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/6_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ec5b7971150736f4abee2e940a64c42e
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_9.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ee27a665d0dcebd4f9f9220f8423211b
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/8_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ee55c063b63d268488974190731e1884
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Clubs/4club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: eef50b7453abf254eba00232b05599c9
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Clubs/12_club.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f1a09b7f0fade6d44935c96cc19438ce
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Card
+      Back/card_back_rect_3.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f85109396ca2b1244b7216794d4f3d59
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Diamonds/4diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fa11906ff7a436846ac8ab8dee8afade
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Spades/4_spade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fbb9692602d6ed94eaf1d85460b632e3
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Rect Cards/Spades/Jspade.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fd0becf2f7971714a8f7afdfcc77caf0
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Standard 52 Cards/Standard Cards/Diamonds/5_diamond.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fddf572c998c49746937229a7d510e12
+    m_Address: Assets/2D Cards Game Art Pack/Sprites/Characters/char_5.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: 06f684b879ce4064da9203dfc2bdd58c, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: 668dac7dc51b07a4aaf8a2a786b60805, type: 2}
+    - {fileID: 11400000, guid: 1c1dc877e3c749a4ba548cf7fa38dc82, type: 2}

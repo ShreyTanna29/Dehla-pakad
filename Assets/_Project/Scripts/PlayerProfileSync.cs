@@ -15,6 +15,11 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
     public TMP_Text txtTopName;     
     public TMP_Text txtRightName;   
 
+    [Header("Name Label Styling")]
+    [Tooltip("Font size applied to the seat name labels (and the local player's name) in the game screen.")]
+    public float seatNameFontSize = 42f;
+    bool _nameFontApplied;
+
     [Header("Avatar Settings")]
     public Sprite maskSprite;
 
@@ -108,6 +113,28 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
         ApplyMask(imgLeftAvatar);
         ApplyMask(imgTopAvatar);
         ApplyMask(imgRightAvatar);
+
+        ApplySeatNameFontSize();
+    }
+
+    // Task 12: enlarge the seat name labels (and local name) for readability.
+    void ApplySeatNameFontSize()
+    {
+        if (_nameFontApplied) return;
+        bool anyApplied = false;
+        anyApplied |= SetFontSize(txtLeftName);
+        anyApplied |= SetFontSize(txtTopName);
+        anyApplied |= SetFontSize(txtRightName);
+        anyApplied |= SetFontSize(txtMyName);
+        if (anyApplied) _nameFontApplied = true;
+    }
+
+    bool SetFontSize(TMP_Text label)
+    {
+        if (label == null) return false;
+        label.enableAutoSizing = false;
+        label.fontSize = seatNameFontSize;
+        return true;
     }
 
     void ApplyMask(UnityEngine.UI.Image img)
@@ -296,17 +323,52 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
         PhotonNetwork.LocalPlayer.SetCustomProperties(props);
     }
 
-    static string GetLocalProfileDisplayName()
+    public static string GetLocalProfileDisplayName()
     {
-        string profileName = PlayerPrefs.GetString("PlayerUsername", string.Empty).Trim();
+        string profileName = PlayerProfileManager.GetSavedUsername();
         if (!string.IsNullOrEmpty(profileName))
             return profileName;
 
-        string nickName = PhotonNetwork.NickName;
-        if (!string.IsNullOrEmpty(nickName))
+        if (Instance != null && Instance.txtMyName != null)
+        {
+            string fromSeat = Instance.txtMyName.text?.Trim();
+            if (!string.IsNullOrEmpty(fromSeat))
+                return fromSeat.Split('\n')[0].Trim();
+        }
+
+        if (PlayerProfileManager.Instance != null)
+        {
+            if (PlayerProfileManager.Instance.textHomeProfileName != null)
+            {
+                string home = PlayerProfileManager.Instance.textHomeProfileName.text?.Trim();
+                if (!string.IsNullOrEmpty(home)) return home;
+            }
+            if (PlayerProfileManager.Instance.textProfileName != null)
+            {
+                string profile = PlayerProfileManager.Instance.textProfileName.text?.Trim();
+                if (!string.IsNullOrEmpty(profile)) return profile;
+            }
+        }
+
+        string nickName = PhotonNetwork.NickName?.Trim();
+        if (!string.IsNullOrEmpty(nickName) && !LooksLikeOpaqueUserId(nickName))
             return nickName;
 
-        return "Player";
+        return "You";
+    }
+
+    static bool LooksLikeOpaqueUserId(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return true;
+
+        try
+        {
+            string uid = Firebase.Auth.FirebaseAuth.DefaultInstance?.CurrentUser?.UserId;
+            if (!string.IsNullOrEmpty(uid) && value == uid) return true;
+        }
+        catch { /* Firebase not ready */ }
+
+        return value.Length >= 20;
     }
 
     private void SetSeatText(int seatIndex, string name)

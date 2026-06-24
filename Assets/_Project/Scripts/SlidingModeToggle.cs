@@ -23,8 +23,8 @@ public class SlidingModeToggle : MonoBehaviour
     public TMP_Text label2;          // The "2" number label.
 
     [Header("Layout - Knob (top)")]
-    public float knobLeftX = -70f;   // posX when value == 1
-    public float knobRightX = 70f;   // posX when value == 2
+    public float knobLeftX = -40f;   // posX when value == 1
+    public float knobRightX = 40f;   // posX when value == 2
 
     [Header("Layout - Knob2 (background)")]
     public float knob2Value1X = 40f;   // knob2 posX when value == 1
@@ -32,8 +32,8 @@ public class SlidingModeToggle : MonoBehaviour
 
     [Header("Layout - Label2 movement")]
     public bool moveLabel2 = true;     // also slide the "2" label horizontally
-    public float label2Value1X = 90f;  // label2 posX when value == 1
-    public float label2Value2X = 0f;   // label2 posX when value == 2
+    public float label2Value1X = 110f;  // label2 posX when value == 1
+    public float label2Value2X = -30f;   // label2 posX when value == 2
 
     [Header("Animation")]
     public float animDuration = 0.22f;

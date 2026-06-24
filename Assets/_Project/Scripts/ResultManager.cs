@@ -3,6 +3,9 @@ using TMPro;
 using UnityEngine.UI;
 using DG.Tweening;
 using Photon.Pun;
+using Photon.Realtime;
+using PhotonHashtable = ExitGames.Client.Photon.Hashtable;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -29,6 +32,8 @@ public class ResultManager : MonoBehaviourPunCallbacks
     public Sprite woodBoardSprite;
     [Tooltip("Settings gear icon sprite (e.g. settings_button).")]
     public Sprite gearButtonSprite;
+    [Tooltip("Fixed avatar shown for every player column in the leaderboard. Assign once here — this exact sprite is what appears in game (no runtime randomization).")]
+    public Sprite playerAvatarSprite;
 
     [System.Serializable]
     public class PlayerResult
@@ -43,13 +48,36 @@ public class ResultManager : MonoBehaviourPunCallbacks
         public int rank;
     }
 
+    [System.Serializable]
+    public class RoundResult
+    {
+        public int roundNumber;
+        public int[] dehlasPerSeat = new int[4];
+        public int[] tricksPerSeat = new int[4];
+    }
+
+    public int currentRound = 1;
+    /// <summary>5 for Bots/Online, -1 for unlimited Friends matches.</summary>
+    public int maxRounds = 5;
+    public List<RoundResult> roundHistory = new List<RoundResult>();
+
+    const int MaxRoundsBotsOnline = 5;
+    // Task 13: keep the leaderboard visible for 5 seconds after a round before auto-closing.
+    const float InterRoundLeaderboardSeconds = 5f;
+    const float MatchEndLeaderboardSeconds = 10f;
+
     private PlayerResult[] playerResults = new PlayerResult[4];
     private Transform _builtRoot;
     private Image _dimOverlay;
     private readonly List<GameObject> _dynamicRows = new List<GameObject>();
+    // Runtime-only extra round rows created when a Friends match runs past the static row count.
+    private readonly List<GameObject> _overflowRows = new List<GameObject>();
     private bool _isShowingResult;
     private bool _statsRecorded;
     private bool _resultActionTaken;
+    private bool _autoTransitionMode;
+    private bool _roundTransitionRunning;
+    private ScrollRect _roundScrollRect;
     private static bool _resultPanelResolveWarned;
 
     /// <summary>
@@ -73,11 +101,8 @@ public class ResultManager : MonoBehaviourPunCallbacks
         Debug.Log($"[Stats] Recorded {(vsBots ? "VsBots" : "Online")} game: rank={rank} score={me.score} bid={me.bid} kot={kot}");
     }
 
-    const int RoundsPerMatch = 3;
     const int KotDehlasOneTaash = 4;
     const int KotDehlasTwoTaash = 8;
-    readonly int[][] _roundDehlas = new int[RoundsPerMatch][];
-    int _currentRoundIndex;
 
     // Professional Theme Colors
     static readonly Color PanelBgColor = new Color(0.25f, 0.15f, 0.05f, 0.95f); // Wooden Dark
@@ -86,6 +111,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
     static readonly Color WinnerGoldColor = new Color(1f, 0.84f, 0f, 1f);      // Gold highlight
     static readonly Color TextWhiteColor = Color.white;
     static readonly Color TextGoldColor = new Color(1f, 0.92f, 0.5f, 1f);
+    static readonly Color ScoreDarkColor = new Color(0.16f, 0.09f, 0.04f, 1f);
 
     void Awake()
     {
@@ -94,9 +120,6 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
         for (int i = 0; i < 4; i++)
             playerResults[i] = new PlayerResult { name = GetInitialPlayerName(i) };
-
-        for (int r = 0; r < RoundsPerMatch; r++)
-            _roundDehlas[r] = new int[4];
 
         HideResultPanelImmediate();
         WireButtons();
@@ -118,9 +141,23 @@ public class ResultManager : MonoBehaviourPunCallbacks
         }
     }
 
+    static void ShowLeaderboardBanner()
+    {
+        if (AdsManager.Instance == null) return;
+        AdsManager.Instance.LoadBanner();
+        AdsManager.Instance.ShowBanner();
+    }
+
+    static void HideLeaderboardBanner()
+    {
+        if (AdsManager.Instance == null) return;
+        AdsManager.Instance.HideBanner();
+    }
+
     void HideResultPanelImmediate()
     {
         _isShowingResult = false;
+        HideLeaderboardBanner();
         if (!ResolveResultPanel()) return;
         resultPanel.DOKill();
         resultPanel.alpha = 0;
@@ -210,9 +247,16 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
         _dimOverlay.color = new Color(0f, 0f, 0f, 0.55f);
         _dimOverlay.raycastTarget = true;
+
+        // Task 16: tapping outside the board (on the full-screen overlay) closes the leaderboard.
+        var overlayBtn = _dimOverlay.GetComponent<Button>();
+        if (overlayBtn == null) overlayBtn = _dimOverlay.gameObject.AddComponent<Button>();
+        overlayBtn.transition = Selectable.Transition.None;
+        overlayBtn.onClick.RemoveAllListeners();
+        overlayBtn.onClick.AddListener(CloseResult);
     }
 
-    string GetInitialPlayerName(int i) => i == 0 ? "You" : "Dehla_AI_" + i;
+    string GetInitialPlayerName(int i)=> i == 0 ? "You" : "Dehla_AI_" + i;
 
     public void SetBid(int seatIndex, int bidValue)
     {
@@ -241,12 +285,18 @@ public class ResultManager : MonoBehaviourPunCallbacks
             dehlas[i] = playerResults[i].dehlasCollected;
         }
         PhotonNetwork.CurrentRoom.SetCustomProperties(
-            new ExitGames.Client.Photon.Hashtable { { "SW", tricks }, { "DL", dehlas } });
+            new PhotonHashtable { { "SW", tricks }, { "DL", dehlas } });
     }
 
-    public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
+    public override void OnRoomPropertiesUpdate(PhotonHashtable propertiesThatChanged)
     {
         if (propertiesThatChanged == null) return;
+        if (propertiesThatChanged.ContainsKey("CR") &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("CR", out object crObj))
+            currentRound = (int)crObj;
+        if (propertiesThatChanged.ContainsKey("MR") &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("MR", out object mrObj))
+            maxRounds = (int)mrObj;
         if (propertiesThatChanged.ContainsKey("SW") &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("SW", out object tricksObj))
         {
@@ -261,6 +311,118 @@ public class ResultManager : MonoBehaviourPunCallbacks
             for (int i = 0; dehlas != null && i < 4 && i < dehlas.Length; i++)
                 playerResults[i].dehlasCollected = dehlas[i];
         }
+    }
+
+    public void InitializeForMatch()
+    {
+        bool unlimited = GameSettings.Instance != null
+            && GameSettings.Instance.currentMatchType == MatchType.PlayWithFriends;
+        if (!unlimited && DeckManager.IsPrivateFriendsRoom())
+            unlimited = true;
+
+        maxRounds = unlimited ? -1 : MaxRoundsBotsOnline;
+        currentRound = 1;
+        roundHistory.Clear();
+        _roundTransitionRunning = false;
+        _statsRecorded = false;
+        ResetRoundPlayerStats();
+
+        if (PhotonNetwork.IsMasterClient && PhotonNetwork.InRoom)
+            SyncRoundConfigToRoom();
+    }
+
+    void SyncRoundConfigToRoom()
+    {
+        if (!PhotonNetwork.InRoom || !PhotonNetwork.IsMasterClient) return;
+        PhotonNetwork.CurrentRoom.SetCustomProperties(new PhotonHashtable
+        {
+            { "CR", currentRound },
+            { "MR", maxRounds }
+        });
+    }
+
+    public bool IsMatchOver() => maxRounds != -1 && currentRound >= maxRounds;
+
+    /// <summary>Master-only entry when the 13th trick of a round completes.</summary>
+    public void TriggerRoundCompletedFromMaster()
+    {
+        if (!PhotonNetwork.IsMasterClient && !PhotonNetwork.OfflineMode) return;
+        if (DeckManager.Instance != null && DeckManager.Instance.photonView != null)
+            DeckManager.Instance.photonView.RPC(nameof(DeckManager.RPC_OnRoundCompleted), RpcTarget.All);
+        else
+            OnRoundCompleted();
+    }
+
+    public void OnRoundCompleted()
+    {
+        if (_roundTransitionRunning) return;
+
+        if (TurnManager.Instance != null)
+            TurnManager.Instance.StopTimer();
+
+        EnsurePlayerResults();
+        RefreshPlayerNamesAndActors();
+        CalculateScores();
+        AssignRanks();
+        FinalizeCurrentRoundScores();
+
+        bool matchOver = IsMatchOver();
+        if (matchOver)
+            GameFlowState.SetPhase(GameFlowPhase.GameFinished, forceRecovery: true);
+
+        ShowRoundLeaderboard(matchOver);
+
+        _roundTransitionRunning = true;
+        bool authoritative = PhotonNetwork.IsMasterClient || PhotonNetwork.OfflineMode;
+        StartCoroutine(RoundTransitionRoutine(matchOver, authoritative));
+    }
+
+    IEnumerator RoundTransitionRoutine(bool matchOver, bool authoritative)
+    {
+        float wait = matchOver ? MatchEndLeaderboardSeconds : InterRoundLeaderboardSeconds;
+        yield return new WaitForSecondsRealtime(wait);
+
+        HideResultPanelImmediate();
+        _roundTransitionRunning = false;
+
+        if (!authoritative)
+            yield break;
+
+        if (matchOver)
+        {
+            AssignMatchRanksFromHistory();
+            RecordMatchStats();
+            if (DeckManager.Instance != null)
+                DeckManager.Instance.ResetMatchState();
+
+            if (PhotonNetwork.InRoom)
+                PhotonNetwork.LeaveRoom();
+            else if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ReturnToHomeScreen();
+            yield break;
+        }
+
+        int nextRound = currentRound + 1;
+        if (DeckManager.Instance != null)
+        {
+            if (PhotonNetwork.IsMasterClient || PhotonNetwork.OfflineMode)
+                DeckManager.Instance.ResetRoundStateForNextRound();
+            if (DeckManager.Instance.photonView != null)
+                DeckManager.Instance.photonView.RPC(nameof(DeckManager.RPC_BeginNextRound), RpcTarget.All, nextRound);
+        }
+    }
+
+    public void ApplyNextRoundStart(int newRound)
+    {
+        currentRound = newRound;
+        ResetRoundPlayerStats();
+        if (PhotonNetwork.IsMasterClient)
+            SyncRoundConfigToRoom();
+    }
+
+    void ShowRoundLeaderboard(bool matchOver)
+    {
+        ShowResultInternal(autoTransition: true, matchOver: matchOver);
     }
 
     public void CloseResult()
@@ -283,6 +445,11 @@ public class ResultManager : MonoBehaviourPunCallbacks
     [ContextMenu("Show Test Result")]
     public void ShowResult()
     {
+        ShowResultInternal(autoTransition: false, matchOver: false);
+    }
+
+    void ShowResultInternal(bool autoTransition, bool matchOver)
+    {
         if (_isShowingResult)
         {
             Debug.LogWarning("[Result] ShowResult ignored — already showing.");
@@ -296,78 +463,100 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
         _isShowingResult = true;
         _resultActionTaken = false;
-        Debug.Log("Result Panel Opening");
+        _autoTransitionMode = autoTransition;
+        Debug.Log(autoTransition
+            ? $"[Result] Round {currentRound} leaderboard (matchOver={matchOver})"
+            : "Result Panel Opening");
         EnsurePlayerResults();
         EnsurePanelHierarchyActive();
         EnsureDimOverlay();
 
-        RefreshPlayerNamesAndActors();
-        CalculateScores();
-        AssignRanks();
+        if (!autoTransition)
+        {
+            RefreshPlayerNamesAndActors();
+            CalculateScores();
+            AssignRanks();
+            RecordMatchStats();
+        }
 
         PlayerResult winner = playerResults.OrderBy(p => p.rank).FirstOrDefault();
         if (winner != null)
             Debug.Log($"Winner Determined: {winner.name} (Rank #{winner.rank}, Score {winner.score})");
-        else
-            Debug.Log("Winner Determined: (none)");
 
-        FinalizeCurrentRoundScores();
-        RecordMatchStats();
         BuildResultPanelUI();
-        Debug.Log("Result Data Loaded");
+        SetActionButtonsVisible(!autoTransition);
+        StartCoroutine(ScrollLeaderboardToBottom());
 
         resultPanel.gameObject.SetActive(true);
-        resultPanel.DOKill();
-        resultPanel.alpha = 0;
+        ShowLeaderboardBanner();
+        ResetPanelOpenStateInstant();
+        Debug.Log("Result Panel Opened");
+
+        CreateBannerAd();
+        HideMatchFinishedLabel();
+    }
+
+    /// <summary>No open animation — panel and MainFrame stay at full scene-authored size/scale.</summary>
+    void ResetPanelOpenStateInstant()
+    {
+        if (resultPanel == null) return;
+
+        resultPanel.DOKill(complete: true);
+        resultPanel.alpha = 1f;
         resultPanel.interactable = true;
         resultPanel.blocksRaycasts = true;
-        Debug.Log("Result Panel Opened");
+
+        Transform root = resultPanel.transform;
+        root.DOKill(complete: true);
+        root.localScale = Vector3.one;
 
         if (_dimOverlay != null)
         {
+            _dimOverlay.DOKill(complete: true);
             Color c = _dimOverlay.color;
-            c.a = 0f;
+            c.a = 0.55f;
             _dimOverlay.color = c;
-            _dimOverlay.DOFade(0.55f, 0.35f).SetUpdate(true);
         }
 
-        resultPanel.DOFade(1f, 0.4f).SetUpdate(true).OnComplete(() =>
-        {
-            resultPanel.alpha = 1f;
-        });
-
-        Transform frame = resultPanel.transform.Find("MainFrame");
+        Transform frame = root.Find("MainFrame");
         if (frame != null)
         {
-            frame.DOKill();
-            frame.localScale = Vector3.one * 0.92f;
-            frame.DOScale(1f, 0.5f).SetEase(Ease.OutBack).SetUpdate(true);
+            frame.DOKill(complete: true);
+            frame.localScale = Vector3.one;
             frame.SetAsLastSibling();
-        }
 
-        StartCoroutine(AnimateRowsRoutine());
+            // Lift the board above the banner without shrinking it (no offsetMin / sizeDelta hacks).
+            var frt = frame as RectTransform;
+            if (frt != null)
+            {
+                Vector2 pos = frt.anchoredPosition;
+                if (pos.y < 55f) pos.y = 55f;
+                frt.anchoredPosition = pos;
+            }
+        }
     }
 
-    System.Collections.IEnumerator AnimateRowsRoutine()
+    IEnumerator ScrollLeaderboardToBottom()
     {
-        foreach (var row in _dynamicRows)
-        {
-            if (row == null) continue;
-            row.transform.localScale = new Vector3(1, 0, 1);
-            row.GetComponent<CanvasGroup>().alpha = 0;
-        }
+        yield return null;
+        yield return null;
+        Canvas.ForceUpdateCanvases();
+        if (_roundScrollRect != null)
+            _roundScrollRect.verticalNormalizedPosition = 0f;
+    }
 
-        yield return new WaitForSecondsRealtime(0.5f);
+    void SetActionButtonsVisible(bool visible)
+    {
+        if (homeButton != null) homeButton.gameObject.SetActive(visible);
+        if (restartButton != null) restartButton.gameObject.SetActive(visible);
 
-        for (int i = 0; i < _dynamicRows.Count; i++)
+        Transform mainFrame = resultPanel != null ? resultPanel.transform.Find("MainFrame") : null;
+        if (mainFrame != null)
         {
-            var row = _dynamicRows[i];
-            if (row == null) continue;
-            
-            row.GetComponent<CanvasGroup>().DOFade(1f, 0.3f).SetUpdate(true);
-            row.transform.DOScale(Vector3.one, 0.4f).SetEase(Ease.OutBack).SetUpdate(true);
-            
-            yield return new WaitForSecondsRealtime(0.15f);
+            Transform btnContainer = mainFrame.Find("ButtonsContainer");
+            if (btnContainer != null) btnContainer.gameObject.SetActive(visible);
+            Transform closeBtn = mainFrame.Find("CloseButton");
+            if (closeBtn != null) closeBtn.gameObject.SetActive(visible);
         }
     }
 
@@ -398,7 +587,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
     string GetSeatDisplayName(int seatIndex)
     {
         if (seatIndex == 0)
-            return PhotonNetwork.NickName ?? "You";
+            return PlayerProfileSync.GetLocalProfileDisplayName();
 
         if (PlayerProfileSync.Instance != null)
         {
@@ -423,13 +612,60 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     void FinalizeCurrentRoundScores()
     {
-        if (_currentRoundIndex < 0 || _currentRoundIndex >= RoundsPerMatch) return;
-
+        var result = new RoundResult { roundNumber = currentRound };
         for (int seat = 0; seat < 4; seat++)
-            _roundDehlas[_currentRoundIndex][seat] = playerResults[seat].dehlasCollected;
+        {
+            result.dehlasPerSeat[seat] = playerResults[seat].dehlasCollected;
+            result.tricksPerSeat[seat] = playerResults[seat].tricksWon;
+        }
 
-        Debug.Log($"[Result] Round R{_currentRoundIndex + 1} finalized: " +
-                  string.Join(", ", Enumerable.Range(0, 4).Select(i => $"{playerResults[i].name}={_roundDehlas[_currentRoundIndex][i]}")));
+        if (roundHistory.Count > 0 && roundHistory[roundHistory.Count - 1].roundNumber == currentRound)
+            roundHistory[roundHistory.Count - 1] = result;
+        else
+            roundHistory.Add(result);
+
+        Debug.Log($"[Result] Round R{currentRound} finalized: " +
+                  string.Join(", ", Enumerable.Range(0, 4).Select(i => $"{playerResults[i].name}={result.dehlasPerSeat[i]}")));
+    }
+
+    void ResetRoundPlayerStats()
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            playerResults[i].tricksWon = 0;
+            playerResults[i].dehlasCollected = 0;
+            playerResults[i].score = 0;
+            playerResults[i].isCompleted = false;
+            playerResults[i].rank = 0;
+        }
+
+        if (PhotonNetwork.IsMasterClient && PhotonNetwork.InRoom)
+        {
+            PhotonNetwork.CurrentRoom.SetCustomProperties(new PhotonHashtable
+            {
+                { "SW", new int[4] },
+                { "DL", new int[4] },
+                { "TP", 0 }
+            });
+        }
+    }
+
+    void AssignMatchRanksFromHistory()
+    {
+        int[] totals = new int[4];
+        foreach (RoundResult round in roundHistory)
+            for (int i = 0; i < 4; i++)
+                totals[i] += round.dehlasPerSeat[i];
+
+        for (int i = 0; i < 4; i++)
+        {
+            playerResults[i].dehlasCollected = totals[i];
+            playerResults[i].score = totals[i];
+        }
+
+        var ranked = totals.Select((value, index) => (value, index)).OrderByDescending(x => x.value).ToList();
+        for (int r = 0; r < ranked.Count; r++)
+            playerResults[ranked[r].index].rank = r + 1;
     }
 
     static int GetKotThreshold()
@@ -464,182 +700,562 @@ public class ResultManager : MonoBehaviourPunCallbacks
     void AssignRanks()
     {
         EnsurePlayerResults();
-        var sorted = playerResults.OrderByDescending(p => p.score).ToList();
-        for (int i = 0; i < sorted.Count; i++)
-            sorted[i].rank = i + 1;
+        UpdateAndSortLeaderboard(new List<PlayerResult>(playerResults));
+    }
+
+    /// <summary>
+    /// Task 28 — Robust leaderboard ranking. Sorts players strictly by Score (descending), then
+    /// breaks ties deterministically: more Dehlas (KOT cards) first, then more Tricks won, then a
+    /// stable fallback on actorNumber so the order never flickers between equal players. Null-safe:
+    /// silently skips players that disconnected/were removed right before the leaderboard is built,
+    /// so a missing player can never break the round-end game loop. Ranks are written back onto the
+    /// surviving PlayerResult objects (rank 1 = winner).
+    /// </summary>
+    public void UpdateAndSortLeaderboard(List<PlayerResult> currentPlayers)
+    {
+        if (currentPlayers == null) return;
+
+        // Drop any null entries (a player object can be missing if they left right at round end).
+        List<PlayerResult> valid = currentPlayers.Where(p => p != null).ToList();
+        if (valid.Count == 0) return;
+
+        valid.Sort(CompareForLeaderboard);
+
+        for (int i = 0; i < valid.Count; i++)
+            valid[i].rank = i + 1;
+    }
+
+    /// <summary>
+    /// Leaderboard comparator: Score desc -> Dehlas (KOT) desc -> Tricks desc -> actorNumber asc.
+    /// Returns negative when <paramref name="a"/> should rank ABOVE <paramref name="b"/>.
+    /// </summary>
+    static int CompareForLeaderboard(PlayerResult a, PlayerResult b)
+    {
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;   // nulls sink to the bottom
+        if (b == null) return -1;
+
+        int byScore = b.score.CompareTo(a.score);            // higher score first
+        if (byScore != 0) return byScore;
+
+        int byDehlas = b.dehlasCollected.CompareTo(a.dehlasCollected); // KOT/Dehla tiebreak
+        if (byDehlas != 0) return byDehlas;
+
+        int byTricks = b.tricksWon.CompareTo(a.tricksWon);   // tricks (wins) tiebreak
+        if (byTricks != 0) return byTricks;
+
+        return a.actorNumber.CompareTo(b.actorNumber);       // stable, deterministic fallback
     }
 
     void BuildResultPanelUI()
     {
+        // The Panel_Winning leaderboard skeleton (header + avatars + name plates + R1..R5 rows +
+        // dividers) lives in the scene hierarchy and is fully editable. At runtime we only ensure it
+        // exists, then fill score data into it — we never recreate the header/avatars/name plates so
+        // the authored layout, fonts and text stay exactly as set in the Editor.
         ClearDynamicUI();
 
         if (resultPanel == null) return;
-        
-        // Load Wood Board background safely
-#if UNITY_EDITOR
-        if (woodBoardSprite == null)
-        {
-            woodBoardSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/Sprites/Images/BG_Buttons.png");
-        }
-#endif
 
-        // Ensure MainFrame exists and set its size & sprite to match the wooden board style
         Transform mainFrame = resultPanel.transform.Find("MainFrame");
         if (mainFrame == null)
         {
-            mainFrame = CreateRect("MainFrame", resultPanel.transform, Vector2.zero, new Vector2(1200, 780)).transform;
+            Debug.LogError("[Result] MainFrame not found under Panel_Winning. Cannot fill result UI.");
+            return;
+        }
+
+        mainFrame.localScale = Vector3.one;
+
+        // Task 14: reduce the board's rounded-corner radius (9-sliced sprite + higher PPU shrinks the corners).
+        var mainFrameImg = mainFrame.GetComponent<Image>();
+        if (mainFrameImg != null)
+        {
+            mainFrameImg.type = Image.Type.Sliced;
+            mainFrameImg.pixelsPerUnitMultiplier = 1.8f;
+        }
+
+        Transform rowsContainer = scoreboardContainer != null
+            ? scoreboardContainer
+            : mainFrame.Find("PlayerRowsContainer");
+
+        if (rowsContainer != null)
+        {
+            EnsureStaticLeaderboard(rowsContainer);
+            RefreshLeaderboardHeader(rowsContainer);
+            FillLeaderboardData(rowsContainer);
         }
         else
         {
-            ClearDynamicMainFrameContent(mainFrame);
+            Debug.LogWarning("[Result] PlayerRowsContainer not found under MainFrame — scores not filled.");
         }
 
-        // Apply Wood Background to MainFrame
-        var mainFrameImage = AddImage(mainFrame.gameObject, Color.white);
-        if (woodBoardSprite != null)
+        // Optional round-progress title, only if the user wired a titleText field.
+        string title = maxRounds == -1
+            ? $"Round {currentRound} Complete"
+            : $"Round {currentRound} / {maxRounds}";
+        if (titleText != null) titleText.text = title;
+
+        // Wire the existing CloseButton from the hierarchy (do not create/restyle it).
+        Transform closeT = mainFrame.Find("CloseButton");
+        if (closeT != null)
         {
-            mainFrameImage.sprite = woodBoardSprite;
-            mainFrameImage.type = Image.Type.Simple;
-        }
-        else
-        {
-            // Fallback to high-quality dark theme if sprite is missing
-            mainFrameImage.color = PanelBgColor;
-        }
-
-        var rectMf = mainFrame.GetComponent<RectTransform>();
-        if (rectMf != null)
-        {
-            rectMf.sizeDelta = new Vector2(1200, 780);
-            rectMf.anchoredPosition = Vector2.zero;
-        }
-
-        var shadow = mainFrame.gameObject.GetComponent<Shadow>();
-        if (shadow == null) shadow = mainFrame.gameObject.AddComponent<Shadow>();
-        shadow.effectColor = new Color(0, 0, 0, 0.4f);
-        shadow.effectDistance = new Vector2(6, -6);
-
-        // Layout constants (shared so separators / dashed lines align with the rows)
-        float headerH = 150f;
-        float rowH = 60f;
-        float rowSpacing = 14f;
-        float sideColWidth = 130f;
-        float playerColWidth = 160f;
-        float colSpacing = 15f;
-        float tableCenterY = 90f;
-        float tableContentH = headerH + (4f * rowH) + (4f * rowSpacing); // 446
-        float tableWidth = (sideColWidth * 2f) + (playerColWidth * 4f) + (colSpacing * 5f); // 975
-        float tableTopEdge = tableCenterY + (tableContentH / 2f);
-
-        // 1. Create Round Close Button (X) at Top Right of the board
-        CreateCloseButton(mainFrame);
-
-        // 2. Setup the Scorecard Grid (Table)
-        // Scorecard Table holds all columns horizontally
-        var scorecardTableGo = CreateRect("ScorecardTable", mainFrame, new Vector2(0, tableCenterY), new Vector2(tableWidth, tableContentH));
-        var hlg = scorecardTableGo.AddComponent<HorizontalLayoutGroup>();
-        hlg.spacing = colSpacing;
-        hlg.childAlignment = TextAnchor.UpperCenter;
-        hlg.childControlWidth = false;
-        hlg.childControlHeight = false;
-        hlg.childForceExpandWidth = false;
-        hlg.childForceExpandHeight = false;
-
-        // Round scores come from actual dehlas captured each chaal (no fake/demo data).
-        int[] r1_scores = _roundDehlas[0];
-        int[] r2_scores = _roundDehlas[1];
-        int[] r3_scores = _roundDehlas[2];
-
-        int r1_total = SumRound(r1_scores);
-        int r2_total = SumRound(r2_scores);
-        int r3_total = SumRound(r3_scores);
-
-        // Player totals
-        int[] playerTotals = new int[4];
-        for (int i = 0; i < 4; i++)
-        {
-            playerTotals[i] = r1_scores[i] + r2_scores[i] + r3_scores[i];
-        }
-
-        int grandTotal = r1_total + r2_total + r3_total;
-
-        // Find winner based on grand totals
-        int winningTotal = playerTotals.Max();
-        int winnerIndex = System.Array.IndexOf(playerTotals, winningTotal);
-
-        // --- Column 1: ROUNDS ---
-        var roundsCol = CreateColumn("RoundsColumn", scorecardTableGo.transform, sideColWidth, tableContentH, rowSpacing);
-        CreateLabelCell("ROUNDS", roundsCol.transform, sideColWidth, headerH, true);
-        CreateValueCell("R1", roundsCol.transform, sideColWidth, rowH, true);
-        CreateValueCell("R2", roundsCol.transform, sideColWidth, rowH, true);
-        CreateValueCell("R3", roundsCol.transform, sideColWidth, rowH, true);
-        CreateValueCell("TOTAL", roundsCol.transform, sideColWidth, rowH, true);
-        _dynamicRows.Add(roundsCol);
-
-        // --- Columns 2-5: PLAYERS ---
-        for (int seat = 0; seat < 4; seat++)
-        {
-            var pCol = CreateColumn($"PlayerColumn_{seat}", scorecardTableGo.transform, playerColWidth, tableContentH, rowSpacing);
-            
-            // Player Header Cell with Avatar and Name Box
-            CreatePlayerHeaderCell(seat, pCol.transform, playerColWidth, headerH);
-            
-            // R1 score
-            CreateValueCell(FormatDehlaScore(r1_scores[seat]), pCol.transform, playerColWidth, rowH, false,
-                isCurrentRound: _currentRoundIndex == 0);
-
-            // R2 score
-            CreateValueCell(FormatDehlaScore(r2_scores[seat]), pCol.transform, playerColWidth, rowH, false,
-                isCurrentRound: _currentRoundIndex == 1);
-
-            // R3 score
-            CreateValueCell(FormatDehlaScore(r3_scores[seat]), pCol.transform, playerColWidth, rowH, false,
-                isCurrentRound: _currentRoundIndex == 2);
-            
-            // Total score
-            bool isWinner = (seat == winnerIndex);
-            CreateValueCell(playerTotals[seat].ToString(), pCol.transform, playerColWidth, rowH, true, isWinner: isWinner);
-            
-            _dynamicRows.Add(pCol);
-        }
-
-        // --- Column 6: TOTAL ---
-        var totalCol = CreateColumn("TotalColumn", scorecardTableGo.transform, sideColWidth, tableContentH, rowSpacing);
-        CreateLabelCell("TOTAL", totalCol.transform, sideColWidth, headerH, true);
-        CreateValueCell(r1_total.ToString(), totalCol.transform, sideColWidth, rowH, true,
-            isCurrentRound: _currentRoundIndex == 0);
-        CreateValueCell(r2_total.ToString(), totalCol.transform, sideColWidth, rowH, true,
-            isCurrentRound: _currentRoundIndex == 1);
-        CreateValueCell(r3_total.ToString(), totalCol.transform, sideColWidth, rowH, true,
-            isCurrentRound: _currentRoundIndex == 2);
-        CreateValueCell(grandTotal.ToString(), totalCol.transform, sideColWidth, rowH, true, isWinner: true);
-        _dynamicRows.Add(totalCol);
-
-        // 3. Draw Vertical Column Dividers under MainFrame (computed from column widths)
-        float[] sepX = new float[] { -350f, -175f, 0f, 175f, 350f };
-        for (int i = 0; i < sepX.Length; i++)
-        {
-            var line = CreateRect($"SeparatorLine_{i}", mainFrame, new Vector2(sepX[i], tableCenterY), new Vector2(2, tableContentH - 20f));
-            AddImage(line, new Color(1f, 1f, 1f, 0.18f));
-        }
-
-        // 4. Draw Horizontal Dashed Divider Lines under MainFrame (computed to sit in the row gaps)
-        float gap1 = tableTopEdge - headerH - (rowSpacing / 2f);
-        float[] dashedY = new float[]
-        {
-            gap1,
-            gap1 - rowH - rowSpacing,
-            gap1 - (rowH + rowSpacing) * 2f,
-            gap1 - (rowH + rowSpacing) * 3f
-        };
-        for (int i = 0; i < dashedY.Length; i++)
-        {
-            var lineGo = CreateRect($"DashedLine_{i}", mainFrame, new Vector2(0, dashedY[i]), new Vector2(tableWidth, 20));
-            var txt = AddTmp(lineGo.transform, ". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .", new Color(1f, 1f, 1f, 0.25f), 18, TextAlignmentOptions.Center, FontStyles.Bold);
-            txt.rectTransform.anchoredPosition = Vector2.zero;
+            var closeBtn = closeT.GetComponent<Button>();
+            if (closeBtn != null)
+            {
+                EnableButtonVisuals(closeBtn);
+                closeBtn.onClick.RemoveAllListeners();
+                closeBtn.onClick.AddListener(CloseResult);
+            }
         }
 
         EnsureSceneButtons(mainFrame);
+    }
+
+    // Decorative (non-animated) leaderboard elements, cleared together with the rows.
+    private readonly List<GameObject> _dynamicDecor = new List<GameObject>();
+    // Rounded button sprite reused for the name plate, pulled from the existing hand-made buttons.
+    private Sprite _roundedSprite;
+
+    static readonly Color LeaderLabelColor = new Color(1f, 0.92f, 0.5f, 1f);  // gold ROUNDS / TOTAL headers
+    static readonly Color NameBoxColor = new Color(0.36f, 0.20f, 0.10f, 1f);  // brown name plate
+
+    /// <summary>Number of round rows materialised as persistent, editable scene objects.</summary>
+    const int StaticLeaderboardRows = 5;
+
+    /// <summary>Builds the editable leaderboard skeleton once if it isn't already in the hierarchy.</summary>
+    void EnsureStaticLeaderboard(Transform container)
+    {
+        if (container == null) return;
+        if (container.Find("HeaderRow") != null) return; // already authored / built earlier
+        BuildStaticLeaderboard(container, StaticLeaderboardRows);
+    }
+
+    /// <summary>
+    /// Builds the persistent leaderboard skeleton: a header row (ROUNDS + four avatar/name columns +
+    /// TOTAL), <paramref name="rowCount"/> round rows (R1..Rn) and the two vertical dividers. These
+    /// objects are NOT tracked as dynamic, so they survive between shows and can be hand-edited in the
+    /// scene (positions, fonts, text, avatars, name plates). Runtime only fills the score cells.
+    /// </summary>
+    public void BuildStaticLeaderboard(Transform container, int rowCount)
+    {
+        if (container == null) return;
+        ResolveThemeSprites();
+
+        float innerW = ComputeInnerWidth(container);
+        const float headerH = 120f;
+        const float rowH = 64f;
+
+        // Header: ROUNDS | avatar x4 (fixed) | TOTAL
+        CreateHeaderRow("HeaderRow", container, innerW, headerH);
+
+        // One editable row per round slot (blank until scores are filled at runtime).
+        for (int r = 1; r <= rowCount; r++)
+        {
+            string[] cells = new string[6];
+            cells[0] = "R" + r;
+            for (int s = 1; s < 6; s++) cells[s] = "";
+            CreateScoreRow("RoundRow_" + r, container, cells, innerW, rowH, TextWhiteColor, false);
+        }
+
+        // Faint vertical dividers behind the table: after ROUNDS and before TOTAL.
+        BuildVerticalDividers(container, innerW);
+    }
+
+    float ComputeInnerWidth(Transform container)
+    {
+        var crt = container as RectTransform;
+        var vlg = container.GetComponent<VerticalLayoutGroup>();
+        float innerW = 1040f;
+        if (crt != null && crt.rect.width > 1f)
+        {
+            innerW = crt.rect.width;
+            if (vlg != null) innerW -= (vlg.padding.left + vlg.padding.right);
+        }
+        return innerW;
+    }
+
+    /// <summary>
+    /// Fills score values into the existing static round rows. Played rounds are filled, future rounds
+    /// stay blank (matching the mock-up). Extra rows are only created at runtime when a Friends match
+    /// runs past the static row count. The header row (avatars + names) is left untouched so it stays
+    /// exactly as authored in the scene.
+    /// </summary>
+    void FillLeaderboardData(Transform container)
+    {
+        _dynamicRows.Clear();
+
+        Transform header = container.Find("HeaderRow");
+        if (header != null) _dynamicRows.Add(header.gameObject);
+
+        int slots = maxRounds > 0 ? maxRounds : Mathf.Max(roundHistory.Count, 1);
+        int total = Mathf.Max(slots, StaticLeaderboardRows);
+
+        for (int r = 1; r <= total; r++)
+        {
+            Transform rowT = container.Find("RoundRow_" + r);
+            GameObject rowGo;
+            if (rowT != null)
+            {
+                rowGo = rowT.gameObject;
+            }
+            else
+            {
+                // Overflow round row (beyond the static rows) — created at runtime, cleared each show.
+                string[] blank = new string[6];
+                blank[0] = "R" + r;
+                for (int s = 1; s < 6; s++) blank[s] = "";
+                rowGo = CreateScoreRow("RoundRow_" + r, container, blank, ComputeInnerWidth(container), 64f, TextWhiteColor, false);
+                _overflowRows.Add(rowGo);
+            }
+
+            rowGo.SetActive(true);
+            rowGo.transform.localScale = Vector3.one;
+            var rowCg = rowGo.GetComponent<CanvasGroup>();
+            if (rowCg != null) rowCg.alpha = 1f;
+            FillRowCells(rowGo, r);
+            _dynamicRows.Add(rowGo);
+        }
+
+        // Task 28: cumulative standings row so the actual ranking is visible at a glance.
+        BuildOrUpdateTotalsRow(container);
+
+        // Unity's nested layout groups do not always solve in the same frame the panel is shown
+        // (rects are still zero-sized when the cells are created). Defer one frame, flush the canvas,
+        // then force an immediate rebuild so every column resolves to its innerW/6 share and lines up
+        // with the vertical dividers.
+        if (container is RectTransform containerRect)
+            StartCoroutine(RebuildLeaderboardLayout(containerRect));
+    }
+
+    /// <summary>Forces the leaderboard layout to resolve after the rows have been generated.</summary>
+    IEnumerator RebuildLeaderboardLayout(RectTransform containerTransform)
+    {
+        // Wait one frame so the container/cell RectTransforms have valid sizes.
+        yield return null;
+        if (containerTransform == null) yield break;
+        Canvas.ForceUpdateCanvases();
+        UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(containerTransform);
+    }
+
+    /// <summary>
+    /// Task 28: builds a bottom "TOTAL" row showing each player's cumulative dehlas across all rounds,
+    /// highlighting the current leader. Tracked as an overflow row so it is rebuilt cleanly each show.
+    /// </summary>
+    void BuildOrUpdateTotalsRow(Transform container)
+    {
+        if (container == null) return;
+
+        int[] totals = new int[4];
+        foreach (RoundResult rr in roundHistory)
+            for (int s = 0; s < 4 && s < rr.dehlasPerSeat.Length; s++)
+                totals[s] += rr.dehlasPerSeat[s];
+        int grand = totals[0] + totals[1] + totals[2] + totals[3];
+
+        string[] cellTexts = new string[6];
+        cellTexts[0] = "TOTAL";
+        for (int s = 0; s < 4; s++) cellTexts[s + 1] = totals[s].ToString();
+        cellTexts[5] = grand.ToString();
+
+        GameObject rowGo = CreateScoreRow("TotalsRow", container, cellTexts, ComputeInnerWidth(container), 64f, ScoreDarkColor, true);
+        _overflowRows.Add(rowGo);
+        rowGo.transform.SetAsLastSibling();
+        rowGo.SetActive(true);
+        _dynamicRows.Add(rowGo);
+
+        var tmps = new List<TextMeshProUGUI>();
+        foreach (Transform child in rowGo.transform)
+        {
+            var t = child.GetComponent<TextMeshProUGUI>();
+            if (t != null) tmps.Add(t);
+        }
+        if (tmps.Count < 6) return;
+
+        for (int s = 0; s < 6; s++)
+        {
+            ApplyCellStyle(tmps[s], s == 0);
+            tmps[s].color = ScoreDarkColor;
+            tmps[s].fontStyle = FontStyles.Bold;
+        }
+    }
+
+    /// <summary>Writes the round number, per-player dehla scores and the row total into a row's text cells.</summary>
+    void FillRowCells(GameObject rowGo, int roundNumber)
+    {
+        var cells = new List<TextMeshProUGUI>();
+        foreach (Transform child in rowGo.transform)
+        {
+            var tmp = child.GetComponent<TextMeshProUGUI>();
+            if (tmp != null) cells.Add(tmp);
+        }
+        if (cells.Count < 6) return;
+
+        RoundResult round = roundHistory.Find(rr => rr.roundNumber == roundNumber);
+        cells[0].text = "R" + roundNumber;
+        if (round != null)
+        {
+            for (int s = 0; s < 4; s++) cells[s + 1].text = FormatDehlaScore(round.dehlasPerSeat[s]);
+            cells[5].text = SumRound(round.dehlasPerSeat).ToString();
+        }
+        else
+        {
+            for (int s = 1; s < 6; s++) cells[s].text = "";
+        }
+
+        bool isLatest = round != null && round.roundNumber == currentRound;
+        // Dark, high-contrast text on the light-wood board (bold readable per design).
+        Color rowColor = isLatest ? new Color(0.10f, 0.42f, 0.18f, 1f) : new Color(0.16f, 0.09f, 0.04f, 1f);
+        for (int s = 0; s < 6; s++)
+        {
+            // Task 13 / 31: large, BOLD score cells — round label left, numbers right-aligned.
+            ApplyCellStyle(cells[s], s == 0);
+            cells[s].color = rowColor;
+        }
+    }
+
+    /// <summary>Task 13/31: large bold cells — round label left-aligned, score numbers right-aligned.</summary>
+    void ApplyCellStyle(TextMeshProUGUI cell, bool isRowLabel)
+    {
+        if (cell == null) return;
+        cell.fontStyle = FontStyles.Bold;
+        cell.enableAutoSizing = true;
+        cell.fontSizeMin = 18;
+        cell.fontSizeMax = 42;
+        cell.overflowMode = TextOverflowModes.Overflow;
+        if (isRowLabel)
+        {
+            cell.alignment = TextAlignmentOptions.MidlineLeft;
+            cell.margin = new Vector4(18f, 0f, 0f, 0f);
+        }
+        else
+        {
+            cell.alignment = TextAlignmentOptions.MidlineRight;
+            cell.margin = new Vector4(0f, 0f, 18f, 0f);
+        }
+    }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// Editor helper: clears and regenerates the static leaderboard skeleton under PlayerRowsContainer
+    /// so it can be hand-edited in the scene. Right-click the ResultManager component → this menu item.
+    /// </summary>
+    [ContextMenu("Rebuild Static Leaderboard")]
+    void RebuildStaticLeaderboardEditor()
+    {
+        if (!ResolveResultPanel() || resultPanel == null)
+        {
+            Debug.LogError("[Result] Cannot build — Panel_Winning / resultPanel could not be resolved.");
+            return;
+        }
+        Transform mainFrame = resultPanel.transform.Find("MainFrame");
+        if (mainFrame == null) { Debug.LogError("[Result] MainFrame missing under Panel_Winning."); return; }
+        Transform container = scoreboardContainer != null ? scoreboardContainer : mainFrame.Find("PlayerRowsContainer");
+        if (container == null) { Debug.LogError("[Result] PlayerRowsContainer missing under MainFrame."); return; }
+
+        for (int i = container.childCount - 1; i >= 0; i--)
+            DestroyImmediate(container.GetChild(i).gameObject);
+
+        BuildStaticLeaderboard(container, StaticLeaderboardRows);
+        UnityEditor.EditorUtility.SetDirty(this);
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        Debug.Log("[Result] Static leaderboard rebuilt under PlayerRowsContainer.");
+    }
+#endif
+
+    /// <summary>Caches the rounded button sprite from the existing buttons so the name plate gets rounded corners in builds too.</summary>
+    void ResolveThemeSprites()
+    {
+        if (resultPanel == null || _roundedSprite != null) return;
+        var btnImg = FindImageDeep(resultPanel.transform, "HomeButton")
+                  ?? FindImageDeep(resultPanel.transform, "RestartButton")
+                  ?? FindImageDeep(resultPanel.transform, "NameBox")
+                  ?? FindImageDeep(resultPanel.transform, "CloseButton");
+        if (btnImg != null) _roundedSprite = btnImg.sprite;
+    }
+
+    static UnityEngine.UI.Image FindImageDeep(Transform root, string name)
+    {
+        Transform t = FindDeepByName(root, name);
+        return t != null ? t.GetComponent<UnityEngine.UI.Image>() : null;
+    }
+
+    static Transform FindDeepByName(Transform parent, string name)
+    {
+        if (parent.name == name) return parent;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            Transform r = FindDeepByName(parent.GetChild(i), name);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    /// <summary>Header row with a "ROUNDS" label, four fixed-avatar player columns and a "TOTAL" label.</summary>
+    GameObject CreateHeaderRow(string name, Transform parent, float width, float height)
+    {
+        var rowGo = NewRow(name, parent, width, height);
+        AddSideHeaderLabel(rowGo.transform, "ROUNDS", alignLeft: true, LeaderLabelColor, 30, FontStyles.Bold);
+        for (int s = 0; s < 4; s++) CreateAvatarHeaderCell(rowGo.transform, s);
+        AddCellLabel(rowGo.transform, "TOTAL", LeaderLabelColor, 30, FontStyles.Bold);
+        AddRowDashedLine(rowGo, width, height);
+        return rowGo;
+    }
+
+    /// <summary>ROUNDS / TOTAL header text nudged toward the outer edge so it clears the column dividers.</summary>
+    void AddSideHeaderLabel(Transform rowParent, string text, bool alignLeft, Color color, int maxSize, FontStyles style)
+    {
+        var cellGo = new GameObject("Cell", typeof(RectTransform));
+        cellGo.transform.SetParent(rowParent, false);
+        MakeEqualColumn(cellGo);
+        var tmp = cellGo.AddComponent<TextMeshProUGUI>();
+        tmp.text = text;
+        tmp.color = color;
+        tmp.alignment = alignLeft ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineRight;
+        tmp.fontStyle = style;
+        tmp.enableAutoSizing = true;
+        tmp.fontSizeMin = 12;
+        tmp.fontSizeMax = maxSize;
+        tmp.overflowMode = TextOverflowModes.Ellipsis;
+        tmp.raycastTarget = false;
+        if (customFont != null) tmp.font = customFont;
+
+        var rt = tmp.rectTransform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        const float edgePad = 18f;
+        if (alignLeft)
+            rt.offsetMin = new Vector2(edgePad, 0);
+        else
+            rt.offsetMax = new Vector2(-edgePad, 0);
+    }
+
+    /// <summary>One player column: the fixed avatar portrait on top, a brown name plate beneath.</summary>
+    void CreateAvatarHeaderCell(Transform rowParent, int seatIndex)
+    {
+        var cell = new GameObject("PlayerHeaderCell", typeof(RectTransform));
+        cell.transform.SetParent(rowParent, false);
+
+        // Player profile avatar (same index / Photon sync as in-game seats).
+        var avatarGo = CreateRect("AvatarImage", cell.transform, new Vector2(0, 26f), new Vector2(82, 82));
+        var avatarImg = AddImage(avatarGo, Color.white);
+        avatarImg.preserveAspect = true;
+        avatarImg.raycastTarget = false;
+        Sprite avatar = GetAvatarSprite(GetActorNumberBySeat(seatIndex));
+        if (avatar != null)
+            avatarImg.sprite = avatar;
+        else if (playerAvatarSprite != null)
+            avatarImg.sprite = playerAvatarSprite;
+
+        // Brown name plate.
+        var nameBox = CreateRect("NameBox", cell.transform, new Vector2(0, -36f), new Vector2(150, 34));
+        var nameImg = AddImage(nameBox, NameBoxColor);
+        if (_roundedSprite != null) { nameImg.sprite = _roundedSprite; nameImg.type = UnityEngine.UI.Image.Type.Sliced; }
+        nameImg.raycastTarget = false;
+
+        var nameTxt = AddTmp(nameBox.transform, GetSeatDisplayName(seatIndex), Color.white, 18, TextAlignmentOptions.Center, FontStyles.Bold);
+        nameTxt.rectTransform.anchorMin = Vector2.zero;
+        nameTxt.rectTransform.anchorMax = Vector2.one;
+        nameTxt.rectTransform.offsetMin = new Vector2(8, 2);
+        nameTxt.rectTransform.offsetMax = new Vector2(-8, -2);
+        nameTxt.overflowMode = TextOverflowModes.Ellipsis;
+        nameTxt.enableAutoSizing = true;
+        nameTxt.fontSizeMin = 10;
+        nameTxt.fontSizeMax = 18;
+    }
+
+    /// <summary>A data row of evenly-distributed text cells (ROUND | values | TOTAL) with a dashed line beneath.</summary>
+    GameObject CreateScoreRow(string name, Transform parent, string[] cells, float width, float height, Color color, bool bold)
+    {
+        var rowGo = NewRow(name, parent, width, height);
+        for (int i = 0; i < cells.Length; i++)
+            AddCellLabel(rowGo.transform, cells[i], color, bold ? 30 : 28, bold ? FontStyles.Bold : FontStyles.Normal);
+        AddRowDashedLine(rowGo, width, height);
+        return rowGo;
+    }
+
+    /// <summary>Creates the row container: CanvasGroup (for the reveal animation) + an even 6-column HorizontalLayoutGroup.</summary>
+    GameObject NewRow(string name, Transform parent, float width, float height)
+    {
+        var rowGo = new GameObject(name, typeof(RectTransform), typeof(CanvasGroup));
+        rowGo.transform.SetParent(parent, false);
+        var rrt = rowGo.GetComponent<RectTransform>();
+        rrt.sizeDelta = new Vector2(width, height);
+
+        var hlg = rowGo.AddComponent<HorizontalLayoutGroup>();
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+        hlg.childForceExpandWidth = true;
+        hlg.childForceExpandHeight = true;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+
+        var le = rowGo.AddComponent<LayoutElement>();
+        le.preferredHeight = height;
+        le.minHeight = height;
+        le.preferredWidth = width;
+        return rowGo;
+    }
+
+    /// <summary>
+    /// Forces a HorizontalLayoutGroup child to take an equal 1/N share of the row width so every
+    /// column lines up exactly with the fixed innerW/6 vertical dividers. Without this, cells size to
+    /// their content (text preferred width / collapsed avatars) and clump toward the centre.
+    /// </summary>
+    static void MakeEqualColumn(GameObject cell)
+    {
+        var le = cell.GetComponent<LayoutElement>();
+        if (le == null) le = cell.AddComponent<LayoutElement>();
+        le.minWidth = 0f;
+        le.preferredWidth = 0f;
+        le.flexibleWidth = 1f;
+    }
+
+    /// <summary>A single centered text cell inside a row's HorizontalLayoutGroup.</summary>
+    void AddCellLabel(Transform rowParent, string text, Color color, int maxSize, FontStyles style)
+    {
+        var cellGo = new GameObject("Cell", typeof(RectTransform));
+        cellGo.transform.SetParent(rowParent, false);
+        MakeEqualColumn(cellGo);
+        var tmp = cellGo.AddComponent<TextMeshProUGUI>();
+        tmp.text = text;
+        tmp.color = color;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.fontStyle = style;
+        tmp.enableAutoSizing = true;
+        tmp.fontSizeMin = 12;
+        tmp.fontSizeMax = maxSize;
+        tmp.overflowMode = TextOverflowModes.Ellipsis;
+        tmp.raycastTarget = false;
+        if (customFont != null) tmp.font = customFont;
+    }
+
+    /// <summary>Adds a horizontal dashed ledger line pinned to the bottom edge of a row (ignored by layout).</summary>
+    void AddRowDashedLine(GameObject rowGo, float width, float height)
+    {
+        var line = CreateDashedLine("DashedLine_Row", rowGo.transform, width - 8f, new Vector2(0f, -height / 2f + 2f), true);
+        var lrt = line.GetComponent<RectTransform>();
+        lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
+        lrt.pivot = new Vector2(0.5f, 0.5f);
+        lrt.anchoredPosition = new Vector2(0f, -height / 2f + 2f);
+    }
+
+    /// <summary>Two faint vertical dividers behind the table separating ROUNDS | players | TOTAL.</summary>
+    void BuildVerticalDividers(Transform container, float innerW)
+    {
+        var crt = container as RectTransform;
+        float h = (crt != null && crt.rect.height > 1f) ? crt.rect.height - 40f : 540f;
+        float col = innerW / 6f;
+        AddVerticalDivider(container, -innerW / 2f + col, h);       // after ROUNDS
+        AddVerticalDivider(container, -innerW / 2f + col * 5f, h);  // before TOTAL
+    }
+
+    void AddVerticalDivider(Transform container, float x, float height)
+    {
+        var go = CreateRect("VDivider", container, new Vector2(x, 0f), new Vector2(3f, height));
+        var le = go.AddComponent<LayoutElement>();
+        le.ignoreLayout = true;
+        var img = AddImage(go, new Color(0.12f, 0.06f, 0.02f, 0.45f));
+        img.raycastTarget = false;
+        go.transform.SetAsFirstSibling();
+        _dynamicDecor.Add(go);
     }
 
     void ClearDynamicMainFrameContent(Transform mainFrame)
@@ -650,7 +1266,9 @@ public class ResultManager : MonoBehaviourPunCallbacks
         foreach (Transform child in mainFrame)
         {
             string childName = child.name;
-            if (childName == "ScorecardTable" || childName == "CloseButton")
+            if (childName == "ScorecardTable" || childName == "CloseButton"
+                || childName == "RoundScrollView" || childName == "ScorecardHeader"
+                || childName == "RoundTitle")
                 toDestroy.Add(child.gameObject);
             else if (childName.StartsWith("SeparatorLine_") || childName.StartsWith("DashedLine_"))
                 toDestroy.Add(child.gameObject);
@@ -662,17 +1280,12 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     void EnsureSceneButtons(Transform mainFrame)
     {
+        // Action buttons (HOME / RESTART) are intentionally removed from the result panel:
+        // at match end the leaderboard auto-returns to the Home screen after
+        // MatchEndLeaderboardSeconds. If the ButtonsContainer has been deleted from the
+        // scene we do NOT recreate it (no fallback buttons).
         Transform btnContainer = mainFrame.Find("ButtonsContainer");
-        if (btnContainer == null)
-        {
-            var btnContainerGo = CreateRect("ButtonsContainer", mainFrame, new Vector2(0, -300), new Vector2(700, 90));
-            var hlgBtn = btnContainerGo.AddComponent<HorizontalLayoutGroup>();
-            hlgBtn.spacing = 60;
-            hlgBtn.childAlignment = TextAnchor.MiddleCenter;
-            hlgBtn.childControlWidth = false;
-            hlgBtn.childControlHeight = false;
-            btnContainer = btnContainerGo.transform;
-        }
+        if (btnContainer == null) return;
 
         WireSceneButton(ref restartButton, btnContainer, "RestartButton", OnRestartClicked);
         WireSceneButton(ref homeButton, btnContainer, "HomeButton", OnHomeClicked);
@@ -848,10 +1461,52 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     Sprite GetAvatarSprite(int actorNumber)
     {
-        List<Sprite> pool = MatchmakingManager.GlobalProfileSprites;
-        if (pool == null || pool.Count == 0) return null;
-        int spriteIndex = Mathf.Abs(actorNumber) % pool.Count;
+        Sprite[] pool = GetProfileSpritePool();
+        if (pool == null || pool.Length == 0) return null;
+
+        int spriteIndex = ResolveAvatarIndexForActor(actorNumber);
+        if (spriteIndex < 0 || spriteIndex >= pool.Length)
+            spriteIndex = Mathf.Abs(actorNumber) % pool.Length;
+
         return pool[spriteIndex];
+    }
+
+    static Sprite[] GetProfileSpritePool()
+    {
+        if (PlayerProfileManager.Instance != null &&
+            PlayerProfileManager.Instance.profileSprites != null &&
+            PlayerProfileManager.Instance.profileSprites.Length > 0)
+            return PlayerProfileManager.Instance.profileSprites;
+
+        if (MatchmakingManager.GlobalProfileSprites != null && MatchmakingManager.GlobalProfileSprites.Count > 0)
+            return MatchmakingManager.GlobalProfileSprites.ToArray();
+
+        return null;
+    }
+
+    static int ResolveAvatarIndexForActor(int actorNumber)
+    {
+        if (PhotonNetwork.LocalPlayer != null && actorNumber == PhotonNetwork.LocalPlayer.ActorNumber)
+        {
+            int local = PlayerProfileManager.GetSavedAvatarIndex();
+            if (local >= 0) return local;
+        }
+
+        if (PhotonNetwork.CurrentRoom != null)
+        {
+            Player p = PhotonNetwork.CurrentRoom.GetPlayer(actorNumber);
+            if (p != null && p.CustomProperties != null &&
+                p.CustomProperties.TryGetValue(PlayerProfileManager.PROP_AVATAR, out object val))
+            {
+                if (val != null)
+                {
+                    if (val is int vi) return vi;
+                    if (int.TryParse(val.ToString(), out int parsed)) return parsed;
+                }
+            }
+        }
+
+        return -1;
     }
 
     GameObject CreateRect(string name, Transform parent, Vector2 pos, Vector2 size)
@@ -862,6 +1517,180 @@ public class ResultManager : MonoBehaviourPunCallbacks
         rt.sizeDelta = size;
         rt.anchoredPosition = pos;
         return go;
+    }
+
+    // ============================================================
+    // LEDGER LINES & BANNER (1v1v1v1 leaderboard mockup)
+    // ============================================================
+
+    static readonly Color LedgerLineColor = new Color(0.12f, 0.06f, 0.02f, 0.6f);
+
+    /// <summary>Builds a horizontal dashed line from small dash segments (no sprite needed).</summary>
+    GameObject CreateDashedLine(string name, Transform parent, float width, Vector2 anchoredPos, bool ignoreLayout)
+    {
+        var line = CreateRect(name, parent, anchoredPos, new Vector2(width, 4f));
+        if (ignoreLayout)
+        {
+            var le = line.AddComponent<LayoutElement>();
+            le.ignoreLayout = true; // keep parent layout groups from repositioning the line
+        }
+
+        const float dashW = 20f;
+        const float gap = 14f;
+        const float step = dashW + gap;
+        int count = Mathf.Max(1, Mathf.FloorToInt(width / step));
+        float used = (count * step) - gap;
+        float startX = (-used / 2f) + (dashW / 2f);
+
+        for (int i = 0; i < count; i++)
+        {
+            var dash = CreateRect("Dash", line.transform, new Vector2(startX + (i * step), 0f), new Vector2(dashW, 4f));
+            var img = AddImage(dash, LedgerLineColor);
+            img.raycastTarget = false;
+        }
+        return line;
+    }
+
+    /// <summary>Solid vertical column divider spanning [bottomY, topY] at the given x (board-local).</summary>
+    void CreateVerticalSeparator(string name, Transform parent, float x, float topY, float bottomY)
+    {
+        float h = Mathf.Abs(topY - bottomY);
+        float cy = (topY + bottomY) / 2f;
+        var line = CreateRect(name, parent, new Vector2(x, cy), new Vector2(3f, h));
+        var img = AddImage(line, new Color(LedgerLineColor.r, LedgerLineColor.g, LedgerLineColor.b, 0.5f));
+        img.raycastTarget = false;
+    }
+
+    /// <summary>
+    /// Full-width banner ad placeholder pinned to the bottom of the screen (below the board).
+    /// Lives on the full-screen result panel so it stretches edge-to-edge. Reused across rebuilds.
+    /// </summary>
+    void CreateBannerAd()
+    {
+        if (resultPanel == null) return;
+
+        Transform existing = resultPanel.transform.Find("BannerAdPlacement");
+        GameObject banner = existing != null ? existing.gameObject : null;
+        if (banner == null)
+        {
+            banner = new GameObject("BannerAdPlacement", typeof(RectTransform));
+            banner.transform.SetParent(resultPanel.transform, false);
+        }
+
+        var rt = banner.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.offsetMin = new Vector2(0f, 0f);
+        rt.offsetMax = new Vector2(0f, 110f); // full width, 110px tall, flush to screen bottom
+
+        ResolveThemeSprites();
+        var bg = AddImage(banner, new Color(0.96f, 0.94f, 0.90f, 0.97f));
+        if (_roundedSprite != null) { bg.sprite = _roundedSprite; bg.type = UnityEngine.UI.Image.Type.Sliced; }
+        bg.raycastTarget = true;
+
+        // Subtle top highlight strip for an engraved, AAA edge.
+        Transform topT = banner.transform.Find("TopEdge");
+        GameObject top = topT != null ? topT.gameObject : CreateRect("TopEdge", banner.transform, Vector2.zero, new Vector2(0f, 3f));
+        var topRt = top.GetComponent<RectTransform>();
+        topRt.anchorMin = new Vector2(0f, 1f);
+        topRt.anchorMax = new Vector2(1f, 1f);
+        topRt.pivot = new Vector2(0.5f, 1f);
+        topRt.offsetMin = new Vector2(0f, -3f);
+        topRt.offsetMax = Vector2.zero;
+        var topImg = AddImage(top, new Color(1f, 0.85f, 0.5f, 0.18f));
+        topImg.raycastTarget = false;
+
+        // Placeholder label.
+        Transform lblT = banner.transform.Find("Label");
+        TextMeshProUGUI lbl;
+        if (lblT != null)
+            lbl = lblT.GetComponent<TextMeshProUGUI>();
+        else
+        {
+            lbl = AddTmp(banner.transform, "BANNER AD PLACEMENT (FULL WIDTH)", new Color(0.15f, 0.10f, 0.06f, 1f),
+                30, TextAlignmentOptions.Center, FontStyles.Bold);
+            lbl.gameObject.name = "Label";
+        }
+        var lrt = lbl.rectTransform;
+        lrt.anchorMin = Vector2.zero;
+        lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = Vector2.zero;
+        lrt.offsetMax = Vector2.zero;
+
+        banner.transform.SetAsLastSibling(); // above the dim overlay
+    }
+
+    /// <summary>Updates avatar portraits and name plates in the scene-authored HeaderRow.</summary>
+    void RefreshLeaderboardHeader(Transform container)
+    {
+        if (container == null) return;
+
+        Transform header = container.Find("HeaderRow");
+        if (header == null) return;
+
+        RefreshPlayerNamesAndActors();
+
+        // Task 13/31: enlarge the header column labels (ROUNDS / TOTAL).
+        foreach (Transform child in header)
+        {
+            if (child.name != "Cell") continue;
+            var lbl = child.GetComponent<TextMeshProUGUI>();
+            if (lbl == null) continue;
+            lbl.fontStyle = FontStyles.Bold;
+            lbl.enableAutoSizing = true;
+            lbl.fontSizeMin = 16;
+            lbl.fontSizeMax = 40;
+        }
+
+        var headerCells = new List<Transform>();
+        for (int i = 0; i < header.childCount; i++)
+        {
+            Transform child = header.GetChild(i);
+            if (child.name == "PlayerHeaderCell")
+                headerCells.Add(child);
+        }
+
+        for (int seat = 0; seat < headerCells.Count && seat < 4; seat++)
+        {
+            Transform cell = headerCells[seat];
+            string displayName = GetSeatDisplayName(seat);
+
+            Transform nameBox = cell.Find("NameBox");
+            if (nameBox != null)
+            {
+                var nameTmp = nameBox.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (nameTmp != null)
+                {
+                    nameTmp.text = displayName;
+                    nameTmp.fontStyle = FontStyles.Bold;
+                    nameTmp.enableAutoSizing = true;
+                    nameTmp.fontSizeMin = 14;
+                    nameTmp.fontSizeMax = 26;
+                }
+            }
+
+            Transform avatarT = cell.Find("AvatarImage") ?? FindDeepByName(cell, "AvatarImage");
+            if (avatarT != null)
+            {
+                var avatarImg = avatarT.GetComponent<Image>();
+                if (avatarImg != null)
+                {
+                    Sprite avatar = GetAvatarSprite(GetActorNumberBySeat(seat));
+                    if (avatar != null)
+                        avatarImg.sprite = avatar;
+                }
+            }
+        }
+    }
+
+    /// <summary>Hides the old mock-up status pill if it was created in a previous session.</summary>
+    void HideMatchFinishedLabel()
+    {
+        if (resultPanel == null) return;
+        Transform tag = resultPanel.transform.Find("MatchFinishedTag");
+        if (tag != null)
+            tag.gameObject.SetActive(false);
     }
 
     static Image AddImage(GameObject go, Color c)
@@ -891,9 +1720,11 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     void ClearDynamicUI()
     {
-        foreach (var go in _dynamicRows)
+        // Only destroy runtime-created overflow rows. The static leaderboard skeleton
+        // (HeaderRow, RoundRow_1..5, dividers) is authored in the scene and must persist.
+        foreach (var go in _overflowRows)
             if (go != null) DestroyObjectSafe(go);
-        _dynamicRows.Clear();
+        _overflowRows.Clear();
     }
 
     void DestroyObjectSafe(GameObject go)
@@ -967,20 +1798,16 @@ public class ResultManager : MonoBehaviourPunCallbacks
     void ResetMatchStats()
     {
         _statsRecorded = false;
-        _currentRoundIndex = 0;
-        for (int r = 0; r < RoundsPerMatch; r++)
-        {
-            for (int i = 0; i < 4; i++)
-                _roundDehlas[r][i] = 0;
-        }
+        _roundTransitionRunning = false;
+        currentRound = 1;
+        maxRounds = MaxRoundsBotsOnline;
+        roundHistory.Clear();
+        ResetRoundPlayerStats();
 
         for (int i = 0; i < 4; i++)
         {
-            playerResults[i].tricksWon = 0;
-            playerResults[i].dehlasCollected = 0;
-            playerResults[i].score = 0;
-            playerResults[i].isCompleted = false;
-            playerResults[i].rank = 0;
+            playerResults[i].bid = 0;
+            playerResults[i].name = GetInitialPlayerName(i);
         }
     }
 }

@@ -268,7 +268,7 @@ public class FriendsPanelUIController : MonoBehaviour
     /// <summary>Friend row: avatar + name/status + green invite-to-game button.</summary>
     public GameObject BuildFriendRow(string friendId, string displayName, FriendInfo info, bool inviteSent)
     {
-        string status = GetOnlineStatusText(info);
+        string status = GetOnlineStatusText(friendId, info);
         GameObject row = BuildBaseRow(friendsListContainer, displayName, friendId, status);
 
         Button invite = CreateCircleButton(row.transform, "InviteButton", inviteSent ? new Color(0.45f, 0.45f, 0.45f, 1f) : GreenBtn, acceptIconSprite, -18f);
@@ -279,8 +279,9 @@ public class FriendsPanelUIController : MonoBehaviour
             invite.onClick.AddListener(() =>
             {
                 if (PlayWithFriendsManager.Instance == null) return;
-                PlayWithFriendsManager.Instance.InviteFriendToGame(friendId, displayName);
-                PlayWithFriendsManager.Instance.MarkGameInviteSent(friendId);
+                // Don't mark "sent" here — SendGameInvite marks it only on a successful Firebase
+                // write, so a failed invite leaves the button usable instead of greyed out forever.
+                PlayWithFriendsManager.Instance.SendGameInvite(friendId);
                 RefreshFriendsList();
             });
         }
@@ -350,7 +351,7 @@ public class FriendsPanelUIController : MonoBehaviour
         nameTmp.fontStyle = FontStyles.Bold;
         nameTmp.alignment = TextAlignmentOptions.Left;
         nameTmp.overflowMode = TextOverflowModes.Ellipsis;
-        nameTmp.enableWordWrapping = false;
+        nameTmp.textWrappingMode = TextWrappingModes.NoWrap;
         if (customFont != null) nameTmp.font = customFont;
 
         return row;
@@ -581,8 +582,15 @@ public class FriendsPanelUIController : MonoBehaviour
         return avatarPool[hash % avatarPool.Count];
     }
 
-    static string GetOnlineStatusText(FriendInfo info)
+    static string GetOnlineStatusText(string friendId, FriendInfo info)
     {
+        if (PlayWithFriendsManager.Instance != null)
+        {
+            if (PlayWithFriendsManager.Instance.IsFriendInGame(friendId)) return "In Game";
+            if (PlayWithFriendsManager.Instance.IsFriendOnline(friendId)) return "Online";
+            return "Offline";
+        }
+
         if (info == null) return "Offline";
         if (info.IsInRoom) return "In Game";
         if (info.IsOnline) return "Online";

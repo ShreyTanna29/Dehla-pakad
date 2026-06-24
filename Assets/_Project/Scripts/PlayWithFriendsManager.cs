@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,6 +13,9 @@ using Firebase.Auth;
 public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 {
     public static PlayWithFriendsManager Instance;
+
+    /// <summary>PIN queued while Photon is still connecting (invite accept / join table).</summary>
+    public static string PendingJoinPin { get; set; }
 
     [Header("PIN UI Components")]
     public TMP_InputField pinInputField;
@@ -79,6 +83,21 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public List<string> myFriends = new List<string>();
     readonly Dictionary<string, string> friendDisplayNames = new Dictionary<string, string>();
     readonly Dictionary<string, FriendInfo> friendPhotonStatus = new Dictionary<string, FriendInfo>();
+    readonly Dictionary<string, long> friendFirebaseLastActiveMs = new Dictionary<string, long>();
+    readonly Dictionary<string, bool> friendFirebaseOnlineFlag = new Dictionary<string, bool>();
+    readonly Dictionary<string, (DatabaseReference Ref, EventHandler<ValueChangedEventArgs> Handler)> _presenceListeners =
+        new Dictionary<string, (DatabaseReference, EventHandler<ValueChangedEventArgs>)>();
+    readonly Dictionary<string, PendingGameInvite> _pendingGameInvites = new Dictionary<string, PendingGameInvite>();
+    Coroutine _presenceHeartbeatCoroutine;
+    const long FirebaseOnlineThresholdMs = 120_000;
+
+    struct PendingGameInvite
+    {
+        public string InviteId;
+        public string RoomPin;
+        public string FromName;
+        public string FromUserId;
+    }
     PhotonView _photonView;
     DatabaseReference inviteDbRef;
     string _pendingInviteFriendId;
@@ -109,10 +128,141 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public FriendInfo GetFriendPhotonInfo(string friendId) =>
         friendPhotonStatus.TryGetValue(friendId, out FriendInfo info) ? info : null;
 
+    /// <summary>Online when Photon reports it, or Firebase presence was updated recently (works in-room).</summary>
+    public bool IsFriendOnline(string friendId)
+    {
+        if (string.IsNullOrEmpty(friendId)) return false;
+
+        if (friendPhotonStatus.TryGetValue(friendId, out FriendInfo photonInfo) && photonInfo != null && photonInfo.IsOnline)
+            return true;
+
+        if (friendFirebaseOnlineFlag.TryGetValue(friendId, out bool firebaseOnline) && firebaseOnline)
+            return true;
+
+        if (friendFirebaseLastActiveMs.TryGetValue(friendId, out long lastMs) && lastMs > 0)
+        {
+            long age = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - lastMs;
+            return age >= 0 && age <= FirebaseOnlineThresholdMs;
+        }
+
+        return false;
+    }
+
+    public bool IsFriendInGame(string friendId)
+    {
+        if (friendPhotonStatus.TryGetValue(friendId, out FriendInfo info) && info != null)
+            return info.IsOnline && info.IsInRoom;
+        return false;
+    }
+
     public void MarkGameInviteSent(string friendUserId)
     {
         if (string.IsNullOrEmpty(friendUserId)) return;
         _gameInvitesSent.Add(friendUserId);
+    }
+
+    /// <summary>
+    /// Live friend presence sync: attaches Firebase ValueChanged listeners per friend, publishes
+    /// our own heartbeat, polls Photon FindFriends when on the master server, and repaints UI.
+    /// </summary>
+    public void SyncFriendStatus()
+    {
+        EnsurePhotonUserId();
+        PublishOwnPresence();
+
+        if (myFriends == null || myFriends.Count == 0)
+        {
+            TearDownPresenceListeners();
+            RefreshFriendsListUI();
+            return;
+        }
+
+        TearDownPresenceListeners();
+
+        DatabaseReference root = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference;
+        foreach (string friendId in myFriends)
+        {
+            if (string.IsNullOrEmpty(friendId)) continue;
+
+            string capturedId = friendId;
+            DatabaseReference presenceRef = root.Child("users").Child(capturedId).Child("presence");
+
+            EventHandler<ValueChangedEventArgs> handler = (_, args) => OnFriendPresenceChanged(capturedId, args);
+            presenceRef.ValueChanged += handler;
+            _presenceListeners[capturedId] = (presenceRef, handler);
+
+            presenceRef.GetValueAsync().ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted || task.Result == null) return;
+                ApplyPresenceSnapshot(capturedId, task.Result);
+                RefreshFriendsListUI();
+            });
+        }
+
+        if (CanCallFindFriends())
+            PhotonNetwork.FindFriends(myFriends.ToArray());
+        else if (!PhotonNetwork.InRoom)
+            ScheduleFindFriendsWhenReady();
+
+        RefreshFriendsListUI();
+    }
+
+    public void RefreshFriendsStatus() => SyncFriendStatus();
+
+    public void CheckFriendsOnlineStatus() => SyncFriendStatus();
+
+    void OnFriendPresenceChanged(string friendId, ValueChangedEventArgs args)
+    {
+        if (args.DatabaseError != null) return;
+        ApplyPresenceSnapshot(friendId, args.Snapshot);
+        RefreshFriendsListUI();
+    }
+
+    void ApplyPresenceSnapshot(string friendId, DataSnapshot snapshot)
+    {
+        if (string.IsNullOrEmpty(friendId)) return;
+
+        if (snapshot == null || !snapshot.Exists)
+        {
+            friendFirebaseOnlineFlag[friendId] = false;
+            friendFirebaseLastActiveMs.Remove(friendId);
+            return;
+        }
+
+        if (snapshot.Child("online").Exists)
+        {
+            object onlineVal = snapshot.Child("online").Value;
+            bool online = onlineVal is bool b && b
+                || (onlineVal != null && onlineVal.ToString().Equals("true", System.StringComparison.OrdinalIgnoreCase));
+            friendFirebaseOnlineFlag[friendId] = online;
+        }
+
+        if (snapshot.Child("lastActive").Exists
+            && long.TryParse(snapshot.Child("lastActive").Value?.ToString(), out long lastMs))
+        {
+            friendFirebaseLastActiveMs[friendId] = lastMs;
+        }
+    }
+
+    void TearDownPresenceListeners()
+    {
+        foreach (var entry in _presenceListeners)
+        {
+            if (entry.Value.Ref != null && entry.Value.Handler != null)
+                entry.Value.Ref.ValueChanged -= entry.Value.Handler;
+        }
+        _presenceListeners.Clear();
+    }
+
+    /// <summary>
+    /// Tasks 9/18/25 — Public entry the friends UI invite button should call. Wraps
+    /// InviteFriendToGame and relies on SendFirebaseInvite to mark the invite "sent" ONLY in its
+    /// success callback — so a failed invite no longer permanently greys out the button.
+    /// </summary>
+    public void SendGameInvite(string friendId)
+    {
+        if (string.IsNullOrEmpty(friendId)) return;
+        InviteFriendToGame(friendId, GetFriendDisplayNameInternal(friendId));
     }
 
     public bool IsGameInviteSent(string friendUserId) =>
@@ -136,10 +286,15 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         TryHookFirebaseAuth();
     }
 
-    void OnEnable() => TryHookFirebaseAuth();
-
-    void OnDisable()
+    public override void OnEnable()
     {
+        base.OnEnable();
+        TryHookFirebaseAuth();
+    }
+
+    public override void OnDisable()
+    {
+        base.OnDisable();
         UnhookFirebaseAuth();
         if (_retryFriendServicesCoroutine != null)
         {
@@ -188,7 +343,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         if (string.IsNullOrEmpty(PhotonNetwork.NickName))
         {
-            PhotonNetwork.NickName = "Player_" + Random.Range(100, 999);
+            PhotonNetwork.NickName = "Player_" + UnityEngine.Random.Range(100, 999);
             Debug.Log("My Random Name Set To: " + PhotonNetwork.NickName);
         }
     }
@@ -267,6 +422,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (inviteDbRef != null)
             inviteDbRef.ChildAdded -= OnIncomingInviteAdded;
 
+        TearDownPresenceListeners();
         if (Instance == this) Instance = null;
     }
 
@@ -323,8 +479,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         StartFriendRequestListener();
         StartFriendAcceptListener();
         StartInviteListener();
-        RefreshFriendsListUI();
-        CheckFriendsOnlineStatus();
+        StartPresenceHeartbeat();
+        SyncFriendStatus();
     }
 
     bool _headlessFriendsLoaded;
@@ -475,7 +631,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (!PhotonNetwork.IsConnectedAndReady || PhotonNetwork.InRoom) return;
 
-        string newPin = Random.Range(10000, 99999).ToString();
+        string newPin = UnityEngine.Random.Range(10000, 99999).ToString();
         Debug.Log("Generating PIN: " + newPin);
 
         RoomOptions roomOptions = new RoomOptions
@@ -533,6 +689,17 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             _pendingCreatePrivateRoom = false;
             if (errorText != null) errorText.gameObject.SetActive(false);
             DoCreatePrivateRoom();
+        }
+
+        if (!string.IsNullOrEmpty(PendingJoinPin) && !PhotonNetwork.InRoom)
+        {
+            string pin = PendingJoinPin;
+            PendingJoinPin = null;
+
+            Debug.Log($"[Friends] Photon ready — joining queued room '{pin}'");
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ShowLoading("Joining game...");
+            PhotonNetwork.JoinRoom(pin);
         }
 
         CheckFriendsOnlineStatus();
@@ -595,12 +762,17 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                 return;
             }
 
+            PendingJoinPin = pin.Trim();
             if (NetworkManager.Instance != null)
+            {
                 NetworkManager.Instance.ConnectToPhoton();
+                NetworkManager.Instance.ShowLoading("Joining game...");
+            }
             ShowUIError("Connecting... please wait.");
             return;
         }
 
+        PendingJoinPin = null;
         PhotonNetwork.JoinRoom(pin.Trim());
     }
 
@@ -637,7 +809,10 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         {
             Debug.Log("Private Room Joined. Waiting in Lobby...");
             if (NetworkManager.Instance != null)
+            {
                 NetworkManager.Instance.StayInPrivateLobbyUI();
+                NetworkManager.Instance.ShowLoading("Joined — waiting for host...");
+            }
             ShowPrivateRoomLobbyUI();
             TrySendPendingInvite();
             return;
@@ -1325,7 +1500,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         // Single shared, guarded entry: hides menus, shows game scene, ensures local
         // NetworkPlayer exists, initializes gameplay UI, and (master only) starts dealing once.
         if (NetworkManager.Instance != null)
+        {
+            if (!PhotonNetwork.IsMasterClient)
+                NetworkManager.Instance.ShowLoading("Starting game...");
             NetworkManager.Instance.BeginGameAfterRoomReady();
+        }
         else
             Debug.LogError("[GameStart ERROR] NetworkManager.Instance missing — cannot start friends game.");
 
@@ -1467,19 +1646,65 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         Debug.Log($"[Friends] Added {friendDisplayNames[friendUserId]} ({friendUserId})");
     }
 
-    public void CheckFriendsOnlineStatus()
+    /// <summary>
+    /// Task 24 — After a player is replaced/kicked, re-poll friend status a few times so the
+    /// replaced player stops showing "In Game" promptly, instead of waiting for the 45s heartbeat.
+    /// "In game" is derived from Photon room membership (FindFriends IsInRoom), so a few quick
+    /// re-polls reflect the leave as soon as the kick propagates server-side.
+    /// </summary>
+    public void RefreshInGameStatusSoon()
     {
-        EnsurePhotonUserId();
-        if (myFriends == null || myFriends.Count == 0)
-            return;
+        if (isActiveAndEnabled)
+            StartCoroutine(RefreshInGameStatusRoutine());
+        else if (SocialServiceBootstrap.Instance != null)
+            SocialServiceBootstrap.Instance.StartCoroutine(RefreshInGameStatusRoutine());
+    }
 
-        if (!CanCallFindFriends())
+    IEnumerator RefreshInGameStatusRoutine()
+    {
+        for (int i = 0; i < 3; i++)
         {
-            ScheduleFindFriendsWhenReady();
-            return;
+            yield return new WaitForSeconds(1f);
+            CheckFriendsOnlineStatus();
         }
+    }
 
-        PhotonNetwork.FindFriends(myFriends.ToArray());
+    void StartPresenceHeartbeat()
+    {
+        PublishOwnPresence();
+        if (_presenceHeartbeatCoroutine != null) return;
+
+        if (isActiveAndEnabled)
+            _presenceHeartbeatCoroutine = StartCoroutine(PresenceHeartbeatRoutine());
+        else if (SocialServiceBootstrap.Instance != null)
+            _presenceHeartbeatCoroutine = SocialServiceBootstrap.Instance.StartCoroutine(PresenceHeartbeatRoutine());
+    }
+
+    IEnumerator PresenceHeartbeatRoutine()
+    {
+        var wait = new WaitForSeconds(45f);
+        while (true)
+        {
+            yield return wait;
+            PublishOwnPresence();
+        }
+    }
+
+    void PublishOwnPresence()
+    {
+        string myId = MyUserId;
+        if (string.IsNullOrEmpty(myId)) return;
+
+        long now = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var data = new Dictionary<string, object>
+        {
+            { "lastActive", now },
+            { "online", true }
+        };
+
+        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("users").Child(myId).Child("presence")
+            .UpdateChildrenAsync(data);
     }
 
     static bool CanCallFindFriends()
@@ -1910,14 +2135,16 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         GameObject row = Instantiate(friendUIPrefab, friendsListContainer);
 
         TMP_Text friendText = FindPrimaryLabel(row.transform);
+        bool online = IsFriendOnline(friendId);
+        bool inGame = IsFriendInGame(friendId);
         string status = "🔴 Offline";
-        if (photonInfo != null)
-            status = photonInfo.IsOnline ? (photonInfo.IsInRoom ? "🎮 In Game" : "🟢 Online") : "🔴 Offline";
+        if (online)
+            status = inGame ? "🎮 In Game" : "🟢 Online";
 
         if (friendText != null)
         {
             friendText.text = $"{displayName}\n{status}";
-            friendText.color = photonInfo != null && photonInfo.IsOnline ? Color.green : Color.gray;
+            friendText.color = online ? Color.green : Color.gray;
         }
 
         Button inviteBtn = FindChildButton(row.transform, "InviteButton");
@@ -2050,7 +2277,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (_inviteListenerStarted) return;
 
-        string myId = PhotonNetwork.AuthValues?.UserId ?? PhotonNetwork.LocalPlayer?.UserId ?? "";
+        string myId = MyUserId;
         if (string.IsNullOrEmpty(myId)) return;
 
         inviteDbRef = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference.Child("invites").Child(myId);
@@ -2062,54 +2289,111 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         {
             if (task.IsFaulted || task.IsCanceled || task.Result == null || !task.Result.Exists) return;
 
-            DataSnapshot latest = null;
-            long latestTicks = 0;
             foreach (DataSnapshot child in task.Result.Children)
-            {
-                if (!child.Exists) continue;
-                long ticks = 0;
-                if (child.Child("createdAt").Exists)
-                    long.TryParse(child.Child("createdAt").Value?.ToString(), out ticks);
-                if (latest == null || ticks >= latestTicks)
-                {
-                    latest = child;
-                    latestTicks = ticks;
-                }
-            }
-
-            if (latest == null) return;
-            string roomPin = latest.Child("roomPin").Value?.ToString();
-            string fromName = latest.Child("fromName").Value?.ToString() ?? "Friend";
-            if (!string.IsNullOrEmpty(roomPin))
-            {
-                ShowIncomingInvite(fromName, roomPin);
-                latest.Reference.RemoveValueAsync();
-            }
+                TryRegisterIncomingInviteSnapshot(child);
         });
+    }
+
+    void TryRegisterIncomingInviteSnapshot(DataSnapshot snapshot)
+    {
+        if (snapshot == null || !snapshot.Exists) return;
+
+        string inviteId = snapshot.Key;
+        string roomPin = snapshot.Child("roomPin").Value?.ToString();
+        string fromName = snapshot.Child("fromName").Value?.ToString() ?? "Friend";
+        string fromUserId = snapshot.Child("fromUserId").Value?.ToString();
+        if (string.IsNullOrEmpty(roomPin)) roomPin = inviteId;
+        if (string.IsNullOrEmpty(inviteId)) inviteId = roomPin;
+        if (string.IsNullOrEmpty(roomPin)) return;
+
+        RegisterPendingInvite(inviteId, roomPin, fromName, fromUserId);
+        ShowIncomingInvite(fromName, roomPin, inviteId);
     }
 
     void OnIncomingInviteAdded(object sender, ChildChangedEventArgs args)
     {
         if (args.DatabaseError != null || args.Snapshot == null || !args.Snapshot.Exists) return;
-
-        string roomPin = args.Snapshot.Child("roomPin").Value?.ToString();
-        string fromName = args.Snapshot.Child("fromName").Value?.ToString() ?? "Friend";
-        if (string.IsNullOrEmpty(roomPin)) return;
-
-        ShowIncomingInvite(fromName, roomPin);
-        args.Snapshot.Reference.RemoveValueAsync();
+        TryRegisterIncomingInviteSnapshot(args.Snapshot);
     }
 
-    void ShowIncomingInvite(string fromName, string roomPin)
+    void RegisterPendingInvite(string inviteId, string roomPin, string fromName, string fromUserId)
     {
-        // Keep the PIN prefilled as a harmless fallback for the manual JOIN path.
+        if (string.IsNullOrEmpty(inviteId) || string.IsNullOrEmpty(roomPin)) return;
+
+        _pendingGameInvites[inviteId] = new PendingGameInvite
+        {
+            InviteId = inviteId,
+            RoomPin = roomPin,
+            FromName = fromName,
+            FromUserId = fromUserId
+        };
+    }
+
+    /// <summary>Accepts a pending game invite and joins the inviter's private room.</summary>
+    public void AcceptInvite(string inviteId)
+    {
+        if (string.IsNullOrEmpty(inviteId)) return;
+
+        if (!_pendingGameInvites.TryGetValue(inviteId, out PendingGameInvite invite))
+        {
+            invite = new PendingGameInvite
+            {
+                InviteId = inviteId,
+                RoomPin = inviteId
+            };
+        }
+
+        string roomPin = invite.RoomPin;
+        RemoveInviteFromFirebase(invite.InviteId);
+        _pendingGameInvites.Remove(invite.InviteId);
+        IncomingInvitePopup.Dismiss();
+
+        if (string.IsNullOrEmpty(roomPin))
+        {
+            ShowUIError("Invite expired.");
+            return;
+        }
+
+        if (PhotonNetwork.InRoom)
+        {
+            ShowUIError("Leave your current table first.");
+            return;
+        }
+
+        Debug.Log($"[Invite] Accepting invite '{invite.InviteId}' -> room '{roomPin}'");
+        JoinRoomWithPINText(roomPin);
+    }
+
+    /// <summary>Declines a pending game invite and removes it from Firebase.</summary>
+    public void DeclineInvite(string inviteId)
+    {
+        if (string.IsNullOrEmpty(inviteId)) return;
+
+        RemoveInviteFromFirebase(inviteId);
+        _pendingGameInvites.Remove(inviteId);
+        IncomingInvitePopup.Dismiss();
+        Debug.Log($"[Invite] Declined invite '{inviteId}'");
+    }
+
+    void RemoveInviteFromFirebase(string inviteId)
+    {
+        if (string.IsNullOrEmpty(inviteId)) return;
+
+        string myId = MyUserId;
+        if (string.IsNullOrEmpty(myId)) return;
+
+        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("invites").Child(myId).Child(inviteId)
+            .RemoveValueAsync();
+    }
+
+    void ShowIncomingInvite(string fromName, string roomPin, string inviteId)
+    {
         if (pinInputField != null)
             pinInputField.text = roomPin;
 
-        // Free-Fire / PUBG style slide-in popup with ACCEPT (joins instantly) / DECLINE.
-        IncomingInvitePopup.ShowInvite(fromName, roomPin);
-
-        Debug.Log($"[Invite] Incoming from {fromName} — room {roomPin}");
+        IncomingInvitePopup.ShowInvite(fromName, roomPin, inviteId);
+        Debug.Log($"[Invite] Incoming from {fromName} — room {roomPin} (id={inviteId})");
     }
 
     void SaveFriends()

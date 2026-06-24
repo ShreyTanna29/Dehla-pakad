@@ -12,7 +12,7 @@ public class TurnManager : MonoBehaviourPunCallbacks
     public static TurnManager Instance;
 
     [Header("Timer Settings")]
-    public int maxTurnTime = 15; 
+    public int maxTurnTime = 18; 
     private int currentTime;
     private bool isTimerRunning = false;
     private bool isPaused = false;
@@ -26,6 +26,47 @@ public class TurnManager : MonoBehaviourPunCallbacks
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+    }
+
+    void Start() => ResolveTimerUi();
+
+    void ResolveTimerUi()
+    {
+        if (timerText == null && UiSafeLookup.TryGetPath("TimerText", out GameObject timerGo))
+            timerText = timerGo.GetComponent<TMP_Text>();
+
+        if (timerFillBar == null && UiSafeLookup.TryGetPath("TimerFill", out GameObject fillGo))
+            timerFillBar = fillGo.GetComponent<Image>();
+        else if (timerFillBar == null && timerText != null && timerText.transform.parent != null)
+        {
+            Transform fill = timerText.transform.parent.Find("TimerFill");
+            if (fill != null) timerFillBar = fill.GetComponent<Image>();
+        }
+    }
+
+    void EnsureTimerVisible()
+    {
+        ResolveTimerUi();
+        if (timerText == null) return;
+
+        Transform t = timerText.transform;
+        while (t != null)
+        {
+            if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
+            var cg = t.GetComponent<CanvasGroup>();
+            if (cg != null && cg.alpha < 0.05f) cg.alpha = 1f;
+            t = t.parent;
+        }
+
+        timerText.gameObject.SetActive(true);
+        // Only force the legacy horizontal bar visible when the circular timers are NOT in use,
+        // otherwise it would re-enable the bar we intentionally disabled.
+        if (timerFillBar != null && DynamicTimerSetup.Instance == null)
+        {
+            timerFillBar.gameObject.SetActive(true);
+            if (timerFillBar.transform.parent != null)
+                timerFillBar.transform.parent.gameObject.SetActive(true);
+        }
     }
 
     public void SetPaused(bool paused)
@@ -80,6 +121,7 @@ public class TurnManager : MonoBehaviourPunCallbacks
         StopAllCoroutines();
         if (timerText != null) timerText.text = "Wait...";
         if (timerFillBar != null) timerFillBar.fillAmount = 0;
+        if (DynamicTimerSetup.Instance != null) DynamicTimerSetup.Instance.HideAll();
     }
 
     // 🚀 MASTER SWITCH: If the previous master left mid-timer, the new one takes over.
@@ -158,9 +200,21 @@ public class TurnManager : MonoBehaviourPunCallbacks
 
     void UpdateTimerUI()
     {
-        if (timerFillBar != null)
+        EnsureTimerVisible();
+
+        float fillAmount = maxTurnTime > 0 ? (float)currentTime / maxTurnTime : 0f;
+
+        // Circular per-seat timer (Callbreak style) takes priority when present. It is driven from the
+        // authoritative, network-synced currentTime/currentActorTurn — never from a separate countdown.
+        if (DynamicTimerSetup.Instance != null)
         {
-            float fillAmount = (float)currentTime / maxTurnTime;
+            int seat = PlayerHand.LocalInstance != null
+                ? PlayerHand.LocalInstance.GetSeatIndex(currentActorTurn)
+                : -1;
+            DynamicTimerSetup.Instance.ShowForSeat(seat, fillAmount);
+        }
+        else if (timerFillBar != null)
+        {
             timerFillBar.fillAmount = fillAmount;
 
             // 🎨 COLOR CHANGE: Green to Red
@@ -169,7 +223,8 @@ public class TurnManager : MonoBehaviourPunCallbacks
             else timerFillBar.color = Color.red;
 
             // Optional: Punch scale on tick
-            timerFillBar.transform.parent.DOPunchScale(new Vector3(0.05f, 0.05f, 0), 0.2f);
+            if (timerFillBar.transform.parent != null)
+                timerFillBar.transform.parent.DOPunchScale(new Vector3(0.05f, 0.05f, 0), 0.2f);
         }
 
         if (timerText != null)

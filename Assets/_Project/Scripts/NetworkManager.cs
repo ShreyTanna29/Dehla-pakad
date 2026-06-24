@@ -50,11 +50,15 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     [Header("Reconnection UI")]
     public GameObject connectionLostPanel;
     const float DisconnectAbandonHomeSeconds = 30f;
+    const float ReconnectRetrySeconds = 2f;
+    public const float GameStartLoadingDelaySeconds = 1.5f;
 
     private bool isAttemptingRejoin = false;
     private bool _localMatchAbandoned;
     private Coroutine _disconnectAbandonCoroutine;
+    private Coroutine _autoReconnectCoroutine;
     private string storedRoomName;
+    const string PrefsActiveRoomName = "ActiveMatchRoomName";
     private TMP_Text reconnectingStatusText;
     private TMP_Text reconnectionLostStatusText;
     private GameObject reconnectingSpinner;
@@ -72,7 +76,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         GamePerformanceBootstrap.Apply();
 
-        PhotonNetwork.KeepAliveInBackground = 300f;
+        ApplyPhotonPeerTuning();
         Application.runInBackground = true;
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
@@ -85,9 +89,37 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
 
         HideHomeUntilLogin();
+    }
 
-        if (HasInternet())
-            ConnectToPhoton();
+    static void ApplyPhotonPeerTuning()
+    {
+        PhotonNetwork.KeepAliveInBackground = 300f;
+        var peer = PhotonNetwork.NetworkingClient?.LoadBalancingPeer;
+        if (peer == null) return;
+        // Slightly longer tolerance for mobile UDP jitter before ClientTimeout disconnects.
+        peer.DisconnectTimeout = 25000;
+        peer.SentCountAllowance = 9;
+    }
+
+    void PersistActiveRoomName(string roomName)
+    {
+        if (string.IsNullOrEmpty(roomName)) return;
+        storedRoomName = roomName;
+        PlayerPrefs.SetString(PrefsActiveRoomName, roomName);
+        PlayerPrefs.Save();
+    }
+
+    void RestoreActiveRoomNameIfNeeded()
+    {
+        if (!string.IsNullOrEmpty(storedRoomName)) return;
+        string saved = PlayerPrefs.GetString(PrefsActiveRoomName, "");
+        if (!string.IsNullOrEmpty(saved))
+            storedRoomName = saved;
+    }
+
+    void ClearPersistedActiveRoomName()
+    {
+        PlayerPrefs.DeleteKey(PrefsActiveRoomName);
     }
 
     void OnApplicationQuit()
@@ -121,9 +153,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             if (!PhotonNetwork.OfflineMode && HasInternet())
             {
-                if (!PhotonNetwork.IsConnectedAndReady)
+                if (!PhotonNetwork.IsConnectedAndReady && !isAttemptingRejoin)
                     ConnectToPhoton();
-                else
+                else if (!isAttemptingRejoin)
                     EnsureJoinLobby();
                 RefreshPlayOnlineButtonState();
             }
@@ -146,7 +178,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         while (!PhotonNetwork.IsConnectedAndReady && Time.unscaledTime - photonStart < maxPhotonSeconds)
         {
             onStatus?.Invoke("Connecting to Photon...");
-            if (!IsPhotonConnectingOrConnected() && HasInternet())
+            if (!IsPhotonConnectingOrConnected() && HasInternet() && !isAttemptingRejoin)
                 ConnectToPhoton();
             yield return new WaitForSecondsRealtime(0.2f);
         }
@@ -309,9 +341,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
                 if (!PhotonNetwork.OfflineMode
                     && PhotonNetwork.NetworkClientState == ClientState.Disconnected
-                    && !_pendingPhotonReconnectAfterAuth)
+                    && !_pendingPhotonReconnectAfterAuth
+                    && !isAttemptingRejoin)
                 {
                     ConnectToPhoton();
+                }
+                else if (isAttemptingRejoin && PhotonNetwork.NetworkClientState == ClientState.Disconnected)
+                {
+                    TryReconnectToMatch();
                 }
             }
 
@@ -442,6 +479,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void ShowReconnectingPanel(string message)
     {
+        if (loadingCanvasGroup != null)
+        {
+            loadingCanvasGroup.DOKill();
+            loadingCanvasGroup.alpha = 0f;
+            loadingCanvasGroup.blocksRaycasts = false;
+            loadingCanvasGroup.gameObject.SetActive(false);
+        }
+
         bool hasShell = TryShowConnectionLostShell();
 
         SafeSetActive(reconnectingSpinner, true, "SpinnerContainer");
@@ -501,6 +546,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         HideReconnectPanels();
         HideLoading();
         isAttemptingRejoin = false;
+        StopAutoReconnectRoutine();
+        ClearPersistedActiveRoomName();
         GameFlowState.SetPhase(GameFlowPhase.Home);
 
         if (PhotonNetwork.InRoom)
@@ -516,9 +563,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         float timeLeft = DisconnectAbandonHomeSeconds;
         while (timeLeft > 0 && isAttemptingRejoin)
         {
-            if (reconnectionLostStatusText != null)
-                reconnectionLostStatusText.text = $"Internet lost.\nReconnecting... please wait ({Mathf.CeilToInt(timeLeft)}s)";
-
+            ShowReconnectingPanel($"Reconnecting to your game...\n({Mathf.CeilToInt(timeLeft)}s remaining)");
             yield return new WaitForSeconds(1f);
             timeLeft -= 1f;
         }
@@ -527,6 +572,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             _localMatchAbandoned = true;
             isAttemptingRejoin = false;
+            StopAutoReconnectRoutine();
             ShowReconnectionLostPanel("Connection lost permanently.\nReturning to Home...");
             yield return new WaitForSeconds(2.5f);
             LeaveMatchAndReturnHome();
@@ -549,34 +595,170 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void BeginInMatchDisconnectFlow()
     {
+        if (isAttemptingRejoin) return;
+
+        RestoreActiveRoomNameIfNeeded();
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null)
+            PersistActiveRoomName(PhotonNetwork.CurrentRoom.Name);
+
         StopDisconnectAbandonCoroutine();
+        StopAutoReconnectRoutine();
         GameFlowState.SetPhase(GameFlowPhase.Disconnected, forceRecovery: true);
+        if (TurnManager.Instance != null)
+            TurnManager.Instance.SetPaused(true);
         CleanUpLocalNetworkPlayer();
-        ShowReconnectionLostPanel($"Internet lost.\nReconnecting... please wait ({DisconnectAbandonHomeSeconds}s)");
+        EnsureConnectionLostPanelVisible();
+        ShowReconnectingPanel("Connection lost. Reconnecting...");
         isAttemptingRejoin = true;
         _disconnectAbandonCoroutine = StartCoroutine(AbandonMatchAfterDisconnectRoutine());
-        StartCoroutine(AutoReconnectRoutine());
+        _autoReconnectCoroutine = StartCoroutine(AutoReconnectRoutine());
+
+        if (HasInternet())
+            TryReconnectToMatch();
+    }
+
+    void EnsureConnectionLostPanelVisible()
+    {
+        ResolveReconnectPanels();
+        SafeSetActive(connectionLostPanel, true, "connectionLostPanel");
+    }
+
+    void StopAutoReconnectRoutine()
+    {
+        if (_autoReconnectCoroutine != null)
+        {
+            StopCoroutine(_autoReconnectCoroutine);
+            _autoReconnectCoroutine = null;
+        }
+    }
+
+    bool IsPhotonReconnectInProgress()
+    {
+        ClientState state = PhotonNetwork.NetworkClientState;
+        return state == ClientState.ConnectingToNameServer
+            || state == ClientState.ConnectingToMasterServer
+            || state == ClientState.Authenticating
+            || state == ClientState.Joining
+            || state == ClientState.JoiningLobby;
+    }
+
+    System.Collections.IEnumerator DeferredTryReconnectToMatch()
+    {
+        yield return null;
+        TryReconnectToMatch();
+    }
+
+    System.Collections.IEnumerator DeferredBeginInMatchDisconnectFlow()
+    {
+        yield return null;
+        if (!isAttemptingRejoin)
+            BeginInMatchDisconnectFlow();
+    }
+
+    void TryReconnectToMatch()
+    {
+        if (!isAttemptingRejoin || !HasInternet()) return;
+        if (PhotonNetwork.IsConnectedAndReady && PhotonNetwork.InRoom) return;
+        if (IsPhotonReconnectInProgress()) return;
+
+        Debug.Log("[Photon] Attempting match reconnect...");
+        ShowReconnectingPanel("Reconnecting to your game...");
+
+        // Connected to master but not in room (common after ClientTimeout on ConnectedToMasterServer).
+        if (PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.InRoom && !string.IsNullOrEmpty(storedRoomName))
+        {
+            Debug.Log("[Photon] On master without room — RejoinRoom: " + storedRoomName);
+            PhotonNetwork.RejoinRoom(storedRoomName);
+            return;
+        }
+
+        if (PhotonNetwork.NetworkClientState == ClientState.Disconnected)
+        {
+            if (!PhotonNetwork.ReconnectAndRejoin())
+                StartCoroutine(RejoinRoomAfterConnectRoutine());
+        }
+    }
+
+    bool ShouldKeepLoadingVisibleAfterDisconnect()
+    {
+        return isAttemptingRejoin
+            || GameFlowState.Current == GameFlowPhase.InGame
+            || GameFlowState.Current == GameFlowPhase.Dealing
+            || GameFlowState.Current == GameFlowPhase.ResolvingTrick
+            || GameFlowState.Current == GameFlowPhase.Disconnected
+            || (gameCanvasGroup != null && gameCanvasGroup.alpha > 0.1f);
+    }
+
+    System.Collections.IEnumerator ReconnectIdleRoutine()
+    {
+        yield return null;
+        if (PhotonNetwork.OfflineMode || isAttemptingRejoin || !HasInternet()) yield break;
+        if (PhotonNetwork.IsConnectedAndReady) yield break;
+
+        Debug.Log("[Photon] Idle reconnect after timeout/disconnect.");
+        ConnectToPhoton();
     }
 
     System.Collections.IEnumerator AutoReconnectRoutine()
     {
+        yield return new WaitForSeconds(0.5f);
+
         while (isAttemptingRejoin)
         {
-            if (!PhotonNetwork.IsConnectedAndReady && PhotonNetwork.NetworkClientState == ClientState.Disconnected)
+            if (HasInternet())
             {
-                if (Application.internetReachability != NetworkReachability.NotReachable)
+                if (PhotonNetwork.IsConnectedAndReady && PhotonNetwork.InRoom)
                 {
-                    Debug.Log("[Photon] Internet is back! Attempting ReconnectAndRejoin...");
-                    PhotonNetwork.ReconnectAndRejoin();
+                    Debug.Log("[Photon] Rejoin succeeded while polling.");
+                    yield break;
                 }
+
+                if (!IsPhotonReconnectInProgress())
+                    TryReconnectToMatch();
             }
-            yield return new WaitForSeconds(3f);
+
+            yield return new WaitForSeconds(ReconnectRetrySeconds);
+        }
+
+        _autoReconnectCoroutine = null;
+    }
+
+    System.Collections.IEnumerator RejoinRoomAfterConnectRoutine()
+    {
+        if (string.IsNullOrEmpty(storedRoomName))
+        {
+            Debug.LogWarning("[Photon] No stored room name — cannot RejoinRoom fallback.");
+            yield break;
+        }
+
+        Debug.Log("[Photon] ReconnectAndRejoin unavailable — using Connect + RejoinRoom fallback.");
+        if (PhotonNetwork.NetworkClientState == ClientState.Disconnected)
+            PhotonNetwork.ConnectUsingSettings();
+
+        float waited = 0f;
+        while (waited < 20f && isAttemptingRejoin)
+        {
+            if (PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.InRoom)
+            {
+                Debug.Log("[Photon] Connected — calling RejoinRoom(" + storedRoomName + ")");
+                PhotonNetwork.RejoinRoom(storedRoomName);
+                yield break;
+            }
+
+            waited += 0.5f;
+            yield return new WaitForSeconds(0.5f);
         }
     }
 
     public void ConnectToPhoton()
     {
         if (PhotonNetwork.OfflineMode) return;
+
+        if (isAttemptingRejoin)
+        {
+            Debug.Log("[Photon] ConnectToPhoton skipped — match rejoin in progress.");
+            return;
+        }
 
         string authUserId = PlayerPrefs.GetString("PhotonUserId", "");
         if (string.IsNullOrEmpty(authUserId) && PhotonNetwork.AuthValues != null)
@@ -638,7 +820,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         homeCanvasGroup.blocksRaycasts = true;
     }
 
-    public void UpdateUIState(bool isHome)
+    public void UpdateUIState(bool isHome, bool showLoadingOverlay = true)
     {
         if (isHome && !GoogleLogin.HasCompletedLoginFlow)
         {
@@ -649,14 +831,16 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (isHome)
             ShowHomeUI();
         else
-            ShowGameScene();
+            ShowGameScene(showLoadingOverlay);
     }
 
-    public void ShowGameScene()
+    public void ShowGameScene(bool showLoadingOverlay = true)
     {
         Debug.Log("[GameStart] ShowGameScene");
-        if (gameCanvasGroup == null)
-            Debug.LogError("[GameStart ERROR] Missing gameCanvasGroup");
+        HideReconnectPanels();
+
+        if (showLoadingOverlay)
+            ShowLoading("Loading game...");
 
         if (gameCanvasGroup != null)
         {
@@ -675,25 +859,20 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             homeCanvasGroup.blocksRaycasts = false;
         }
 
-        if (loadingCanvasGroup != null)
-        {
-            loadingCanvasGroup.DOKill();
-            loadingCanvasGroup.alpha = 0f;
-            loadingCanvasGroup.interactable = false;
-            loadingCanvasGroup.blocksRaycasts = false;
-            loadingCanvasGroup.gameObject.SetActive(false);
-        }
-
         ResolveGameTablePanel();
         if (gameTablePanel != null)
         {
             gameTablePanel.SetActive(true);
-            gameTablePanel.transform.SetAsLastSibling();
+            if (!showLoadingOverlay)
+                gameTablePanel.transform.SetAsLastSibling();
         }
         else
         {
             Debug.LogError("[GameStart ERROR] Missing Panel_Game");
         }
+
+        if (showLoadingOverlay)
+            BringLoadingToFront();
 
         // Only initialize gameplay logic if we are actually in a room and have a player.
         // Otherwise, this will be called again in OnJoinedRoom.
@@ -843,12 +1022,16 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public void ReturnToHomeScreen()
     {
         Debug.Log("[GameFlow] ReturnToHomeScreen");
+        if (AdsManager.Instance != null)
+            AdsManager.Instance.HideBanner();
+
         _localMatchAbandoned = false;
         StopDisconnectAbandonCoroutine();
         GameFlowState.SetPhase(GameFlowPhase.Home);
         HideLoading();
         HideReconnectPanels();
         isAttemptingRejoin = false;
+        ClearPersistedActiveRoomName();
         isPlayBotsMode = false;
         gameStartInProgress = false;
         dealingStarted = false;
@@ -934,16 +1117,25 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void ShowLoading(string message)
     {
+        // Game-start loading must never share the screen with the reconnect/logo panel.
+        HideReconnectPanels();
+
         if (loadingText != null) loadingText.text = message;
         if (loadingCanvasGroup == null) return;
 
         loadingCanvasGroup.gameObject.SetActive(true);
         loadingCanvasGroup.DOKill();
         loadingCanvasGroup.alpha = 1;
-        loadingCanvasGroup.interactable = false;
-        loadingCanvasGroup.blocksRaycasts = false;
-        loadingCanvasGroup.transform.SetAsLastSibling();
+        loadingCanvasGroup.interactable = true;
+        loadingCanvasGroup.blocksRaycasts = true;
+        BringLoadingToFront();
         lastStatusMessage = message;
+    }
+
+    void BringLoadingToFront()
+    {
+        if (loadingCanvasGroup == null) return;
+        loadingCanvasGroup.transform.SetAsLastSibling();
     }
 
     public void HideLoading()
@@ -978,6 +1170,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnConnectedToMaster() 
     { 
+        ApplyPhotonPeerTuning();
         Debug.Log("[Photon] ConnectedToMaster. Reconnect Success part 1.");
         lastStatusMessage = "Connected to Master";
 
@@ -1011,10 +1204,16 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
 
         // A reconnect/rejoin is in flight: do NOT pull the client into the lobby here, or we cancel
-        // PhotonNetwork.ReconnectAndRejoin() and drop the match. Let OnJoinedRoom resume the game.
+        // ReconnectAndRejoin() and drop the match. If we're on master but not in a room yet, try RejoinRoom.
         if (isAttemptingRejoin)
         {
-            Debug.Log("[Photon] Connected during rejoin — waiting for OnJoinedRoom to resume the match.");
+            Debug.Log("[Photon] Connected during rejoin — waiting for room rejoin.");
+            if (!PhotonNetwork.InRoom && !string.IsNullOrEmpty(storedRoomName)
+                && PhotonNetwork.NetworkClientState != ClientState.Joining)
+            {
+                Debug.Log("[Photon] OnConnectedToMaster fallback RejoinRoom: " + storedRoomName);
+                PhotonNetwork.RejoinRoom(storedRoomName);
+            }
             return;
         }
 
@@ -1039,6 +1238,23 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         if (MatchmakingManager.Instance != null)
             MatchmakingManager.Instance.RefreshUIAfterResume();
+
+        if (isAttemptingRejoin && HasInternet())
+        {
+            Debug.Log("[Photon] App resumed during match rejoin — retrying reconnect.");
+            TryReconnectToMatch();
+            return;
+        }
+
+        // Stay in an active match when the app returns from background — do not restart matchmaking.
+        if (GameFlowState.Current == GameFlowPhase.InGame
+            || GameFlowState.Current == GameFlowPhase.Dealing
+            || GameFlowState.Current == GameFlowPhase.ResolvingTrick
+            || GameFlowState.Current == GameFlowPhase.InRoom)
+        {
+            Debug.Log("[Photon] App resumed during active session — keeping current game state.");
+            return;
+        }
 
         if (GameFlowState.Current == GameFlowPhase.Matchmaking)
         {
@@ -1066,6 +1282,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         Debug.Log($"[Photon] Disconnected! Cause: {cause}");
         lastErrorMessage = cause.ToString();
 
+        if (PhotonNetwork.CurrentRoom != null)
+            PersistActiveRoomName(PhotonNetwork.CurrentRoom.Name);
+        else
+            RestoreActiveRoomNameIfNeeded();
+
         if (_pendingPhotonReconnectAfterAuth)
         {
             _pendingPhotonReconnectAfterAuth = false;
@@ -1077,7 +1298,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        if (!_showingNoInternetOverlay)
+        if (!_showingNoInternetOverlay && !ShouldKeepLoadingVisibleAfterDisconnect())
             HideLoading();
 
         if (!HasInternet())
@@ -1091,9 +1312,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
         else if (cause != DisconnectCause.DisconnectByClientLogic && cause != DisconnectCause.None)
         {
-            bool wasInMatch = GameFlowState.Current == GameFlowPhase.InGame || 
-                              GameFlowState.Current == GameFlowPhase.InRoom ||
-                              (gameCanvasGroup != null && gameCanvasGroup.alpha > 0.1f);
+            bool wasInMatch = isAttemptingRejoin
+                || GameFlowState.Current == GameFlowPhase.InGame
+                || GameFlowState.Current == GameFlowPhase.InRoom
+                || GameFlowState.Current == GameFlowPhase.Dealing
+                || GameFlowState.Current == GameFlowPhase.ResolvingTrick
+                || GameFlowState.Current == GameFlowPhase.Disconnected
+                || (gameCanvasGroup != null && gameCanvasGroup.alpha > 0.1f);
 
             if (GameFlowState.Current == GameFlowPhase.Matchmaking)
             {
@@ -1102,10 +1327,27 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 HideLoading();
                 StartCoroutine(ReconnectForMatchmakingRoutine());
             }
-            else if (wasInMatch)
+            else if (wasInMatch && !isAttemptingRejoin)
             {
-                Debug.Log("[Photon] Disconnected during match — abandoning and returning home.");
-                BeginInMatchDisconnectFlow();
+                Debug.Log("[Photon] Disconnected during match — starting rejoin flow.");
+                StartCoroutine(DeferredBeginInMatchDisconnectFlow());
+            }
+            else if (isAttemptingRejoin && HasInternet())
+            {
+                StartCoroutine(DeferredTryReconnectToMatch());
+            }
+            else if (!wasInMatch && !isAttemptingRejoin && HasInternet()
+                     && (GameFlowState.Current == GameFlowPhase.Home
+                         || cause == DisconnectCause.ClientTimeout
+                         || cause == DisconnectCause.ServerTimeout))
+            {
+                Debug.Log($"[Photon] Idle disconnect ({cause}) — scheduling Photon reconnect.");
+                StartCoroutine(ReconnectIdleRoutine());
+            }
+            else if (cause == DisconnectCause.ClientTimeout || cause == DisconnectCause.ServerTimeout)
+            {
+                Debug.Log($"[Photon] Timeout disconnect ({cause}) — forcing reconnect attempt.");
+                StartCoroutine(ReconnectIdleRoutine());
             }
         }
 
@@ -1186,7 +1428,7 @@ yield return new WaitForSeconds(1f);
             if (!rejoiningActiveGame)
             {
                 Debug.Log("Private Room Joined. Waiting in Lobby...");
-                storedRoomName = PhotonNetwork.CurrentRoom.Name;
+                PersistActiveRoomName(PhotonNetwork.CurrentRoom.Name);
                 GameFlowState.SetPhase(GameFlowPhase.InRoom);
                 StopDisconnectAbandonCoroutine();
                 _localMatchAbandoned = false;
@@ -1198,7 +1440,7 @@ yield return new WaitForSeconds(1f);
         }
 
         if (PhotonNetwork.CurrentRoom != null)
-            storedRoomName = PhotonNetwork.CurrentRoom.Name;
+            PersistActiveRoomName(PhotonNetwork.CurrentRoom.Name);
 
         rejoiningActiveGame = PhotonNetwork.CurrentRoom != null
             && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs2)
@@ -1207,7 +1449,7 @@ yield return new WaitForSeconds(1f);
         if (rejoiningActiveGame)
         {
             GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
-            UpdateUIState(false);
+            ShowLoading("Loading game...");
         }
         else
         {
@@ -1215,17 +1457,61 @@ yield return new WaitForSeconds(1f);
         }
 
         StopDisconnectAbandonCoroutine();
+        StopAutoReconnectRoutine();
         _localMatchAbandoned = false;
         HideReconnectPanels();
-        HideLoading();
+        if (!rejoiningActiveGame)
+            HideLoading();
         isAttemptingRejoin = false;
 
         EnsureLocalNetworkPlayer();
 
-        if (DeckManager.Instance != null && !DeckManager.IsPrivateFriendsRoom())
+        if (rejoiningActiveGame)
+            StartCoroutine(CompleteActiveGameRejoin());
+        else if (DeckManager.Instance != null && !DeckManager.IsPrivateFriendsRoom())
             DeckManager.Instance.OnRoomJoinedCheckStart();
 
+        if (!rejoiningActiveGame)
+            InitializeGameplayScene();
+    }
+
+    IEnumerator CompleteActiveGameRejoin()
+    {
+        HideReconnectPanels();
+        ShowLoading("Loading game...");
+
+        float timeout = 8f;
+        while (timeout > 0f && PlayerHand.LocalInstance == null)
+        {
+            EnsureLocalNetworkPlayer();
+            PlayerHand.ResolveLocalHand();
+            yield return null;
+            timeout -= Time.deltaTime;
+        }
+
+        // Let DeckManager.RejoinStateRoutine restore hand / table state from room props.
+        float syncWait = 0f;
+        while (syncWait < 5f)
+        {
+            if (PlayerHand.LocalInstance != null && PlayerHand.LocalInstance.myCards.Count > 0)
+                break;
+            yield return null;
+            syncWait += Time.deltaTime;
+        }
+
+        yield return new WaitForSeconds(0.3f);
+
+        if (PlayerHand.LocalInstance != null)
+        {
+            PlayerHand.LocalInstance.FinishReconnectFromRoom();
+            if (TurnManager.Instance != null)
+                TurnManager.Instance.SetPaused(false);
+        }
+
+        HideLoading();
+        UpdateUIState(false, showLoadingOverlay: false);
         InitializeGameplayScene();
+        Debug.Log("[Photon] Active game rejoin complete.");
     }
 
     /// <summary>
@@ -1410,6 +1696,12 @@ yield return new WaitForSeconds(1f);
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
         LogError($"JoinRoomFailed | {returnCode} | {message}");
+        if (isAttemptingRejoin)
+        {
+            Debug.LogWarning("[Photon] RejoinRoom failed — AutoReconnect will retry.");
+            ShowReconnectingPanel("Rejoin failed. Retrying...");
+            return;
+        }
         HideLoading();
     }
 

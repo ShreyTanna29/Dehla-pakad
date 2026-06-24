@@ -109,10 +109,13 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
     {
         bool isOffline = PhotonNetwork.OfflineMode;
 
-        // Hide the seat lobby before showing the game scene.
         HideSeatLobby();
 
-        // --- FAST PATH FOR BOTS (offline) ---
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowLoading("Loading game...");
+
+        yield return new WaitForSeconds(NetworkManager.GameStartLoadingDelaySeconds);
+
         if (isOffline)
         {
             Debug.Log("🤖 Instant Bot Match.");
@@ -124,16 +127,10 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
             yield break;
         }
 
-        // --- ONLINE: short transition into the game scene, then deal ---
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.UpdateUIState(false);
-
-        yield return new WaitForSeconds(0.4f);
-
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.ShowGameScene();
 
-        yield return new WaitForSeconds(0.3f);
+        yield return new WaitForSeconds(0.2f);
 
         if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
             DeckManager.Instance.StartFullDealingSequence();

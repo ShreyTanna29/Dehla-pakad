@@ -11,7 +11,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [Header("Game Settings")]
     public int minPlayersToStartOnline = 4;
     public int requiredPlayersToStart = 4; 
-    public float matchmakingTimeout = 20f; 
+    public float matchmakingTimeout = 2f; 
 
     public const int MaxTableSeats = 4;
     private const int PhantomBotActorBase = 100;
@@ -514,6 +514,17 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         if (IsPrivateFriendsRoom() && !rejoining)
         {
+            // Task 7: if the host already locked modes / started the match before we joined
+            // (e.g. a friend accepting a REPLACE invite), don't get stuck on the loading screen —
+            // transition straight into the game. ExecuteFriendsGameStart is idempotent.
+            if (FriendsMatchAlreadyStarted())
+            {
+                Debug.Log("[DeckManager] Joined a friends room that already started — entering game.");
+                if (PlayWithFriendsManager.Instance != null)
+                    PlayWithFriendsManager.Instance.ExecuteFriendsGameStart();
+                yield break;
+            }
+
             Debug.Log("Private Room Joined. Waiting in Lobby...");
             yield break;
         }
@@ -529,12 +540,39 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
     }
 
+    // Task 7: true once the host has locked modes / started the friends match (room property "ModesLocked").
+    static bool FriendsMatchAlreadyStarted()
+    {
+        return PhotonNetwork.CurrentRoom != null
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("ModesLocked", out object ml)
+            && ml is bool locked && locked;
+    }
+
+    /// <summary>
+    /// Task 7 — Always-active backup so friends-mode invitees never get stuck on the loading screen.
+    /// DeckManager's PhotonView is always active (unlike PlayWithFriendsManager, which can be
+    /// inactive and miss the start RPC / its own property callback). When the host sets
+    /// "ModesLocked", this drives the loading->game transition for everyone. Idempotent.
+    /// </summary>
+    public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
+    {
+        if (propertiesThatChanged == null || !PhotonNetwork.InRoom) return;
+        if (!IsPrivateFriendsRoom()) return;
+
+        if (propertiesThatChanged.ContainsKey("ModesLocked")
+            && propertiesThatChanged["ModesLocked"] is bool locked && locked)
+        {
+            if (PlayWithFriendsManager.Instance != null)
+                PlayWithFriendsManager.Instance.ExecuteFriendsGameStart();
+        }
+    }
+
     IEnumerator RejoinStateRoutine()
     {
         RestoreBotsFromRoom();
         if (PlayerProfileSync.Instance != null) PlayerProfileSync.Instance.UpdateAllNames();
 
-        float timeout = 2.0f;
+        float timeout = 5.0f;
         while (PlayerHand.LocalInstance == null && timeout > 0)
         {
             yield return null;
@@ -717,6 +755,33 @@ public class DeckManager : MonoBehaviourPunCallbacks
             int currentActor = PlayerHand.LocalInstance.currentTurnActor;
             photonView.RPC("RPC_DealingComplete", p, currentActor);
         }
+    }
+
+    /// <summary>
+    /// Tasks 8 &amp; 24 — Host removes a real player and gives the seat to a bot.
+    /// 1) Marks the seat as a bot LOCALLY first so the host UI updates instantly (no waiting on
+    ///    the CloseConnection round-trip). 2) Syncs the swap to other clients. 3) Kicks the player.
+    /// 4) Forces a prompt friends-status re-poll so the replaced player stops showing "In Game".
+    /// </summary>
+    public void HostReplacePlayerWithBot(Player player)
+    {
+        if (!PhotonNetwork.IsMasterClient || player == null || player.IsLocal) return;
+
+        int actor = player.ActorNumber;
+
+        // Task 8: local-first UI update (direct call runs immediately on the host).
+        RPC_MarkPlayerAsBot(actor);
+
+        // Sync the seat->bot swap to the other clients.
+        if (photonView != null)
+            photonView.RPC("RPC_MarkPlayerAsBot", RpcTarget.Others, actor);
+
+        // Task 24: kick the player so Photon room membership (which drives "In Game" status) clears,
+        // then re-poll friends status promptly instead of waiting for the 45s presence heartbeat.
+        PhotonNetwork.CloseConnection(player);
+
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.RefreshInGameStatusSoon();
     }
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
@@ -914,6 +979,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     void RPC_InitializeMatch(int[] bots)
     {
+        if (ResultManager.Instance != null)
+            ResultManager.Instance.InitializeForMatch();
+
         ApplySyncedBotActorList(bots);
         List<int> seats = BuildActiveSeatList();
         int humans = GetActiveHumanPlayerCount();
@@ -998,15 +1066,23 @@ public class DeckManager : MonoBehaviourPunCallbacks
     public void StartFullDealingSequence()
     {
         if (!PhotonNetwork.IsMasterClient) return;
-        if (isDealCoroutineRunning || IsDealingComplete) return;
+        if (isDealCoroutineRunning) return;
+
+        PrepareLocalDealingStateForNextRound();
 
         if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.HideLoading();
             NetworkManager.Instance.ShowGameScene();
-        }
 
         StartCoroutine(WaitAndStartDealing());
+    }
+
+    /// <summary>Clears local dealing flags so the next round can deal (fixes stuck IsDealingComplete).</summary>
+    public void PrepareLocalDealingStateForNextRound()
+    {
+        deckIndex = 0;
+        currentDealBatch = 0;
+        isDealCoroutineRunning = false;
+        _localIsDealingComplete = false;
     }
 
     IEnumerator WaitAndStartDealing()
@@ -1037,30 +1113,34 @@ public class DeckManager : MonoBehaviourPunCallbacks
         Debug.Log("[DeckManager] FullDealingSequenceRoutine started.");
         isDealCoroutineRunning = true;
         currentDealBatch = 0;
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.HideLoading();
+
         yield return new WaitForSeconds(0.2f);
+
+        // Distribute the full hands up-front so every client already knows its cards. The cards
+        // stay hidden and are revealed progressively as each deal batch animation lands (Task 26).
+        // Doing this here (instead of after the batches) also removes the redundant extra hand
+        // refresh that caused the deal animation to appear to run twice (Task 23).
+        Debug.Log("[DeckManager] Distributing cards up-front for progressive reveal...");
+        BuildAndShuffleDeck();
+        DistributeAllHandsInternal();
 
         int[] dealBatches = TaashRules.GetDealAnimationBatches();
 
+        int revealedSoFar = 0;
         for (int batch = 0; batch < dealBatches.Length; batch++)
         {
             currentDealBatch = batch + 1;
             int cardsThisBatch = dealBatches[batch];
-            Debug.Log($"[DeckManager] Deal round {currentDealBatch}/{dealBatches.Length}");
-            photonView.RPC("RPC_PlayDealAnimation", RpcTarget.All, cardsThisBatch);
+            revealedSoFar += cardsThisBatch;
+            Debug.Log($"[DeckManager] Deal round {currentDealBatch}/{dealBatches.Length} (reveal up to {revealedSoFar})");
+            photonView.RPC("RPC_PlayDealAnimation", RpcTarget.All, cardsThisBatch, revealedSoFar);
 
             // FIX: GetDealBatchDuration now equals the real animation runtime; add a fixed 0.5s
             // gap between batches (previously the overestimated duration produced a ~1s idle gap).
             yield return new WaitForSeconds(PlayerHand.GetDealBatchDuration(cardsThisBatch) + 0.5f);
-        }
-
-        Debug.Log("[DeckManager] Distributing cards manually now...");
-        BuildAndShuffleDeck();
-        DistributeAllHandsInternal();
-
-        if (PlayerHand.LocalInstance != null)
-        {
-            Debug.Log("[DeckManager] Force-refreshing local hand visuals.");
-            PlayerHand.LocalInstance.RefreshHandUI(animate: true, force: true);
         }
 
         List<int> seats = GetActiveSeatActorsSorted();
@@ -1252,17 +1332,62 @@ public class DeckManager : MonoBehaviourPunCallbacks
     }
 
     [PunRPC]
-    public void RPC_PlayDealAnimation(int cardsInBatch)
+    public void RPC_PlayDealAnimation(int cardsInBatch, int revealUpTo)
     {
         if (IsDealingComplete) return;
 
         GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);
         if (PlayerHand.LocalInstance != null)
-            PlayerHand.LocalInstance.PlayDealAnimationOnly(cardsInBatch);
+            PlayerHand.LocalInstance.PlayDealAnimationOnly(cardsInBatch, revealUpTo);
+    }
+
+    public void ResetRoundStateForNextRound()
+    {
+        if (PhotonNetwork.IsMasterClient && PhotonNetwork.InRoom
+            && PhotonNetwork.NetworkClientState == Photon.Realtime.ClientState.Joined)
+        {
+            PhotonNetwork.CurrentRoom.SetCustomProperties(new ExitGames.Client.Photon.Hashtable
+            {
+                { "TP", 0 },
+                { "TC", new int[0] },
+                { "CTA", -1 },
+                { "SW", new int[4] },
+                { "DL", new int[4] },
+                { "DC", false }
+            });
+        }
+
+        deckIndex = 0;
+        currentDealBatch = 0;
+        IsDealingComplete = false;
+        isDealCoroutineRunning = false;
     }
 
     [PunRPC]
-    public void RPC_AssignFullHand(int targetActor, int[] suitIndices, int[] rankIndices)
+    public void RPC_OnRoundCompleted()
+    {
+        if (ResultManager.Instance != null)
+            ResultManager.Instance.OnRoundCompleted();
+    }
+
+    [PunRPC]
+    public void RPC_BeginNextRound(int newRound)
+    {
+        if (ResultManager.Instance != null)
+            ResultManager.Instance.ApplyNextRoundStart(newRound);
+
+        PrepareLocalDealingStateForNextRound();
+        GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);
+
+        if (PlayerHand.LocalInstance != null)
+            PlayerHand.LocalInstance.RPC_ResetHand();
+
+        if (PhotonNetwork.IsMasterClient)
+            StartFullDealingSequence();
+    }
+
+    [PunRPC]
+    void RPC_AssignFullHand(int targetActor, int[] suitIndices, int[] rankIndices)
     {
         if (PlayerHand.LocalInstance != null)
             PlayerHand.LocalInstance.AssignFullHandLocal(targetActor, suitIndices, rankIndices);

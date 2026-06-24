@@ -70,6 +70,8 @@ MonoBehaviour:
   - RPC_SyncTimerState
   - RPC_SyncBotsOnly
   - RPC_ShowGameResult
+  - RPC_OnRoundCompleted
+  - RPC_BeginNextRound
   - RPC_ReceiveGameStateSync
   - RPC_RequestGameStateSync
   - RPC_SyncTrump

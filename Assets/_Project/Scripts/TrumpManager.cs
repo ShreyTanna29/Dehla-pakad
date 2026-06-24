@@ -14,6 +14,9 @@ public class TrumpManager : MonoBehaviourPunCallbacks
     public GameObject trumpChangePopup;
     public TMP_Text trumpChangeText;
 
+    [Tooltip("Task 27: small label shown next to the trump display with the current round, e.g. \"Round 2/5\".")]
+    public TMP_Text roundText;
+
     [Header("Suit Sprites")]
     public Sprite spadeSprite;
     public Sprite heartSprite;
@@ -53,6 +56,7 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         }
 
         RefreshFromRoomProperties(false);
+        UpdateRoundLabel();
     }
 
     public static void ApplyTrumpForCurrentGameMode(bool showPopup)
@@ -132,6 +136,7 @@ public class TrumpManager : MonoBehaviourPunCallbacks
 
         EnsureTrumpDisplayVisible();
         UpdateTrumpUI(suit);
+        UpdateRoundLabel();
 
         if (showPopupIfChanged && changed && revealed && !ShouldDisplayTrumpAsHidden())
             ShowTrumpChangePopup(suit);
@@ -219,6 +224,10 @@ public class TrumpManager : MonoBehaviourPunCallbacks
 
     public override void OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
     {
+        // Task 27: keep the round label in sync with the synced CR/MR room properties.
+        if (propertiesThatChanged.ContainsKey("CR") || propertiesThatChanged.ContainsKey("MR"))
+            UpdateRoundLabel();
+
         if (!propertiesThatChanged.ContainsKey("TS") && !propertiesThatChanged.ContainsKey("TR"))
             return;
 
@@ -312,6 +321,74 @@ $"[TrumpUI] Current Trump: {displaySuit} (gameplay revealed={isTrumpRevealed})\n
             $"[TrumpUI] Display Updated: {(displayHidden ? "Hidden" : displaySuit.ToString())}");
     }
 
+    // Task 27: create (once) a small label next to the trump display showing the current round.
+    void EnsureRoundLabel()
+    {
+        if (roundText != null) return;
+
+        Transform parent = null;
+        if (trumpSuitText != null) parent = trumpSuitText.transform.parent;
+        else if (trumpIcon != null) parent = trumpIcon.transform.parent;
+        if (parent == null) return;
+
+        Transform existing = parent.Find("TrumpRoundLabel");
+        if (existing != null)
+        {
+            roundText = existing.GetComponent<TMP_Text>();
+            if (roundText != null) return;
+        }
+
+        if (trumpSuitText != null)
+        {
+            // Clone the trump suit text so the round label inherits the same font/style, then
+            // place it just below the suit text.
+            GameObject go = Instantiate(trumpSuitText.gameObject, parent);
+            go.name = "TrumpRoundLabel";
+            roundText = go.GetComponent<TMP_Text>();
+            RectTransform rt = go.GetComponent<RectTransform>();
+            RectTransform src = trumpSuitText.GetComponent<RectTransform>();
+            if (rt != null && src != null)
+            {
+                float h = src.rect.height > 1f ? src.rect.height : 28f;
+                rt.anchoredPosition = src.anchoredPosition + new Vector2(0f, -(h + 6f));
+            }
+        }
+        else
+        {
+            GameObject go = new GameObject("TrumpRoundLabel", typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            roundText = go.AddComponent<TextMeshProUGUI>();
+            roundText.fontSize = 28;
+            roundText.alignment = TextAlignmentOptions.Center;
+        }
+
+        if (roundText != null) roundText.gameObject.SetActive(true);
+    }
+
+    public void UpdateRoundLabel()
+    {
+        EnsureRoundLabel();
+        if (roundText == null) return;
+
+        int cr = 1;
+        int mr = -1;
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null)
+        {
+            var props = PhotonNetwork.CurrentRoom.CustomProperties;
+            if (props != null)
+            {
+                if (props.TryGetValue("CR", out object crObj) && crObj != null)
+                    int.TryParse(crObj.ToString(), out cr);
+                if (props.TryGetValue("MR", out object mrObj) && mrObj != null)
+                    int.TryParse(mrObj.ToString(), out mr);
+            }
+        }
+        if (cr < 1) cr = 1;
+
+        roundText.gameObject.SetActive(true);
+        roundText.text = mr > 0 ? $"Round {cr}/{mr}" : $"Round {cr}";
+    }
+
     void EnsureTrumpDisplayVisible()
     {
         if (trumpIcon != null)
@@ -394,7 +471,7 @@ $"[TrumpUI] Current Trump: {displaySuit} (gameplay revealed={isTrumpRevealed})\n
                 trumpChangeText.gameObject.SetActive(true);
             trumpChangeText.text = customMessage ?? ("Trump Changed to " + newSuit + "!");
             trumpChangeText.color = Color.white;
-            trumpChangeText.enableWordWrapping = true;
+            trumpChangeText.textWrappingMode = TextWrappingModes.Normal;
         }
 
         CanvasGroup popupCg = trumpChangePopup.GetComponent<CanvasGroup>();

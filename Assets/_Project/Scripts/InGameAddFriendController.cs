@@ -116,6 +116,12 @@ public class InGameAddFriendController : MonoBehaviour
 
         PopulateRows();
 
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.CheckFriendsOnlineStatus();
+
+        if (AdsManager.Instance != null)
+            AdsManager.Instance.ShowBanner();
+
         _panelGroup.gameObject.SetActive(true);
         _panelGroup.transform.SetAsLastSibling();
         _panelGroup.DOKill();
@@ -140,6 +146,9 @@ public class InGameAddFriendController : MonoBehaviour
 
     public void Close()
     {
+        if (AdsManager.Instance != null)
+            AdsManager.Instance.HideBanner();
+
         if (_panelGroup == null) return;
         _panelGroup.DOKill();
         _panelGroup.interactable = false;
@@ -218,7 +227,17 @@ public class InGameAddFriendController : MonoBehaviour
         closeRt.anchoredPosition = new Vector2(-25, -25);
         Image closeImg = closeGo.AddComponent<Image>();
         closeImg.color = BrownBox;
-        if (circleFrameSprite != null) closeImg.sprite = circleFrameSprite;
+        // Task 20: keep the close button ROUNDED — use the circular frame if available, otherwise
+        // fall back to Unity's built-in rounded (9-sliced) UISprite so it stays rounded in builds too.
+        if (circleFrameSprite != null)
+        {
+            closeImg.sprite = circleFrameSprite;
+        }
+        else
+        {
+            Sprite roundedFallback = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
+            if (roundedFallback != null) { closeImg.sprite = roundedFallback; closeImg.type = Image.Type.Sliced; }
+        }
         Button closeBtn = closeGo.AddComponent<Button>();
         closeBtn.targetGraphic = closeImg;
         closeBtn.onClick.AddListener(Close);
@@ -228,15 +247,20 @@ public class InGameAddFriendController : MonoBehaviour
         // Scroll view (player list)
         BuildScrollView(frame.transform);
 
-        // Bottom banner-ad placeholder (full width)
-        GameObject banner = NewRect("BannerAdPlaceholder", frame.transform);
+        // Task 19: bottom banner-ad placeholder stretched FULL SCREEN WIDTH (matches the leaderboard banner).
+        // Parented to the full-screen root and anchored edge-to-edge along the bottom, exactly like
+        // ResultManager.CreateBannerAd (anchors (0,0)-(1,0), flush to screen bottom, 110px tall).
+        GameObject banner = NewRect("BannerAdPlaceholder", root.transform);
         RectTransform bnRt = banner.GetComponent<RectTransform>();
-        bnRt.anchorMin = new Vector2(0.5f, 0f); bnRt.anchorMax = new Vector2(0.5f, 0f);
+        bnRt.anchorMin = new Vector2(0f, 0f); bnRt.anchorMax = new Vector2(1f, 0f);
         bnRt.pivot = new Vector2(0.5f, 0f);
-        bnRt.sizeDelta = new Vector2(780, 110);
-        bnRt.anchoredPosition = new Vector2(0, 25);
+        bnRt.offsetMin = new Vector2(0f, 0f);
+        bnRt.offsetMax = new Vector2(0f, 110f);
         banner.AddComponent<Image>().color = new Color(0, 0, 0, 0.35f);
-        AddTmp(banner.transform, "BANNER AD PLACEMENT (FULL WIDTH)", new Color(1, 1, 1, 0.6f), 24, TextAlignmentOptions.Center, FontStyles.Bold);
+        var bnLabel = AddTmp(banner.transform, "BANNER AD PLACEMENT (FULL WIDTH)", new Color(1, 1, 1, 0.6f), 24, TextAlignmentOptions.Center, FontStyles.Bold);
+        var bnLblRt = bnLabel.rectTransform;
+        bnLblRt.anchorMin = Vector2.zero; bnLblRt.anchorMax = Vector2.one;
+        bnLblRt.offsetMin = Vector2.zero; bnLblRt.offsetMax = Vector2.zero;
 
         _built = true;
         root.SetActive(false);
@@ -314,16 +338,41 @@ public class InGameAddFriendController : MonoBehaviour
             }
         }
 
-        // 2) Current table opponents you can add.
+        // 2) Saved friends (online) — invite to the current private room when host.
+        int friendCount = 0;
+        if (PlayWithFriendsManager.Instance != null)
+        {
+            var mgr = PlayWithFriendsManager.Instance;
+            bool canInvite = PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient
+                && DeckManager.Instance != null && DeckManager.IsPrivateFriendsRoom();
+
+            foreach (string friendId in mgr.MyFriends)
+            {
+                if (string.IsNullOrEmpty(friendId)) continue;
+                if (friendCount == 0)
+                {
+                    if (requestCount > 0) _rows.Add(CreateSectionHeader("YOUR FRIENDS"));
+                    else _rows.Add(CreateSectionHeader("YOUR FRIENDS"));
+                }
+
+                string display = mgr.GetFriendDisplayName(friendId);
+                bool online = mgr.IsFriendOnline(friendId);
+                bool sent = mgr.IsGameInviteSent(friendId);
+                _rows.Add(CreateFriendInviteRow(friendId, display, online, canInvite, sent));
+                friendCount++;
+            }
+        }
+
+        // 3) Current table opponents you can add.
         List<Player> opponents = GetTableOpponents();
         if (opponents.Count > 0)
         {
-            if (requestCount > 0) _rows.Add(CreateSectionHeader("PLAYERS AT TABLE"));
+            if (requestCount > 0 || friendCount > 0) _rows.Add(CreateSectionHeader("PLAYERS AT TABLE"));
             foreach (Player p in opponents)
                 _rows.Add(CreatePlayerRow(p));
         }
 
-        if (requestCount == 0 && opponents.Count == 0)
+        if (requestCount == 0 && friendCount == 0 && opponents.Count == 0)
         {
             GameObject empty = NewRect("EmptyRow", _rowsContent);
             empty.AddComponent<LayoutElement>().preferredHeight = 120;
@@ -415,6 +464,62 @@ public class InGameAddFriendController : MonoBehaviour
                 PlayWithFriendsManager.Instance.DeclineFriendRequest(id);
             PopulateRows();
         });
+
+        return row;
+    }
+
+    GameObject CreateFriendInviteRow(string friendId, string displayName, bool online, bool canInvite, bool inviteSent)
+    {
+        GameObject row = NewRect("FriendRow", _rowsContent);
+        RectTransform rowRt = row.GetComponent<RectTransform>();
+        rowRt.sizeDelta = new Vector2(700, 96);
+        LayoutElement le = row.AddComponent<LayoutElement>();
+        le.preferredHeight = 96;
+        le.preferredWidth = 700;
+        row.AddComponent<Image>().color = new Color(0, 0, 0, 0.18f);
+
+        GameObject nameBox = NewRect("NameBox", row.transform);
+        RectTransform nbRt = nameBox.GetComponent<RectTransform>();
+        nbRt.anchorMin = nbRt.anchorMax = new Vector2(0f, 0.5f);
+        nbRt.pivot = new Vector2(0f, 0.5f);
+        nbRt.sizeDelta = new Vector2(380, 76);
+        nbRt.anchoredPosition = new Vector2(20, 0);
+        string status = online ? "Online" : "Offline";
+        var nameTxt = AddTmp(nameBox.transform, $"{displayName}\n<size=22><color=#C8E6C9>{status}</color></size>",
+            Color.white, 28, TextAlignmentOptions.Left, FontStyles.Bold);
+        var nameRt = nameTxt.rectTransform;
+        nameRt.anchorMin = Vector2.zero; nameRt.anchorMax = Vector2.one;
+        nameRt.offsetMin = new Vector2(10, 0); nameRt.offsetMax = new Vector2(-10, 0);
+
+        GameObject actionGo = NewRect("InviteButton", row.transform);
+        RectTransform acRt = actionGo.GetComponent<RectTransform>();
+        acRt.anchorMin = acRt.anchorMax = new Vector2(1f, 0.5f);
+        acRt.pivot = new Vector2(1f, 0.5f);
+        acRt.sizeDelta = new Vector2(180, 70);
+        acRt.anchoredPosition = new Vector2(-15, 0);
+        Image acImg = actionGo.AddComponent<Image>();
+        bool enabled = canInvite && online && !inviteSent;
+        acImg.color = inviteSent ? SentBtn : (enabled ? GreenBtn : SentBtn);
+        if (woodBoardSprite != null) { acImg.sprite = woodBoardSprite; acImg.type = Image.Type.Sliced; }
+        Button acBtn = actionGo.AddComponent<Button>();
+        acBtn.targetGraphic = acImg;
+        acBtn.interactable = enabled;
+        string label = inviteSent ? "SENT" : (canInvite ? "INVITE" : "FRIEND");
+        var acLabel = AddTmp(actionGo.transform, label, Color.white, 26, TextAlignmentOptions.Center, FontStyles.Bold);
+        Stretch(acLabel.rectTransform);
+
+        if (enabled)
+        {
+            string id = friendId;
+            string nm = displayName;
+            acBtn.onClick.AddListener(() =>
+            {
+                if (PlayWithFriendsManager.Instance == null) return;
+                PlayWithFriendsManager.Instance.InviteFriendToGame(id, nm);
+                PlayWithFriendsManager.Instance.MarkGameInviteSent(id);
+                PopulateRows();
+            });
+        }
 
         return row;
     }

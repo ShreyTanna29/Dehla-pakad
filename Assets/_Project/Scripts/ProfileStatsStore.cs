@@ -9,6 +9,7 @@ using UnityEngine;
 public static class ProfileStatsStore
 {
     const string Key = "ProfileStats_v1";
+    const string HistoryKey = "ProfileStatsHistory_v1";
 
     [System.Serializable]
     public class CategoryStats
@@ -39,6 +40,12 @@ public static class ProfileStatsStore
     }
 
     [System.Serializable]
+    class HistoryWrapper
+    {
+        public GameRecord[] items;
+    }
+
+    [System.Serializable]
     class Root
     {
         public CategoryStats bots = new CategoryStats();
@@ -66,10 +73,40 @@ public static class ProfileStatsStore
         if (_root.bots == null) _root.bots = new CategoryStats();
         if (_root.online == null) _root.online = new CategoryStats();
         if (_root.history == null) _root.history = new List<GameRecord>();
+
+        string histJson = PlayerPrefs.GetString(HistoryKey, "");
+        if (string.IsNullOrEmpty(histJson) && !string.IsNullOrEmpty(json))
+        {
+            try
+            {
+                var legacy = JsonUtility.FromJson<Root>(json);
+                if (legacy?.history != null && legacy.history.Count > 0)
+                    histJson = JsonUtility.ToJson(new HistoryWrapper { items = legacy.history.ToArray() });
+            }
+            catch { /* ignore */ }
+        }
+
+        if (!string.IsNullOrEmpty(histJson))
+        {
+            try
+            {
+                var wrapper = JsonUtility.FromJson<HistoryWrapper>(histJson);
+                if (wrapper?.items != null)
+                    _root.history = new List<GameRecord>(wrapper.items);
+            }
+            catch { _root.history = new List<GameRecord>(); }
+        }
     }
 
     /// <summary>All recorded games, newest first (capped at the most recent <see cref="MaxHistory"/>).</summary>
     public static List<GameRecord> History => Data.history;
+
+    /// <summary>
+    /// Tasks 38/43 — Returns the COMPLETE past-games list with NO Limit(1)/Take(1) restriction.
+    /// History is stored locally (PlayerPrefs), newest-first, bounded only by MaxHistory (50).
+    /// A copy is returned so callers can iterate/sort without mutating the store.
+    /// </summary>
+    public static List<GameRecord> FetchAllPastGames() => new List<GameRecord>(History);
 
     static void AddHistory(GameRecord rec)
     {
@@ -80,7 +117,16 @@ public static class ProfileStatsStore
 
     static void Save()
     {
-        PlayerPrefs.SetString(Key, JsonUtility.ToJson(Data));
+        var statsOnly = new Root
+        {
+            bots = Data.bots,
+            online = Data.online,
+            history = new List<GameRecord>()
+        };
+        PlayerPrefs.SetString(Key, JsonUtility.ToJson(statsOnly));
+
+        var wrapper = new HistoryWrapper { items = Data.history != null ? Data.history.ToArray() : new GameRecord[0] };
+        PlayerPrefs.SetString(HistoryKey, JsonUtility.ToJson(wrapper));
         PlayerPrefs.Save();
     }
 

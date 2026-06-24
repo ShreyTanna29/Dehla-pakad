@@ -7,6 +7,8 @@ public class CardInteract : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
 {
     public bool isPlayed = false;
     public bool isValidToPlay = false;
+    // Task 23: set true once this card's deal animation has run, so it is never re-animated (no flicker).
+    public bool isDealt = false;
     public static bool canPlayCards = false;
     public static bool isPlayingCard = false;
 

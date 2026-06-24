@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -16,7 +17,7 @@ public class HomeSettingsController : MonoBehaviour
     public string storeUrl = "https://play.google.com/store/apps/details?id=com.dehlapakad.game";
     public string bugReportUrl = "mailto:support@dehlapakad.com?subject=Bug%20Report";
     public string whatsappUrl = "https://chat.whatsapp.com/";
-    public string legalUrl = "https://dehlapakad.com/privacy";
+    public string legalUrl = "https://chaupalstudios.in";
 
     static readonly Color ActiveTint = Color.white;
     static readonly Color InactiveTint = new Color(1f, 1f, 1f, 0.35f);
@@ -66,7 +67,8 @@ public class HomeSettingsController : MonoBehaviour
         if (_wired) return;
 
         WireBtn("Btn_CloseSettings", Close);
-        WireBtn("Btn_Deck", () => ProfileToast.Show(transform, "Card themes — open Inventory to change your deck."));
+        // Top-right spades/deck icon opens the Inventory screen.
+        WireBtn("Btn_Deck", () => { Close(); InventoryScreenController.OpenInventoryScreen(); });
 
         // Appearance
         WireBtn("Btn_AppModern", () => { SettingsService.AppearanceIndex = 0; RefreshAll(); });
@@ -87,22 +89,63 @@ public class HomeSettingsController : MonoBehaviour
         WireBtn("Btn_WhatsApp", () => { OpenUrl(whatsappUrl); ProfileToast.Show(transform, "Opening WhatsApp…"); });
         WireBtn("Btn_Legal", () => { OpenUrl(legalUrl); ProfileToast.Show(transform, "Opening legal info…"); });
         WireBtn("Btn_GameInfo", () => ProfileToast.Show(transform, "Dehla Pakad  •  v" + Application.version + "  •  Unity " + Application.unityVersion));
-        WireBtn("Btn_Default", () => { SettingsService.ResetToDefaults(); if (_langDropdown != null) _langDropdown.SetValueSilent(SettingsService.LanguageIndex); RefreshAll(); ProfileToast.Show(transform, "Settings restored to defaults."); });
+        WireBtn("Btn_Default", () => { SettingsService.ResetToDefaults(); if (_langDropdown != null) _langDropdown.SetValueSilent(0); RefreshAll(); ProfileToast.Show(transform, "Settings restored to defaults."); });
         WireBtn("Btn_Exit", ShowExitConfirm);
+        WireBtn("Btn_Logout", DoLogout);
+        WireBtn("Btn_DeleteAccount", DoDeleteAccount);
+        WireBtn("Btn_SpadesInventory", OpenInventory);
 
         // Exit confirm
         WireBtn("Btn_ExitYes", DoExit);
         WireBtn("Btn_ExitNo", HideExitConfirm);
 
-        // Language dropdown
+        // Language dropdown — only English is offered for now.
         if (_langDropdown != null)
         {
-            _langDropdown.SetValueSilent(SettingsService.LanguageIndex);
-            _langDropdown.OnSelected = (idx, val) => { SettingsService.LanguageIndex = idx; };
+            CollapseLanguageToEnglish();
+            _langDropdown.OnSelected = (idx, val) => { SettingsService.LanguageIndex = 0; };
         }
 
         if (_exitConfirm != null) _exitConfirm.SetActive(false);
         _wired = true;
+    }
+
+    /// <summary>
+    /// Reduces the language dropdown to a single, always-selected "English" option. The
+    /// SettingsService.LanguageIndex plumbing is left intact (index is forced to 0).
+    /// </summary>
+    void CollapseLanguageToEnglish()
+    {
+        if (_langDropdown == null) return;
+
+        // Hide every option button except the first (English).
+        for (int i = 0; i < _langDropdown.optionButtons.Count; i++)
+        {
+            Button b = _langDropdown.optionButtons[i];
+            if (b == null) continue;
+            b.gameObject.SetActive(i == 0);
+        }
+
+        // Keep only English in the dropdown's data lists.
+        if (_langDropdown.optionButtons.Count > 1)
+            _langDropdown.optionButtons.RemoveRange(1, _langDropdown.optionButtons.Count - 1);
+        _langDropdown.optionValues = new List<string> { SettingsService.Languages[0] };
+
+        // Shrink the options panel so it doesn't show empty space below the single entry.
+        if (_langDropdown.optionsPanel != null)
+        {
+            Vector2 sz = _langDropdown.optionsPanel.sizeDelta;
+            _langDropdown.optionsPanel.sizeDelta = new Vector2(sz.x, 64f);
+        }
+
+        // Force English as the selected/displayed value.
+        SettingsService.LanguageIndex = 0;
+        if (_langDropdown.optionButtons.Count > 0 && _langDropdown.optionButtons[0] != null)
+        {
+            TMP_Text optLabel = _langDropdown.optionButtons[0].GetComponentInChildren<TMP_Text>(true);
+            if (optLabel != null) optLabel.text = SettingsService.Languages[0];
+        }
+        _langDropdown.SetValueSilent(0);
     }
 
     void RefreshAll()
@@ -182,9 +225,63 @@ public class HomeSettingsController : MonoBehaviour
             .OnComplete(() => { if (_exitConfirm != null) _exitConfirm.SetActive(false); });
     }
 
+    void DoLogout()
+    {
+        Debug.Log("[Settings] Logout requested.");
+        if (PlayerProfileManager.Instance != null)
+            PlayerProfileManager.Instance.ClearAllDataAndSignOut();
+        else if (GoogleLogin.Instance != null)
+            GoogleLogin.Instance.SignOut();
+        Close();
+    }
+
+    void DoDeleteAccount()
+    {
+        if (PlayerProfileManager.Instance != null)
+        {
+            PlayerProfileManager.Instance.DeleteAccount((ok, err) =>
+            {
+                if (ok)
+                {
+                    ProfileToast.Show(transform, "Account deleted.");
+                    Close();
+                }
+                else
+                    ProfileToast.Show(transform, string.IsNullOrEmpty(err) ? "Could not delete account." : err);
+            });
+            return;
+        }
+
+        if (GoogleLogin.Instance != null)
+            GoogleLogin.Instance.SignOut();
+        ProfileToast.Show(transform, "Signed out.");
+        Close();
+    }
+
+    /// <summary>Task 36 — open the Inventory screen (wired to the Spades icon).</summary>
+    public void OpenInventory()
+    {
+        Close();
+        InventoryScreenController.OpenInventoryScreen();
+    }
+
+    /// <summary>Task 34 — open the legal / studio website.</summary>
+    public void OpenLegalInfo() => OpenUrl(legalUrl);
+
     void DoExit()
     {
         Debug.Log("[Settings] Exit Game requested.");
+        if (AdsManager.Instance != null)
+        {
+            AdsManager.Instance.ShowInterstitialThenRun(QuitApplication);
+            return;
+        }
+
+        QuitApplication();
+    }
+
+    static void QuitApplication()
+    {
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else

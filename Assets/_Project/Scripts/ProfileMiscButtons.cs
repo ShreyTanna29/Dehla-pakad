@@ -37,7 +37,7 @@ public class ProfileMiscButtons : MonoBehaviour
         WireToast("Btn_Cart", "Shop is coming soon!");
         WireToast("Btn_Magic", "Customization is coming soon!");
         WireToast("Item_More", "More items coming soon!");
-        WireToast("DeleteAccount", "Account deletion is available from Settings.");
+        WireDeleteAccount();
 
         _wired = true;
     }
@@ -53,6 +53,58 @@ public class ProfileMiscButtons : MonoBehaviour
         if (wL != null) wL.color = world ? LabelActive : LabelInactive;
         if (cL != null) cL.color = world ? LabelInactive : LabelActive;
         ProfileToast.Show(transform, world ? "Showing World rankings" : "Showing Country rankings");
+    }
+
+    void WireDeleteAccount()
+    {
+        Transform t = FindDeep(transform, "DeleteAccount");
+        if (t == null) return;
+
+        Button btn = t.GetComponent<Button>();
+        if (btn == null)
+        {
+            btn = t.gameObject.AddComponent<Button>();
+            var tmp = t.GetComponent<TMP_Text>();
+            if (tmp != null)
+            {
+                tmp.raycastTarget = true;
+                btn.targetGraphic = tmp;
+            }
+            else
+            {
+                var img = t.GetComponent<Image>();
+                if (img == null) img = t.gameObject.AddComponent<Image>();
+                img.color = new Color(0f, 0f, 0f, 0.01f);
+                btn.targetGraphic = img;
+            }
+            btn.transition = Selectable.Transition.ColorTint;
+        }
+
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(OnDeleteAccountClicked);
+    }
+
+    void OnDeleteAccountClicked()
+    {
+        if (PlayerProfileManager.Instance != null)
+        {
+            PlayerProfileManager.Instance.DeleteAccount((ok, err) =>
+            {
+                if (ok)
+                {
+                    if (PlayerProfileManager.Instance.panelPlayerProfile != null)
+                        PlayerProfileManager.Instance.panelPlayerProfile.SetActive(false);
+                    ProfileToast.Show(transform, "Account deleted.");
+                }
+                else
+                    ProfileToast.Show(transform, string.IsNullOrEmpty(err) ? "Could not delete account." : err);
+            });
+            return;
+        }
+
+        if (GoogleLogin.Instance != null)
+            GoogleLogin.Instance.SignOut();
+        ProfileToast.Show(transform, "Signed out.");
     }
 
     void WireToast(string name, string message)
