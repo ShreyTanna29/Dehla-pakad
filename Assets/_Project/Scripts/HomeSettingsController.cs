@@ -13,11 +13,15 @@ using DG.Tweening;
 /// </summary>
 public class HomeSettingsController : MonoBehaviour
 {
+    [Header("Appearance")]
+    [Tooltip("When enabled, icons, labels, board scale/fade, and dropdown layout stay exactly as set in the Editor.")]
+    [SerializeField] private bool preserveManualAppearance = true;
+
     [Header("Links (customise these)")]
     public string storeUrl = "https://play.google.com/store/apps/details?id=com.dehlapakad.game";
     public string bugReportUrl = "mailto:support@dehlapakad.com?subject=Bug%20Report";
     public string whatsappUrl = "https://chat.whatsapp.com/";
-    public string legalUrl = "https://chaupalstudios.in";
+    public string legalUrl = "https://chaupalstudious.in";
 
     static readonly Color ActiveTint = Color.white;
     static readonly Color InactiveTint = new Color(1f, 1f, 1f, 0.35f);
@@ -40,7 +44,10 @@ public class HomeSettingsController : MonoBehaviour
         Resolve();
         Wire();
         RefreshAll();
-        Animate();
+        if (!preserveManualAppearance)
+            Animate();
+        else
+            transform.SetAsLastSibling();
     }
 
     void Resolve()
@@ -99,7 +106,9 @@ public class HomeSettingsController : MonoBehaviour
         WireBtn("Btn_ExitYes", DoExit);
         WireBtn("Btn_ExitNo", HideExitConfirm);
 
-        // Language dropdown — only English is offered for now.
+        // Task 35 — only English is offered for now. Collapse the language list to a single
+        // English entry whether or not manual appearance is preserved (this is a functional
+        // restriction of the available languages, not a cosmetic re-skin).
         if (_langDropdown != null)
         {
             CollapseLanguageToEnglish();
@@ -150,22 +159,25 @@ public class HomeSettingsController : MonoBehaviour
 
     void RefreshAll()
     {
-        // Sound / Music icon highlight
-        if (_soundIcon != null) _soundIcon.color = SettingsService.SoundOn ? ActiveTint : InactiveTint;
-        if (_musicIcon != null) _musicIcon.color = SettingsService.MusicOn ? ActiveTint : InactiveTint;
-
-        // Appearance underline/active
-        if (_appModernL != null) _appModernL.color = SettingsService.AppearanceIndex == 0 ? OptActive : OptInactive;
-        if (_appClassicL != null) _appClassicL.color = SettingsService.AppearanceIndex == 1 ? OptActive : OptInactive;
-
-        // Push switch
-        bool push = SettingsService.PushNotifications;
-        if (_pushTrack != null) _pushTrack.color = push ? PushOnTrack : PushOffTrack;
-        if (_pushKnob != null)
+        if (!preserveManualAppearance)
         {
-            _pushKnob.DOKill();
-            float x = push ? 34f : -34f;
-            _pushKnob.anchoredPosition = new Vector2(x, _pushKnob.anchoredPosition.y);
+            // Sound / Music icon highlight
+            if (_soundIcon != null) _soundIcon.color = SettingsService.SoundOn ? ActiveTint : InactiveTint;
+            if (_musicIcon != null) _musicIcon.color = SettingsService.MusicOn ? ActiveTint : InactiveTint;
+
+            // Appearance underline/active
+            if (_appModernL != null) _appModernL.color = SettingsService.AppearanceIndex == 0 ? OptActive : OptInactive;
+            if (_appClassicL != null) _appClassicL.color = SettingsService.AppearanceIndex == 1 ? OptActive : OptInactive;
+
+            // Push switch
+            bool push = SettingsService.PushNotifications;
+            if (_pushTrack != null) _pushTrack.color = push ? PushOnTrack : PushOffTrack;
+            if (_pushKnob != null)
+            {
+                _pushKnob.DOKill();
+                float x = push ? 34f : -34f;
+                _pushKnob.anchoredPosition = new Vector2(x, _pushKnob.anchoredPosition.y);
+            }
         }
 
         if (_versionText != null) _versionText.text = "Dehla Pakad v" + Application.version;
@@ -228,24 +240,30 @@ public class HomeSettingsController : MonoBehaviour
     void DoLogout()
     {
         Debug.Log("[Settings] Logout requested.");
-        if (PlayerProfileManager.Instance != null)
+        Close();
+        if (LogoutManager.Instance != null)
+            LogoutManager.Instance.Logout();
+        else if (PlayerProfileManager.Instance != null)
             PlayerProfileManager.Instance.ClearAllDataAndSignOut();
         else if (GoogleLogin.Instance != null)
             GoogleLogin.Instance.SignOut();
-        Close();
     }
 
     void DoDeleteAccount()
     {
+        Close();
+        if (LogoutManager.Instance != null)
+        {
+            LogoutManager.Instance.DeleteAccount();
+            return;
+        }
+
         if (PlayerProfileManager.Instance != null)
         {
             PlayerProfileManager.Instance.DeleteAccount((ok, err) =>
             {
                 if (ok)
-                {
                     ProfileToast.Show(transform, "Account deleted.");
-                    Close();
-                }
                 else
                     ProfileToast.Show(transform, string.IsNullOrEmpty(err) ? "Could not delete account." : err);
             });
@@ -255,7 +273,6 @@ public class HomeSettingsController : MonoBehaviour
         if (GoogleLogin.Instance != null)
             GoogleLogin.Instance.SignOut();
         ProfileToast.Show(transform, "Signed out.");
-        Close();
     }
 
     /// <summary>Task 36 — open the Inventory screen (wired to the Spades icon).</summary>

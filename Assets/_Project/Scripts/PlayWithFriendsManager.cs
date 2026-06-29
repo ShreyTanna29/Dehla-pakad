@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using Firebase.Database;
 using Firebase.Extensions;
 using Firebase.Auth;
+using DG.Tweening;
 
 public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 {
@@ -27,6 +28,12 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public GameObject startGameButton;
     public GameObject modesPanel;
     public TMP_Text clientWaitingText;
+    [Tooltip("Optional spinner icon shown beside the waiting label (auto-created if empty).")]
+    public RectTransform clientWaitingSpinner;
+    [Tooltip("Font size for 'Waiting for Host...' on joining clients.")]
+    [SerializeField] float clientWaitingFontSize = 34f;
+
+    Tween _waitingSpinnerTween;
 
     [Header("Online Matchmaking (shared seat panel)")]
     [Tooltip("Countdown / status text shown only while this panel is used as the online matchmaking lobby.")]
@@ -106,11 +113,30 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     string _listenersBoundUserId;
     readonly HashSet<string> _gameInvitesSent = new HashSet<string>();
     bool _pendingCreatePrivateRoom;
+    bool _joinInProgress;
+    Coroutine _lobbyPlayerRefreshCoroutine;
+
+    // BUG1 (instant invites): true while a private room is created EAGERLY on entering the
+    // friends flow (before the host taps Play) so invites can be sent immediately. While set,
+    // join-time handlers must NOT pull the host out of the Modes panel into the seat lobby.
+    // Cleared when the host opens the seat panel (taps Play) or leaves the private room.
+    public bool SuppressSeatLobbyOnJoin;
+
     Coroutine _createRoomCoroutine;
     Coroutine _retryFriendServicesCoroutine;
     Coroutine _findFriendsCoroutine;
     bool _firebaseAuthHooked;
     bool _friendsGameStartTriggered;
+    bool _hostConfirmedSeatStart;
+
+    // Runtime-created "INVITE FRIENDS" button shown on the friends seat/lobby panel.
+    GameObject _lobbyInviteButton;
+
+    // PIN / private-room creation reliability: track that WE are creating a private room so
+    // OnCreateRoomFailed can retry with a fresh PIN (e.g. a rare 5-digit PIN collision).
+    bool _creatingPrivateRoom;
+    int _createRoomRetries;
+    const int MaxCreateRoomRetries = 5;
 
     public IReadOnlyList<string> MyFriends => myFriends;
     public IReadOnlyDictionary<string, string> IncomingRequests => incomingRequests;
@@ -119,6 +145,13 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     /// In-game panels subscribe to live-refresh their Accept/Decline rows.</summary>
     public event System.Action RequestsChanged;
     void NotifyRequestsChanged() => RequestsChanged?.Invoke();
+
+    /// <summary>TASK 18/25: fires whenever a friend's online/in-game presence changes (Firebase
+    /// presence ValueChanged or a status re-poll). Open in-game friend panels subscribe to this so
+    /// they repaint with the correct Online/Offline state once the async presence read completes —
+    /// otherwise rows built synchronously on panel-open show everyone as "Offline".</summary>
+    public event System.Action FriendsStatusChanged;
+    void NotifyFriendsStatusChanged() => FriendsStatusChanged?.Invoke();
 
     public string GetFriendDisplayName(string friendId) => GetFriendDisplayNameInternal(friendId);
 
@@ -423,13 +456,14 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             inviteDbRef.ChildAdded -= OnIncomingInviteAdded;
 
         TearDownPresenceListeners();
+        _waitingSpinnerTween?.Kill();
         if (Instance == this) Instance = null;
     }
 
     void Start()
     {
         if (errorText != null) errorText.gameObject.SetActive(false);
-        if (clientWaitingText != null) clientWaitingText.gameObject.SetActive(false);
+        HideClientWaitingPresentation();
         if (includeBotsButton != null) includeBotsButton.SetActive(false);
         ClearPlayerListUI();
         EnsureFriendServicesStarted();
@@ -504,11 +538,27 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             _headlessFriendsLoaded = true;
         }
 
+        // The panel GameObject is INACTIVE on the home screen, so MonoBehaviourPunCallbacks'
+        // OnEnable (which registers Photon callbacks) never runs. Register them here so callbacks
+        // like OnConnectedToMaster / OnJoinedRoom fire for the eager private-room creation even
+        // before the player opens the seat panel. Also pre-set the nickname / view headless so
+        // the player's own name shows the moment the room is created.
+        EnsurePhotonCallbacks();
+        EnsurePhotonView();
+        EnsureNickname();
+
         // Subscribe to Firebase auth so the listeners rebind to the real account id once the
         // user finishes signing in (the normal Awake/OnEnable hook never runs while inactive).
         TryHookFirebaseAuth();
         EnsureFriendServicesStarted();
     }
+
+    /// <summary>
+    /// Registers this manager as a Photon callback target. Safe to call repeatedly (PUN dedupes
+    /// by target). Needed because the panel is often inactive, so the base OnEnable registration
+    /// does not run on the home screen.
+    /// </summary>
+    void EnsurePhotonCallbacks() => PhotonNetwork.AddCallbackTarget(this);
 
     IEnumerator RetryFriendServicesWhenReady()
     {
@@ -587,6 +637,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (errorText != null) errorText.gameObject.SetActive(false);
 
+        // The panel may be inactive (eager create from the Modes screen). Make sure our Photon
+        // callbacks are registered so OnConnectedToMaster fires and creates the room once the
+        // cold connection completes — otherwise the very first attempt silently does nothing.
+        EnsurePhotonCallbacks();
+
         if (PhotonNetwork.InRoom)
         {
             ShowUIError("Leave the current room first.");
@@ -622,17 +677,27 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                 NetworkManager.Instance.ConnectToPhoton();
         }
 
-        if (_createRoomCoroutine != null)
-            StopCoroutine(_createRoomCoroutine);
-        _createRoomCoroutine = StartCoroutine(WaitAndCreatePrivateRoomRoutine());
+        // The poll-and-create coroutine can only run on an ACTIVE GameObject. When the panel is
+        // inactive (eager create from the Modes screen) we skip it — OnConnectedToMaster (now
+        // registered headless) creates the room as soon as the connection is ready.
+        if (isActiveAndEnabled)
+        {
+            if (_createRoomCoroutine != null)
+                StopCoroutine(_createRoomCoroutine);
+            _createRoomCoroutine = StartCoroutine(WaitAndCreatePrivateRoomRoutine());
+        }
     }
 
     void DoCreatePrivateRoom()
     {
         if (!PhotonNetwork.IsConnectedAndReady || PhotonNetwork.InRoom) return;
 
-        string newPin = UnityEngine.Random.Range(10000, 99999).ToString();
+        // Fresh PIN every time a room is created. Always 5 digits (10000-99999) so the leading
+        // digit is never 0 and the PIN is easy to read / type.
+        string newPin = GenerateRoomPin();
         Debug.Log("Generating PIN: " + newPin);
+
+        _creatingPrivateRoom = true;
 
         RoomOptions roomOptions = new RoomOptions
         {
@@ -646,6 +711,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         PhotonNetwork.CreateRoom(newPin, roomOptions);
     }
+
+    /// <summary>Generates a fresh, easy-to-read 5-digit room PIN.</summary>
+    static string GenerateRoomPin() => UnityEngine.Random.Range(10000, 100000).ToString();
 
     IEnumerator WaitAndCreatePrivateRoomRoutine()
     {
@@ -698,8 +766,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
             Debug.Log($"[Friends] Photon ready — joining queued room '{pin}'");
             if (NetworkManager.Instance != null)
-                NetworkManager.Instance.ShowLoading("Joining game...");
-            PhotonNetwork.JoinRoom(pin);
+                NetworkManager.Instance.BeginJoinRoomWithLoadingFade(pin, "Joining game...");
+            else
+                PhotonNetwork.JoinRoom(pin);
         }
 
         CheckFriendsOnlineStatus();
@@ -737,7 +806,10 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        PhotonNetwork.JoinRoom(pinInputField.text.Trim());
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.BeginJoinRoomWithLoadingFade(pinInputField.text.Trim(), "Joining game...");
+        else
+            PhotonNetwork.JoinRoom(pinInputField.text.Trim());
     }
 
     /// <summary>
@@ -772,14 +844,84 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             return;
         }
 
+        string targetPin = pin.Trim();
+
+        if (_joinInProgress)
+        {
+            ShowUIError("Joining... please wait.");
+            return;
+        }
+
+        // If we are already sitting in a room (typically our OWN eagerly-created private room
+        // from tapping Play With Friends), we must leave it before we can join the friend's
+        // room. Queue the PIN and leave; NetworkManager.OnLeftRoom honors PendingJoinPin and
+        // joins it once we are back on the master server (instead of bouncing to Home).
+        if (PhotonNetwork.InRoom)
+        {
+            if (PhotonNetwork.CurrentRoom != null && PhotonNetwork.CurrentRoom.Name == targetPin)
+            {
+                _joinInProgress = false;
+                ShowPrivateRoomLobbyUI();
+                return;
+            }
+
+            _joinInProgress = true;
+            SuppressSeatLobbyOnJoin = false;
+            PendingJoinPin = targetPin;
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.SnapScreenCover();
+                NetworkManager.Instance.ShowLoading("Joining game...");
+            }
+            PhotonNetwork.LeaveRoom();
+            return;
+        }
+
+        _joinInProgress = true;
         PendingJoinPin = null;
-        PhotonNetwork.JoinRoom(pin.Trim());
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.BeginJoinRoomWithLoadingFade(targetPin, "Joining game...");
+        else
+            PhotonNetwork.JoinRoom(targetPin);
+    }
+
+    public void ShowJoinError(string errorMsg)
+    {
+        _joinInProgress = false;
+        ShowUIError(errorMsg);
     }
 
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
+        _joinInProgress = false;
         Debug.LogError("Room Join Failed: " + message);
         ShowUIError("Invalid PIN or Room Full!");
+    }
+
+    /// <summary>
+    /// Reliability fix: if creating OUR private friends room fails (e.g. a rare PIN collision —
+    /// Photon ErrorCode.GameIdAlreadyExists — or a transient state), regenerate a fresh PIN and
+    /// retry a few times so the room/PIN is always created. Ignored for non-private-room creates
+    /// (online / bots), which ModeManager handles.
+    /// </summary>
+    public override void OnCreateRoomFailed(short returnCode, string message)
+    {
+        if (!_creatingPrivateRoom) return;
+
+        Debug.LogWarning($"[Friends] Private room create failed ({returnCode}): {message}");
+
+        if (_createRoomRetries < MaxCreateRoomRetries
+            && PhotonNetwork.IsConnectedAndReady && !PhotonNetwork.InRoom)
+        {
+            _createRoomRetries++;
+            Debug.Log($"[Friends] Retrying private room creation with a new PIN (attempt {_createRoomRetries}/{MaxCreateRoomRetries}).");
+            DoCreatePrivateRoom();
+            return;
+        }
+
+        _creatingPrivateRoom = false;
+        _createRoomRetries = 0;
+        ShowUIError("Could not create room. Please try again.");
     }
 
     void ShowUIError(string errorMsg)
@@ -796,6 +938,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         _friendsGameStartTriggered = false;
+        _joinInProgress = false;
         if (PhotonNetwork.CurrentRoom == null) return;
 
         // Online matchmaking: this panel is the lobby — fill seats with real players.
@@ -807,26 +950,216 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         if (!PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
-            Debug.Log("Private Room Joined. Waiting in Lobby...");
-            if (NetworkManager.Instance != null)
+            // BUG1 (instant invites): the host created this room EAGERLY just to enable invites
+            // before mode selection. Don't disrupt the Modes panel — only flush any pending
+            // invite. The seat lobby opens later when the host taps Play (OnSeatPanelOpened).
+            if (SuppressSeatLobbyOnJoin && PhotonNetwork.IsMasterClient)
             {
-                NetworkManager.Instance.StayInPrivateLobbyUI();
-                NetworkManager.Instance.ShowLoading("Joined — waiting for host...");
+                Debug.Log("[Friends][BUG1] Eager invite-room joined by host; seat lobby suppressed, staying on Modes panel.");
+                TrySendPendingInvite();
+                return;
             }
-            ShowPrivateRoomLobbyUI();
+
+            Debug.Log("Private Room Joined. Waiting in Lobby...");
             TrySendPendingInvite();
+            BeginLobbyPlayerListRefresh();
             return;
         }
     }
 
-    void ShowPrivateRoomLobbyUI()
+    /// <summary>Polls player names until Photon syncs nicknames for all seated players.</summary>
+    public void BeginLobbyPlayerListRefresh()
+    {
+        if (_lobbyPlayerRefreshCoroutine != null)
+            StopCoroutine(_lobbyPlayerRefreshCoroutine);
+        _lobbyPlayerRefreshCoroutine = StartCoroutine(LobbyPlayerListRefreshRoutine());
+    }
+
+    IEnumerator LobbyPlayerListRefreshRoutine()
+    {
+        for (int i = 0; i < 20; i++)
+        {
+            if (!PhotonNetwork.InRoom)
+                yield break;
+
+            UpdatePlayerListUI();
+            yield return new WaitForSecondsRealtime(0.25f);
+        }
+        _lobbyPlayerRefreshCoroutine = null;
+    }
+
+    static string GetPlayerDisplayName(Player p)
+    {
+        if (p == null) return "Player";
+        if (!string.IsNullOrWhiteSpace(p.NickName)) return p.NickName.Trim();
+        if (!string.IsNullOrWhiteSpace(p.UserId)) return p.UserId;
+        return "Player " + p.ActorNumber;
+    }
+
+    /// <summary>Host pressed Start on the seat panel — allows ModeManager to launch the match.</summary>
+    public void ConfirmHostSeatStart() => _hostConfirmedSeatStart = true;
+
+    /// <summary>Returns true once when the host confirmed start from the seat panel.</summary>
+    public bool ConsumeHostSeatStartConfirmation()
+    {
+        if (!_hostConfirmedSeatStart) return false;
+        _hostConfirmedSeatStart = false;
+        return true;
+    }
+
+    /// <summary>Full local reset when leaving / abandoning a private friends lobby.</summary>
+    public void ResetLobbyStateForLeave()
+    {
+        _joinInProgress = false;
+        _hostConfirmedSeatStart = false;
+        _friendsGameStartTriggered = false;
+        SuppressSeatLobbyOnJoin = false;
+        _onlineMode = false;
+
+        if (_lobbyPlayerRefreshCoroutine != null)
+        {
+            StopCoroutine(_lobbyPlayerRefreshCoroutine);
+            _lobbyPlayerRefreshCoroutine = null;
+        }
+
+        ResetSeatPanelUI();
+        HidePlayWithFriendsLobbyPanel();
+        HideClientWaitingPresentation();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ClearUiInputBlockers();
+    }
+
+    void SyncRoomLobbyUIForRole()
+    {
+        if (!PhotonNetwork.InRoom) return;
+
+        bool isHost = PhotonNetwork.IsMasterClient;
+
+        if (modesPanel != null)
+        {
+            modesPanel.SetActive(false);
+            CanvasGroup cg = modesPanel.GetComponent<CanvasGroup>();
+            if (cg != null)
+            {
+                cg.interactable = false;
+                cg.blocksRaycasts = false;
+            }
+        }
+
+        if (startGameButton != null)
+            startGameButton.SetActive(isHost);
+
+        ApplyClientWaitingPresentation(!isHost, "Waiting for Host...");
+
+        CheckPlayerCountAndToggleStart();
+    }
+
+    void ApplyClientWaitingPresentation(bool show, string message = "Waiting for Host...")
+    {
+        if (clientWaitingText != null)
+        {
+            if (show)
+            {
+                clientWaitingText.fontSize = clientWaitingFontSize;
+                clientWaitingText.fontStyle = FontStyles.Bold;
+                clientWaitingText.text = message;
+                clientWaitingText.gameObject.SetActive(true);
+            }
+            else
+            {
+                clientWaitingText.gameObject.SetActive(false);
+            }
+        }
+
+        EnsureClientWaitingSpinner();
+        if (clientWaitingSpinner == null) return;
+
+        _waitingSpinnerTween?.Kill();
+        clientWaitingSpinner.gameObject.SetActive(show);
+
+        if (!show) return;
+
+        clientWaitingSpinner.localRotation = Quaternion.identity;
+        _waitingSpinnerTween = clientWaitingSpinner
+            .DORotate(new Vector3(0f, 0f, -360f), 1.1f, RotateMode.FastBeyond360)
+            .SetLoops(-1, LoopType.Restart)
+            .SetEase(Ease.Linear)
+            .SetUpdate(true);
+    }
+
+    void EnsureClientWaitingSpinner()
+    {
+        if (clientWaitingSpinner != null || clientWaitingText == null) return;
+
+        Transform parent = clientWaitingText.transform.parent;
+        if (parent == null) return;
+
+        Transform existing = parent.Find("WaitingSpinner");
+        if (existing != null)
+        {
+            clientWaitingSpinner = existing as RectTransform;
+            return;
+        }
+
+        var go = new GameObject("WaitingSpinner", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(parent, false);
+        clientWaitingSpinner = go.GetComponent<RectTransform>();
+
+        var textRt = clientWaitingText.rectTransform;
+        clientWaitingSpinner.anchorMin = clientWaitingSpinner.anchorMax = textRt.anchorMin;
+        clientWaitingSpinner.pivot = new Vector2(1f, 0.5f);
+        clientWaitingSpinner.sizeDelta = new Vector2(44f, 44f);
+        clientWaitingSpinner.anchoredPosition = textRt.anchoredPosition + new Vector2(-18f, 0f);
+
+        var img = go.GetComponent<Image>();
+        img.color = new Color(1f, 0.92f, 0.55f, 0.95f);
+        img.raycastTarget = false;
+
+        var ring = new GameObject("Ring", typeof(RectTransform), typeof(Image));
+        ring.transform.SetParent(go.transform, false);
+        var ringRt = ring.GetComponent<RectTransform>();
+        ringRt.anchorMin = Vector2.zero;
+        ringRt.anchorMax = Vector2.one;
+        ringRt.offsetMin = new Vector2(6f, 6f);
+        ringRt.offsetMax = new Vector2(-6f, -6f);
+        var ringImg = ring.GetComponent<Image>();
+        ringImg.color = new Color(0.35f, 0.22f, 0.12f, 0.35f);
+        ringImg.raycastTarget = false;
+    }
+
+    void HideClientWaitingPresentation()
+    {
+        ApplyClientWaitingPresentation(false);
+    }
+
+    // Public (BUG 2 fix): NetworkManager.HandleJoinedRoomDeferred re-shows this as the
+    // single source of truth for the joining client's seat lobby panel.
+    public void ShowPrivateRoomLobbyUI()
     {
         if (PhotonNetwork.CurrentRoom == null) return;
 
-        // New flow: ensure the seat panel itself is visible (a client may have joined
-        // via the JoinTable panel on the Modes screen) and hide the Modes panel.
+        GameFlowState.SetPhase(GameFlowPhase.InRoom, forceRecovery: true);
+
+        if (ModeManager.Instance != null)
+        {
+            if (ModeManager.Instance.panelHomeScreen != null)
+                ModeManager.Instance.panelHomeScreen.SetActive(false);
+            if (ModeManager.Instance.panelModes != null && !PhotonNetwork.IsMasterClient)
+                ModeManager.Instance.panelModes.SetActive(false);
+            if (ModeManager.Instance.panelPlayWithFriends != null)
+            {
+                ModeManager.Instance.panelPlayWithFriends.SetActive(true);
+                ModeManager.Instance.panelPlayWithFriends.transform.SetAsLastSibling();
+            }
+        }
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ResetRoomLobbyCanvasGroup();
+
         if (!gameObject.activeSelf) gameObject.SetActive(true);
-        if (modesPanel != null) modesPanel.SetActive(false);
+        if (modesPanel != null && PhotonNetwork.IsMasterClient)
+            modesPanel.SetActive(false);
 
         // Friends mode: show PIN/Room ID plaque, hide online timer.
         _onlineMode = false;
@@ -838,7 +1171,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             pinCreationPanel.SetActive(true);
             pinCreationPanel.transform.SetAsLastSibling();
         }
-        if (generatedPinText != null) generatedPinText.text = "ROOM ID :- " + PhotonNetwork.CurrentRoom.Name;
+        StartRoomIdPlaqueWatch();
         if (errorText != null) errorText.gameObject.SetActive(false);
 
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("BotsIncluded", out object botsObj))
@@ -847,7 +1180,12 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             ApplyBotsIncludedState(false);
 
         UpdatePlayerListUI();
-        CheckPlayerCountAndToggleStart();
+        EnsureLobbyInviteButton(true);
+        SyncRoomLobbyUIForRole();
+        BeginLobbyPlayerListRefresh();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.HideLoadingInstant();
     }
 
     public void ToggleBots()
@@ -882,11 +1220,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             {
                 Player p = currentPlayers[i];
                 string hostTag = p.IsMasterClient ? " (Host)" : "";
-                playerSlotsText[i].text = p.NickName + hostTag;
+                playerSlotsText[i].text = GetPlayerDisplayName(p) + hostTag;
                 playerSlotsText[i].color = Color.white;
                 SetSeatAvatar(i, GetAvatarIndexForPlayer(p), true);
             }
-            else if (areBotsIncluded)
+            else if (areBotsIncluded || (_onlineMode && _previewBotsInOnlineLobby))
             {
                 playerSlotsText[i].text = realPlayerCount == 3 && i == realPlayerCount
                     ? "DehlaBot"
@@ -1016,12 +1354,199 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         cg.blocksRaycasts = on;
     }
 
+    Coroutine _roomIdRefreshCoroutine;
+
+    /// <summary>
+    /// Sets the ROOM ID / PIN plaque text from the current private room. Resolves the TMP label
+    /// by name if it was not wired, and ensures the plaque is visible. Shows a placeholder while
+    /// the room is still being created so the plaque never gets stuck on the editor default.
+    /// </summary>
+    void RefreshRoomIdPlaque()
+    {
+        if (generatedPinText == null)
+        {
+            if (UiSafeLookup.TryGet("Txt_GeneratedPIN", out GameObject pinGo) && pinGo != null)
+                generatedPinText = pinGo.GetComponent<TMP_Text>();
+        }
+        if (generatedPinText == null) return;
+
+        if (roomIdPlaque != null && !roomIdPlaque.activeSelf)
+            roomIdPlaque.SetActive(true);
+        if (!generatedPinText.gameObject.activeSelf)
+            generatedPinText.gameObject.SetActive(true);
+
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+            generatedPinText.text = "ROOM ID :- " + PhotonNetwork.CurrentRoom.Name;
+        else
+            generatedPinText.text = "ROOM ID :- ...";
+    }
+
+    /// <summary>Refreshes the PIN plaque now and keeps retrying briefly until the room exists.</summary>
+    void StartRoomIdPlaqueWatch()
+    {
+        RefreshRoomIdPlaque();
+        if (!isActiveAndEnabled) return;
+        if (_roomIdRefreshCoroutine != null) StopCoroutine(_roomIdRefreshCoroutine);
+        _roomIdRefreshCoroutine = StartCoroutine(RoomIdPlaqueWatchRoutine());
+    }
+
+    IEnumerator RoomIdPlaqueWatchRoutine()
+    {
+        float timeout = 15f;
+        while (timeout > 0f)
+        {
+            RefreshRoomIdPlaque();
+            if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible)
+                break;
+            yield return new WaitForSeconds(0.3f);
+            timeout -= 0.3f;
+        }
+        _roomIdRefreshCoroutine = null;
+    }
+
+    /// <summary>
+    /// Shows a friend-invite button on the friends seat/lobby panel that is a CLONE of the home
+    /// screen's invite button (same look, same anchored position). Tapping it opens the same
+    /// friends list (FRIENDS / REQUESTS + per-friend INVITE) over the lobby so the player can
+    /// invite friends straight into this room. Hidden during online matchmaking.
+    /// </summary>
+    void EnsureLobbyInviteButton(bool visible)
+    {
+        if (_lobbyInviteButton == null)
+            BuildLobbyInviteButton();
+
+        if (_lobbyInviteButton == null) return;
+
+        _lobbyInviteButton.SetActive(visible);
+        if (visible) _lobbyInviteButton.transform.SetAsLastSibling();
+    }
+
+    void BuildLobbyInviteButton()
+    {
+        UnityEngine.UI.Button homeBtn = ResolveHomeInviteButton();
+
+        if (homeBtn != null)
+        {
+            // Clone the EXACT home invite button so it looks identical, place it at the same
+            // anchored position, and rewire its click to open the friends list over the lobby.
+            GameObject go = Instantiate(homeBtn.gameObject, transform);
+            go.name = "FRIEND_INVITE_BUTTON";
+
+            RectTransform src = homeBtn.GetComponent<RectTransform>();
+            RectTransform rt = go.GetComponent<RectTransform>();
+            if (src != null && rt != null)
+            {
+                rt.anchorMin = src.anchorMin;
+                rt.anchorMax = src.anchorMax;
+                rt.pivot = src.pivot;
+                rt.sizeDelta = src.sizeDelta;
+                rt.anchoredPosition = src.anchoredPosition;
+                rt.localScale = src.localScale;
+            }
+
+            UnityEngine.UI.Button btn = go.GetComponent<UnityEngine.UI.Button>();
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(OpenLobbyFriendInvite);
+            }
+
+            go.SetActive(false);
+            _lobbyInviteButton = go;
+            return;
+        }
+
+        // Fallback: a simple labelled button if the home button could not be found.
+        GameObject fb = new GameObject("FRIEND_INVITE_BUTTON",
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image), typeof(Button));
+        fb.transform.SetParent(transform, false);
+
+        RectTransform frt = fb.GetComponent<RectTransform>();
+        frt.anchorMin = frt.anchorMax = new Vector2(1f, 0.5f);
+        frt.pivot = new Vector2(1f, 0.5f);
+        frt.anchoredPosition = Vector2.zero;
+        frt.sizeDelta = new Vector2(100f, 250f);
+
+        UnityEngine.UI.Image img = fb.GetComponent<UnityEngine.UI.Image>();
+        img.color = new Color(0.18f, 0.55f, 0.30f, 1f);
+
+        Button fbBtn = fb.GetComponent<Button>();
+        fbBtn.targetGraphic = img;
+        fbBtn.onClick.AddListener(OpenLobbyFriendInvite);
+
+        GameObject labelGo = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
+        labelGo.transform.SetParent(fb.transform, false);
+        RectTransform lrt = labelGo.GetComponent<RectTransform>();
+        lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero;
+        TextMeshProUGUI label = labelGo.GetComponent<TextMeshProUGUI>();
+        label.text = "FRIENDS";
+        label.fontSize = 28f;
+        label.fontStyle = FontStyles.Bold;
+        label.alignment = TextAlignmentOptions.Center;
+        label.color = Color.white;
+        label.raycastTarget = false;
+
+        fb.SetActive(false);
+        _lobbyInviteButton = fb;
+    }
+
+    /// <summary>Resolves the home-screen invite button (the one that opens the friends drawer).</summary>
+    UnityEngine.UI.Button ResolveHomeInviteButton()
+    {
+        if (FriendsDrawerController.Instance != null
+            && FriendsDrawerController.Instance.inviteFriendsButton != null)
+            return FriendsDrawerController.Instance.inviteFriendsButton;
+
+        FriendsDrawerController drawer = FindFirstObjectByType<FriendsDrawerController>(FindObjectsInactive.Include);
+        if (drawer != null && drawer.inviteFriendsButton != null)
+            return drawer.inviteFriendsButton;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Opens the SAME home friends list (FRIENDS / REQUESTS tabs + per-friend INVITE) over the
+    /// room lobby. Inviting a friend from here sends them a Firebase invite carrying this room's
+    /// PIN; when they accept they join this room, when they decline the invite is removed.
+    /// </summary>
+    public void OpenLobbyFriendInvite()
+    {
+        FriendsDrawerController drawer = FriendsDrawerController.Instance;
+        if (drawer == null)
+            drawer = FindFirstObjectByType<FriendsDrawerController>(FindObjectsInactive.Include);
+
+        if (drawer == null)
+        {
+            ShowUIError("Friends list unavailable.");
+            return;
+        }
+
+        // The lobby lives on the active main Canvas; pass it explicitly so the drawer is
+        // re-parented onto a VISIBLE root (gameCanvasGroup/Panel_Game is inactive here).
+        Canvas canvas = GetComponentInParent<Canvas>();
+        Transform overlayRoot = canvas != null ? canvas.transform : transform.root;
+        drawer.OpenDrawerDuringGame(overlayRoot);
+
+        // Make sure the friends list is freshly populated with live status.
+        if (FriendsPanelUIController.Instance != null)
+            FriendsPanelUIController.Instance.RefreshAll();
+        RefreshFriendsStatus();
+    }
+
     /// <summary>
     /// Called when the seat/lobby panel is opened (host taps Play on the modes screen).
     /// Resets the player list and shows the Start button greyed-out until the table fills.
     /// </summary>
     public void OnSeatPanelOpened()
     {
+        // Host has now committed to the seat panel — stop suppressing the seat lobby so this
+        // open (and any future joins) display the lobby normally.
+        SuppressSeatLobbyOnJoin = false;
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ResetRoomLobbyCanvasGroup();
+
         if (errorText != null) errorText.gameObject.SetActive(false);
         ClearPlayerListUI();
 
@@ -1042,10 +1567,27 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         // New flow: the Create Room button is hidden on the seat panel, so the host
         // automatically creates the private room as soon as this panel opens. Friends
         // join from the Modes screen's JOIN TABLE panel using the shown ROOM ID.
-        if (!PhotonNetwork.InRoom)
-            CreatePrivateRoom();
+        if (pinCreationPanel != null)
+        {
+            pinCreationPanel.SetActive(true);
+            pinCreationPanel.transform.SetAsLastSibling();
+        }
 
+        if (!PhotonNetwork.InRoom)
+        {
+            // No room yet — create it. The PIN plaque shows a placeholder and the watch
+            // coroutine fills in the real PIN as soon as we join the freshly created room.
+            CreatePrivateRoom();
+        }
+        else
+        {
+            // Room was already created eagerly; populate seats now that the seat panel is open.
+            UpdatePlayerListUI();
+        }
+
+        StartRoomIdPlaqueWatch();
         CheckPlayerCountAndToggleStart();
+        EnsureLobbyInviteButton(true);
     }
 
     // ==========================================
@@ -1074,13 +1616,18 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (matchmakingTimerText != null) matchmakingTimerText.text = "Finding players...";
 
         ClearPlayerListUI();
+        EnsureLobbyInviteButton(false);
         if (PhotonNetwork.InRoom) UpdatePlayerListUI();
     }
+
+    bool _previewBotsInOnlineLobby;
 
     /// <summary>Forwarded from DeckManager's matchmaking countdown (players found + seconds left).</summary>
     public void UpdateOnlineTimer(int playersFound, int countdown)
     {
         if (!_onlineMode) return;
+
+        _previewBotsInOnlineLobby = countdown <= 2 && playersFound < DeckManager.MaxTableSeats;
 
         if (matchmakingTimerText != null)
         {
@@ -1155,16 +1702,107 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        LeavePrivateRoomIfAny();
-        HidePrivateFriendsLobbyUI();
-        gameObject.SetActive(false);
-        if (ModeManager.Instance != null)
-            ModeManager.Instance.OnClick_ClosePlayWithFriends();
+        LeaveCurrentRoom();
+    }
+
+    // ==========================================
+    // PROPER LEAVE ROOM (Back button) + UI RESET
+    // ==========================================
+
+    /// <summary>
+    /// Back-button entry point. Actually leaves the Photon room (so no "ghost room" / background
+    /// match keeps running) and resets the seat-panel UI. While leaving, a loading text is shown;
+    /// navigation Home is performed by NetworkManager.OnLeftRoom once the server confirms.
+    /// </summary>
+    public void LeaveCurrentRoom()
+    {
+        SuppressSeatLobbyOnJoin = false;
+        PendingJoinPin = null;
+
+        if (FriendsDrawerController.Instance != null)
+            FriendsDrawerController.Instance.CloseDrawer();
+
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.LeaveRoomAndCleanup();
+            return;
+        }
+
+        ResetLobbyStateForLeave();
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.LeaveRoom();
+        else if (ModeManager.Instance != null)
+            ModeManager.Instance.OnClick_BackToHome();
+    }
+
+    /// <summary>
+    /// Photon callback — fired when WE leave the room. Resets this panel's UI so no ghost state
+    /// (occupied chairs, "Remove Bots" button, stale Room ID) persists into the next session.
+    /// Navigation Home is owned by NetworkManager.OnLeftRoom. Skipped during a leave->join
+    /// transition (accepting an invite / joining a friend's room via PIN).
+    /// </summary>
+    public override void OnLeftRoom()
+    {
+        if (!string.IsNullOrEmpty(PendingJoinPin)) return;
+        ResetSeatPanelUI();
+    }
+
+    /// <summary>
+    /// Completely resets the seat/lobby UI to its empty state: placeholder Room ID, hidden
+    /// "Remove Bots" button, disabled Start, all chairs emptied, hidden friend-invite button.
+    /// Safe to call repeatedly (idempotent).
+    /// </summary>
+    public void ResetSeatPanelUI()
+    {
+        _onlineMode = false;
+        _friendsGameStartTriggered = false;
+
+        if (_roomIdRefreshCoroutine != null)
+        {
+            StopCoroutine(_roomIdRefreshCoroutine);
+            _roomIdRefreshCoroutine = null;
+        }
+
+        // Room ID back to placeholder (resolve the label by name if it was never wired).
+        if (generatedPinText == null
+            && UiSafeLookup.TryGet("Txt_GeneratedPIN", out GameObject pinGo) && pinGo != null)
+            generatedPinText = pinGo.GetComponent<TMP_Text>();
+        if (generatedPinText != null) generatedPinText.text = "ROOM ID :- ...";
+
+        // Reset + hide the Include/Remove Bots button.
+        ApplyBotsIncludedState(false);
+        if (includeBotsButton != null) includeBotsButton.SetActive(false);
+
+        // Disable Start.
+        if (startGameButton != null) SetStartButtonInteractable(false);
+
+        // Empty all chairs locally (text + avatars).
+        ClearPlayerListUI();
+        ClearSeatAvatars();
+
+        // Hide the lobby friend-invite button + any error text.
+        EnsureLobbyInviteButton(false);
+        if (errorText != null) errorText.gameObject.SetActive(false);
+    }
+
+    /// <summary>Dims/empties every seat avatar slot.</summary>
+    void ClearSeatAvatars()
+    {
+        if (playerSlotsAvatar == null) return;
+        for (int i = 0; i < playerSlotsAvatar.Length; i++)
+            SetSeatAvatar(i, -1, false);
     }
 
     /// <summary>Leaves the private (invisible) room if we are currently in one.</summary>
     public void LeavePrivateRoomIfAny()
     {
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.LeaveRoomAndCleanup();
+            return;
+        }
+
+        SuppressSeatLobbyOnJoin = false;
         if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null
             && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
@@ -1194,7 +1832,19 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         }
 
-        ShowPrivateRoomLobbyUI();
+        // BUG1: don't yank the host into the seat lobby while they're still picking modes in an
+        // eagerly-created invite-room. The lobby (with this player seated) opens when host taps Play.
+        if (SuppressSeatLobbyOnJoin && PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log("[Friends][BUG1] Player joined eager invite-room; deferring seat lobby until host taps Play.");
+            UpdatePlayerListUI();
+            return;
+        }
+
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
+        UpdatePlayerListUI();
+        CheckPlayerCountAndToggleStart();
+        BeginLobbyPlayerListRefresh();
     }
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
@@ -1264,8 +1914,10 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             }
         }
 
-        // RPC pehle — panel band karne se pehle clients ko notify karo
-        SendFriendsRpc(nameof(RPC_ShowModesPanelToClients), RpcTarget.Others);
+        // RPC pehle — panel band karne se pehle clients ko notify karo.
+        // BUG 3 fix: send the DeckManager relay method (the PhotonView we route through
+        // lives on DeckManager, so the target [PunRPC] must exist on that GameObject).
+        SendFriendsRpc("RPC_Friends_ShowModesPanel", RpcTarget.Others);
 
         if (PhotonNetwork.CurrentRoom != null)
             PhotonNetwork.CurrentRoom.IsOpen = false;
@@ -1290,11 +1942,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             }
         }
 
-        if (clientWaitingText != null)
-        {
-            clientWaitingText.gameObject.SetActive(true);
-            clientWaitingText.text = "Host is selecting game modes...";
-        }
+        ApplyClientWaitingPresentation(true, "Host is selecting game modes...");
 
         if (ModeManager.Instance != null)
             ModeManager.Instance.ApplyLiveModesFromRoomIfPresent();
@@ -1373,6 +2021,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             ShowUIError("Need 4 players to start!");
             return;
         }
+
+        ConfirmHostSeatStart();
 
         if (ModeManager.Instance != null)
             ModeManager.Instance.StartGameFromModePanel();
@@ -1453,7 +2103,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         PhotonNetwork.CurrentRoom.IsOpen = false;
         PhotonNetwork.CurrentRoom.IsVisible = false;
 
-        SendFriendsRpc(nameof(RPC_StartGameForEveryone), RpcTarget.All);
+        // BUG 3 fix: send the DeckManager relay method (the PhotonView we route through
+        // lives on DeckManager, so the target [PunRPC] must exist on that GameObject).
+        SendFriendsRpc("RPC_Friends_StartGameForEveryone", RpcTarget.All);
     }
 
     [PunRPC]
@@ -1465,10 +2117,6 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         _friendsGameStartTriggered = true;
 
         Debug.Log("[GameStart] Friends RPC_StartGameForEveryone received");
-
-        ResolveModesPanel();
-        if (modesPanel != null) modesPanel.SetActive(false);
-        HidePrivateFriendsLobbyUI();
 
         if (ModeManager.Instance != null)
             ModeManager.Instance.SyncModesFromRoom();
@@ -1497,19 +2145,29 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             }
         }
 
-        // Single shared, guarded entry: hides menus, shows game scene, ensures local
-        // NetworkPlayer exists, initializes gameplay UI, and (master only) starts dealing once.
+        GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
+
         if (NetworkManager.Instance != null)
         {
-            if (!PhotonNetwork.IsMasterClient)
-                NetworkManager.Instance.ShowLoading("Starting game...");
-            NetworkManager.Instance.BeginGameAfterRoomReady();
+            // Cover screen BEFORE hiding any panel — eliminates the blue Unity camera flash.
+            NetworkManager.Instance.SnapScreenCover();
+
+            NetworkManager.Instance.BeginGameTransitionWithBlackFade(() =>
+            {
+                ResolveModesPanel();
+                if (modesPanel != null) modesPanel.SetActive(false);
+                HidePrivateFriendsLobbyUI();
+                if (ModeManager.Instance != null && ModeManager.Instance.panelPlayWithFriends != null)
+                    ModeManager.Instance.panelPlayWithFriends.SetActive(false);
+
+                NetworkManager.Instance.ResetGameStartGuards();
+                NetworkManager.Instance.EnsureLocalNetworkPlayer();
+                PlayerHand.ResolveLocalHand();
+                NetworkManager.Instance.BeginGameAfterRoomReady(showLoadingOverlay: false);
+            }, skipFadeIn: true);
         }
         else
             Debug.LogError("[GameStart ERROR] NetworkManager.Instance missing — cannot start friends game.");
-
-        // Hide this lobby manager LAST so the work above runs while it is still active.
-        gameObject.SetActive(false);
     }
 
     void HidePlayWithFriendsLobbyPanel()
@@ -1520,7 +2178,6 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public void HidePrivateFriendsLobbyUI()
     {
-        if (modesPanel != null) modesPanel.SetActive(false);
         HidePlayWithFriendsLobbyPanel();
         if (errorText != null) errorText.gameObject.SetActive(false);
     }
@@ -2055,6 +2712,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public void RefreshFriendsListUI()
     {
+        // TASK 18/25: notify any open in-game friend panels so they repaint with live presence.
+        NotifyFriendsStatusChanged();
+
         if (FriendsPanelUIController.Instance != null)
         {
             FriendsPanelUIController.Instance.RefreshAll();
@@ -2356,12 +3016,43 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         if (PhotonNetwork.InRoom)
         {
-            ShowUIError("Leave your current table first.");
-            return;
+            // Block only if we are in an ACTIVE game (GS == true). If we are merely sitting in a
+            // lobby / our own eager private room, JoinRoomWithPINText leaves it then joins.
+            bool inActiveGame = PhotonNetwork.CurrentRoom != null
+                && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gsObj)
+                && gsObj is bool gsBool && gsBool;
+            if (inActiveGame)
+            {
+                ShowUIError("Leave your current game first.");
+                return;
+            }
         }
 
         Debug.Log($"[Invite] Accepting invite '{invite.InviteId}' -> room '{roomPin}'");
-        JoinRoomWithPINText(roomPin);
+
+        // TASK 7 fix: the invitee is almost always ALREADY sitting in their OWN eagerly-created
+        // private room (created when they entered the friends flow). PhotonNetwork.JoinRoom returns
+        // false WITHOUT raising OnJoinRoomFailed when you are already in a room, so the loading
+        // overlay shown by BeginJoinRoomWithLoadingFade would never hide and the invitee gets stuck
+        // on the loading screen forever. Leave our current room first, queue the PIN, and let
+        // NetworkManager.OnLeftRoom join the friend's room once we are back on the master server.
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null)
+        {
+            if (PhotonNetwork.CurrentRoom.Name == roomPin)
+                return; // already in the friend's room — nothing to do.
+
+            SuppressSeatLobbyOnJoin = false;
+            PendingJoinPin = roomPin;
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ShowLoading("Joining friend's table...");
+            PhotonNetwork.LeaveRoom();
+            return;
+        }
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.BeginJoinRoomWithLoadingFade(roomPin, "Joining friend's table...");
+        else
+            JoinRoomWithPINText(roomPin);
     }
 
     /// <summary>Declines a pending game invite and removes it from Firebase.</summary>

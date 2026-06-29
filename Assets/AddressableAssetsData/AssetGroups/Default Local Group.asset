@@ -100,6 +100,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2ef909d55af3f5e4aa2eb56c3d74fe34
+    m_Address: Assets/_Project/Art/Sprites/Images/NEW/LOGOUT_ICON.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 2f3d7c64966a43a45a4e0f01501ea982
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/WhatsApp Image 2026-06-22 at
       19.22.55.jpeg
@@ -143,6 +148,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3d577c7791c511444bd1b9da0c04794b
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/PLAYONLINE_Icon.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3f938ba3577ff8f42b6832e2b5b266fe
+    m_Address: Assets/_Project/Art/Sprites/Images/NEW/RateUs_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -332,6 +342,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c32b7cdfa9c2dfb47a4db517d76babf4
+    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Appearance_Icon.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: c4cc5ac746e4aac48a6272935258653e
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/WWW_ICON.png
     m_ReadOnly: 0
@@ -414,6 +429,12 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: f7e730b6e39866a49870d267ed2d6466
     m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Play_Online.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fdb5fdf85ed855641b5483264b2ed5d8
+    m_Address: Assets/_Project/Art/Sprites/Images/NEW/WhatsApp Image 2026-06-22 at
+      19.22.55 (1).jpeg
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

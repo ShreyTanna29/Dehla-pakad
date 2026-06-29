@@ -10,10 +10,8 @@ using TMPro;
 /// </summary>
 public class ProfileMiscButtons : MonoBehaviour
 {
-    static readonly Color TabActive = Color.white;
-    static readonly Color TabInactive = new Color(1f, 1f, 1f, 0.5f);
-    static readonly Color LabelActive = Color.white;
-    static readonly Color LabelInactive = new Color(1f, 0.93f, 0.82f, 0.62f);
+    [Tooltip("When enabled, tab colors and button graphics set in the Editor are never changed at runtime.")]
+    [SerializeField] private bool preserveManualAppearance = true;
 
     bool _wired;
 
@@ -44,14 +42,18 @@ public class ProfileMiscButtons : MonoBehaviour
 
     void SelectTrophyTab(bool world)
     {
-        Image wImg = Find<Image>("Tab_World");
-        Image cImg = Find<Image>("Tab_Country");
-        TMP_Text wL = FindLabel("Tab_World");
-        TMP_Text cL = FindLabel("Tab_Country");
-        if (wImg != null) wImg.color = world ? TabActive : TabInactive;
-        if (cImg != null) cImg.color = world ? TabInactive : TabActive;
-        if (wL != null) wL.color = world ? LabelActive : LabelInactive;
-        if (cL != null) cL.color = world ? LabelInactive : LabelActive;
+        if (!preserveManualAppearance)
+        {
+            Image wImg = Find<Image>("Tab_World");
+            Image cImg = Find<Image>("Tab_Country");
+            TMP_Text wL = FindLabel("Tab_World");
+            TMP_Text cL = FindLabel("Tab_Country");
+            if (wImg != null) wImg.color = world ? Color.white : new Color(1f, 1f, 1f, 0.5f);
+            if (cImg != null) cImg.color = world ? new Color(1f, 1f, 1f, 0.5f) : Color.white;
+            if (wL != null) wL.color = world ? Color.white : new Color(1f, 0.93f, 0.82f, 0.62f);
+            if (cL != null) cL.color = world ? new Color(1f, 0.93f, 0.82f, 0.62f) : Color.white;
+        }
+
         ProfileToast.Show(transform, world ? "Showing World rankings" : "Showing Country rankings");
     }
 
@@ -63,6 +65,8 @@ public class ProfileMiscButtons : MonoBehaviour
         Button btn = t.GetComponent<Button>();
         if (btn == null)
         {
+            if (preserveManualAppearance) return;
+
             btn = t.gameObject.AddComponent<Button>();
             var tmp = t.GetComponent<TMP_Text>();
             if (tmp != null)
@@ -86,6 +90,12 @@ public class ProfileMiscButtons : MonoBehaviour
 
     void OnDeleteAccountClicked()
     {
+        if (LogoutManager.Instance != null)
+        {
+            LogoutManager.Instance.DeleteAccount();
+            return;
+        }
+
         if (PlayerProfileManager.Instance != null)
         {
             PlayerProfileManager.Instance.DeleteAccount((ok, err) =>

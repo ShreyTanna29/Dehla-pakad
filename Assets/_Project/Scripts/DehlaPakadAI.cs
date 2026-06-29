@@ -570,12 +570,27 @@ public class DehlaPakadAI : MonoBehaviour
 
     static int GetPartnerActor(int actor)
     {
+        // 2v2 partnerships exist ONLY in the friends private room. In bots/online (1v1v1v1)
+        // every bot plays for itself, so there is no partner and no cooperative play.
+        if (!IsFriendsTeamMode()) return -1;
         if (DeckManager.Instance == null) return -1;
         List<int> seats = DeckManager.Instance.GetActiveSeatActorsSorted();
         if (seats == null || seats.Count != 4) return -1;
         int idx = seats.IndexOf(actor);
         if (idx < 0) return -1;
+        // Partner sits ACROSS the table (player 1 & 3 are a team, player 2 & 4 are a team).
         return seats[(idx + 2) % 4];
+    }
+
+    /// <summary>
+    /// True only when this is a FRIENDS private room running 2v2 (logic mode 2). Bots (offline) and
+    /// Online (visible room) always return false so the AI keeps playing 1v1v1v1.
+    /// </summary>
+    static bool IsFriendsTeamMode()
+    {
+        if (!DeckManager.IsPrivateFriendsRoom()) return false;
+        int logic = ModeManager.Instance != null ? ModeManager.Instance.currentLogicMode : 1;
+        return logic == 2;
     }
 
     static bool IsDehla(CardData card) => card.cardRank == CardRank.Ten;

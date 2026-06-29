@@ -3,41 +3,39 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Keeps the Player Profile panel's display in sync with the saved profile every time the panel is
-/// shown. <see cref="PlayerProfileManager"/> only updates the account-card name/avatar; this binder
-/// additionally refreshes the prominent sidebar name + avatar and the "Synced with" email (from the
-/// signed-in Google/Firebase account). Self-resolves children by name, so it survives panel rebuilds.
+/// Optional profile-panel data binder. When <see cref="preserveManualLayout"/> is enabled (default),
+/// the scene-authored Player Profile UI is never modified at runtime.
 /// </summary>
 public class PlayerProfilePanelBinder : MonoBehaviour
 {
+    [Tooltip("When enabled, text, images, and visibility set in the Editor are kept exactly as authored.")]
+    [SerializeField] private bool preserveManualLayout = true;
+
     const string PREFS_USERNAME = "PlayerUsername";
     const string PREFS_AVATAR_INDEX = "PlayerAvatarIndex";
     const string PREFS_EMAIL = "PlayerEmail";
 
-    void OnEnable() { Refresh(); }
+    void OnEnable()
+    {
+        if (!preserveManualLayout)
+            Refresh();
+    }
 
     public void Refresh()
     {
+        if (preserveManualLayout) return;
+
         string username = PlayerPrefs.GetString(PREFS_USERNAME, "Player");
         int avatarIndex = PlayerPrefs.GetInt(PREFS_AVATAR_INDEX, 0);
         Sprite avatar = ResolveAvatar(avatarIndex);
 
-        // Sidebar
         SetText("Side_Name", username);
         SetChildSprite("Side_AvatarFrame", "Img", avatar);
-
-        // Account card (redundant with manager but guarantees freshness on reopen)
         SetText("Text_ProfileName", username);
         SetSprite("Img_CurrentAvatar", avatar);
-
-        // "Synced with" — guests see a "Bind with Google" button; linked/Google users see their email.
         UpdateSyncedWithSection();
     }
 
-    /// <summary>
-    /// Guest (anonymous) sessions show a "Bind with Google" button instead of an email address.
-    /// Once the guest links their Google account, this switches back to displaying the Gmail address.
-    /// </summary>
     void UpdateSyncedWithSection()
     {
         bool isGuest = GoogleLogin.IsGuestSession();
@@ -88,7 +86,6 @@ public class PlayerProfilePanelBinder : MonoBehaviour
 
     string ResolveEmail()
     {
-        // Prefer the live Firebase account email; fall back to the cached one from login.
         try
         {
             var user = Firebase.Auth.FirebaseAuth.DefaultInstance != null
@@ -99,13 +96,12 @@ public class PlayerProfilePanelBinder : MonoBehaviour
                 return user.Email;
             }
         }
-        catch { /* Firebase not ready in some contexts — fall back below */ }
+        catch { }
 
         string cached = PlayerPrefs.GetString(PREFS_EMAIL, "");
         return string.IsNullOrEmpty(cached) ? "Not signed in" : cached;
     }
 
-    // ---- helpers ----
     void SetText(string childName, string value)
     {
         Transform t = FindDeep(transform, childName);

@@ -71,7 +71,12 @@ public class GoogleLogin : MonoBehaviour
         ClearDisplayedProfileName();
 
         if (NetworkManager.Instance != null)
+        {
             NetworkManager.Instance.HideHomeUntilLogin();
+            // TASK 3 — clear any lingering loading overlay so a failed/cancelled login (or a logout)
+            // never leaves the user stuck on a loading screen when we return to the login panel.
+            NetworkManager.Instance.HideLoading();
+        }
 
         if (homePanel != null)
             homePanel.SetActive(false);
@@ -180,9 +185,9 @@ public class GoogleLogin : MonoBehaviour
         catch (System.Exception ex)
         {
             Debug.LogError($"[GoogleLogin] AttemptGoogleLogin failed: {ex}");
-            // Reuse the existing status label as the UI Text element.
             UpdateStatus("Login Failed, try again.");
             _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
         }
     }
 
@@ -190,10 +195,13 @@ public class GoogleLogin : MonoBehaviour
     {
         Debug.Log("Google Login Button Clicked! Starting explicit sign-in.");
         _loginFlowStarted = true;
+        SetLoginButtonsInteractable(false);
 
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
             UpdateStatus("No Internet Connection!");
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             return;
         }
 
@@ -205,6 +213,8 @@ public class GoogleLogin : MonoBehaviour
         {
             UpdateStatus("Firebase Initializing...");
             InitializeFirebase();
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             return;
         }
 
@@ -265,6 +275,8 @@ public class GoogleLogin : MonoBehaviour
                 }
             }
             UpdateStatus(errorMessage);
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             return;
         }
 
@@ -272,6 +284,8 @@ public class GoogleLogin : MonoBehaviour
         {
             Debug.LogWarning("Google Login Canceled.");
             UpdateStatus("Login Canceled");
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             return;
         }
 
@@ -280,6 +294,8 @@ public class GoogleLogin : MonoBehaviour
         {
             UpdateStatus("Auth Token Missing!");
             Debug.LogError("Google Result is null or IdToken is empty.");
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             return;
         }
 
@@ -343,6 +359,8 @@ public class GoogleLogin : MonoBehaviour
         {
             UpdateStatus("Firebase Error");
             Debug.LogError("❌ Firebase Auth Failed: " + task.Exception);
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             ShowLoginPanel();
             return;
         }
@@ -350,6 +368,8 @@ public class GoogleLogin : MonoBehaviour
         if (task.IsCanceled)
         {
             UpdateStatus("Firebase Canceled");
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             ShowLoginPanel();
             return;
         }
@@ -357,6 +377,8 @@ public class GoogleLogin : MonoBehaviour
         FirebaseUser user = GetUserFromAuthTask(task);
         if (user == null)
         {
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             ShowLoginPanel();
             return;
         }
@@ -369,12 +391,23 @@ public class GoogleLogin : MonoBehaviour
         // Anonymous (guest) accounts have no DisplayName, so seed a random guest name.
         // Google accounts keep their existing DisplayName-based flow unchanged.
         bool isGuest = user.IsAnonymous;
-        string defaultName = isGuest
-            ? "Guest_" + UnityEngine.Random.Range(1000, 9999)
-            : user.DisplayName;
 
-        Debug.Log($"✅ Authenticated: {(isGuest ? "Guest" : user.DisplayName)} (anonymous={isGuest})");
-        UpdateStatus(isGuest ? "Welcome, Guest" : "Welcome, " + user.DisplayName);
+        if (!string.IsNullOrEmpty(user.Email))
+        {
+            PlayerPrefs.SetString("PlayerEmail", user.Email);
+            PlayerPrefs.Save();
+        }
+
+        string defaultName;
+        if (isGuest)
+            defaultName = "Guest_" + UnityEngine.Random.Range(1000, 9999);
+        else if (!string.IsNullOrWhiteSpace(user.DisplayName))
+            defaultName = user.DisplayName.Trim();
+        else
+            defaultName = PlayerProfileManager.GenerateDefaultUsername(user.Email);
+
+        Debug.Log($"✅ Authenticated: {(isGuest ? "Guest" : defaultName)} (anonymous={isGuest})");
+        UpdateStatus(isGuest ? "Welcome, Guest" : "Welcome, " + defaultName);
 
         string photonUserId = user.UserId;
         ConnectPhotonAfterLogin(photonUserId);
@@ -756,10 +789,16 @@ public class GoogleLogin : MonoBehaviour
         {
             if (NetworkManager.Instance != null)
                 NetworkManager.Instance.ShowLoading("Loading profile setup...");
-            PlayerProfileManager.Instance.CheckAndLoadUserProfile(SimulatedPhotonUserId, null);
+            string defaultName = PlayerProfileManager.GenerateDefaultUsername(
+                PlayerPrefs.GetString("PlayerEmail", "editor.test@gmail.com"));
+            PlayerProfileManager.Instance.CheckAndLoadUserProfile(SimulatedPhotonUserId, defaultName);
         }
         else
+        {
             UpdateStatus("Profile manager missing");
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
+        }
     }
 
     public void SimulateLoginME()
@@ -777,6 +816,7 @@ public class GoogleLogin : MonoBehaviour
         _loginFlowStarted = false;
         _editorSimGuest = false;
         ResetLoginFlow();
+        SetLoginButtonsInteractable(true);
 
         if (auth != null) auth.SignOut();
         if (GoogleSignIn.DefaultInstance != null) GoogleSignIn.DefaultInstance.SignOut();
@@ -787,5 +827,11 @@ public class GoogleLogin : MonoBehaviour
         ShowLoginPanel();
         UpdateStatus("Signed Out");
         Debug.Log("👋 User Signed Out");
+    }
+
+    void SetLoginButtonsInteractable(bool interactable)
+    {
+        if (googleSignInButton != null) googleSignInButton.interactable = interactable;
+        if (btnGuestLogin != null) btnGuestLogin.interactable = interactable;
     }
 }

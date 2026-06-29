@@ -24,18 +24,73 @@ public class InventoryScreenController : MonoBehaviour
     public List<SubTab> subTabs = new List<SubTab>();
     public string defaultSubTab = "Cards";
 
-    static readonly Color TabActive = new Color(0.72f, 0.27f, 0.12f, 1f);   // dark red
-    static readonly Color TabInactive = new Color(0.95f, 0.66f, 0.36f, 1f); // light orange
-    static readonly Color TabActiveText = Color.white;
-    static readonly Color TabInactiveText = new Color(0.30f, 0.16f, 0.05f, 1f);
+    // Shop / inventory sub-tab colors — selected #B8451F, unselected #F2A85C.
+    static readonly Color TabActive   = new Color(0xB8 / 255f, 0x45 / 255f, 0x1F / 255f, 1f);
+    static readonly Color TabInactive = new Color(0xF2 / 255f, 0xA8 / 255f, 0x5C / 255f, 1f);
+
+    [Tooltip("When enabled, tab label text colors are left as set in the Editor.")]
+    [SerializeField] private bool preserveManualTabLabels = true;
 
     string _current;
     bool _wired;
 
     void OnEnable()
     {
+        EnsureResolved();
         Wire();
         ShowSub(string.IsNullOrEmpty(_current) ? defaultSubTab : _current);
+    }
+
+    /// <summary>
+    /// Repairs the sub-tab list when its serialized object references have been lost (e.g. after a
+    /// scene merge). If the list is empty it is rebuilt from the known sub-tab ids; for any entry that
+    /// is missing references they are resolved by name (Tab_&lt;Id&gt; button + Sub_&lt;Id&gt; content).
+    /// </summary>
+    void EnsureResolved()
+    {
+        if (subTabs == null || subTabs.Count == 0)
+        {
+            subTabs = new List<SubTab>
+            {
+                new SubTab { id = "Cards" },
+                new SubTab { id = "Wallpapers" },
+                new SubTab { id = "Avatars" },
+                new SubTab { id = "Voice" },
+            };
+        }
+
+        foreach (SubTab t in subTabs)
+        {
+            if (t == null || string.IsNullOrEmpty(t.id)) continue;
+
+            Transform tab = FindDeep(transform, "Tab_" + t.id);
+            if (tab != null)
+            {
+                if (t.tabButton == null) t.tabButton = tab.GetComponent<Button>();
+                if (t.tabBg == null) t.tabBg = tab.GetComponent<Image>();
+                if (t.tabLabel == null)
+                {
+                    Transform l = tab.Find("Label");
+                    if (l != null) t.tabLabel = l.GetComponent<TMP_Text>();
+                }
+            }
+            if (t.content == null)
+            {
+                Transform c = FindDeep(transform, "Sub_" + t.id);
+                if (c != null) t.content = c.gameObject;
+            }
+        }
+    }
+
+    static Transform FindDeep(Transform parent, string name)
+    {
+        if (parent.name == name) return parent;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            Transform r = FindDeep(parent.GetChild(i), name);
+            if (r != null) return r;
+        }
+        return null;
     }
 
     void Wire()
@@ -60,7 +115,8 @@ public class InventoryScreenController : MonoBehaviour
             bool active = t.id == id;
             if (t.content != null) t.content.SetActive(active);
             if (t.tabBg != null) t.tabBg.color = active ? TabActive : TabInactive;
-            if (t.tabLabel != null) t.tabLabel.color = active ? TabActiveText : TabInactiveText;
+            if (!preserveManualTabLabels && t.tabLabel != null)
+                t.tabLabel.color = active ? Color.white : new Color(0.30f, 0.16f, 0.05f, 1f);
         }
     }
 

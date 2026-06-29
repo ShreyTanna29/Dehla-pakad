@@ -81,6 +81,10 @@ MonoBehaviour:
   - RPC_StartGameForEveryone
   - RPC_SetHiddenTrumpInfo
   - RPC_RevealHiddenTrump
+  - RPC_Friends_ShowModesPanel
+  - RPC_Friends_StartGameForEveryone
+  - RpcStartGameSync
+  - RPC_ForceLeaveAfterReplace
   DisableAutoOpenWizard: 1
   ShowSettings: 0
   DevRegionSetOnce: 1

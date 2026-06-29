@@ -106,7 +106,12 @@ public static class ProfileStatsStore
     /// History is stored locally (PlayerPrefs), newest-first, bounded only by MaxHistory (50).
     /// A copy is returned so callers can iterate/sort without mutating the store.
     /// </summary>
-    public static List<GameRecord> FetchAllPastGames() => new List<GameRecord>(History);
+    public static List<GameRecord> FetchAllPastGames()
+    {
+        _root = null;
+        Load();
+        return new List<GameRecord>(History);
+    }
 
     static void AddHistory(GameRecord rec)
     {

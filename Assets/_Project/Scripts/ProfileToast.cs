@@ -12,6 +12,17 @@ public static class ProfileToast
 {
     public static void Show(Transform panel, string message, float seconds = 1.6f)
     {
+        Show(panel, message, seconds, 640f, 76f, 28f, 60f);
+    }
+
+    /// <summary>Smaller toast for short status messages (e.g. ad loading).</summary>
+    public static void ShowCompact(Transform panel, string message, float seconds = 1.4f)
+    {
+        Show(panel, message, seconds, 360f, 48f, 18f, 36f);
+    }
+
+    public static void Show(Transform panel, string message, float seconds, float width, float height, float fontSize, float bottomOffset)
+    {
         if (panel == null || string.IsNullOrEmpty(message)) return;
 
         Transform existing = panel.Find("__ProfileToast");
@@ -24,8 +35,6 @@ public static class ProfileToast
             rt.anchorMin = new Vector2(0.5f, 0f);
             rt.anchorMax = new Vector2(0.5f, 0f);
             rt.pivot = new Vector2(0.5f, 0f);
-            rt.sizeDelta = new Vector2(640f, 76f);
-            rt.anchoredPosition = new Vector2(0f, 60f);
 
             var bg = go.AddComponent<Image>();
             ColorUtility.TryParseHtmlString("#2B1A0C", out Color c);
@@ -36,10 +45,10 @@ public static class ProfileToast
             txtGo.transform.SetParent(go.transform, false);
             var trt = txtGo.GetComponent<RectTransform>();
             trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
-            trt.offsetMin = new Vector2(20f, 8f); trt.offsetMax = new Vector2(-20f, -8f);
+            trt.offsetMin = new Vector2(12f, 4f); trt.offsetMax = new Vector2(-12f, -4f);
             var tmp = txtGo.AddComponent<TextMeshProUGUI>();
             tmp.alignment = TextAlignmentOptions.Center;
-            tmp.fontSize = 28f;
+            tmp.enableWordWrapping = true;
             ColorUtility.TryParseHtmlString("#FFE9C7", out Color tc);
             tmp.color = tc;
             tmp.raycastTarget = false;
@@ -47,9 +56,17 @@ public static class ProfileToast
             if (font != null) tmp.font = font;
         }
 
+        var toastRt = go.GetComponent<RectTransform>();
+        toastRt.sizeDelta = new Vector2(width, height);
+        toastRt.anchoredPosition = new Vector2(0f, bottomOffset);
+
         go.transform.SetAsLastSibling();
         var label = go.GetComponentInChildren<TMP_Text>();
-        if (label != null) label.text = message;
+        if (label != null)
+        {
+            label.text = message;
+            label.fontSize = fontSize;
+        }
 
         var cg = go.GetComponent<CanvasGroup>();
         if (cg == null) cg = go.AddComponent<CanvasGroup>();

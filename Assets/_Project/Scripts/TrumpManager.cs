@@ -372,7 +372,14 @@ $"[TrumpUI] Current Trump: {displaySuit} (gameplay revealed={isTrumpRevealed})\n
 
         int cr = 1;
         int mr = -1;
-        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null)
+        // Task 27: prefer the authoritative round counters on ResultManager (works in offline/bots
+        // mode too); fall back to the synced room properties if ResultManager isn't ready yet.
+        if (ResultManager.Instance != null)
+        {
+            cr = ResultManager.Instance.currentRound;
+            mr = ResultManager.Instance.maxRounds;
+        }
+        else if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null)
         {
             var props = PhotonNetwork.CurrentRoom.CustomProperties;
             if (props != null)

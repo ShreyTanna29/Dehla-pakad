@@ -74,18 +74,33 @@ public class InGameAddFriendController : MonoBehaviour
     void Start()
     {
         if (PlayWithFriendsManager.Instance != null)
+        {
             PlayWithFriendsManager.Instance.RequestsChanged += OnRequestsChanged;
+            PlayWithFriendsManager.Instance.FriendsStatusChanged += OnFriendsStatusChanged;
+        }
     }
 
     void OnDestroy()
     {
         if (PlayWithFriendsManager.Instance != null)
+        {
             PlayWithFriendsManager.Instance.RequestsChanged -= OnRequestsChanged;
+            PlayWithFriendsManager.Instance.FriendsStatusChanged -= OnFriendsStatusChanged;
+        }
         if (Instance == this) Instance = null;
     }
 
     /// <summary>Live-refresh the list if a request arrives/leaves while the panel is open.</summary>
     void OnRequestsChanged()
+    {
+        if (_panelGroup != null && _panelGroup.gameObject.activeSelf)
+            PopulateRows();
+    }
+
+    /// <summary>TASK 25: repaint when a friend's online status loads/changes while the panel is open
+    /// (rows are built synchronously on open before the async Firebase presence read completes, so
+    /// without this online friends would stay greyed-out as "Offline").</summary>
+    void OnFriendsStatusChanged()
     {
         if (_panelGroup != null && _panelGroup.gameObject.activeSelf)
             PopulateRows();
@@ -256,11 +271,15 @@ public class InGameAddFriendController : MonoBehaviour
         bnRt.pivot = new Vector2(0.5f, 0f);
         bnRt.offsetMin = new Vector2(0f, 0f);
         bnRt.offsetMax = new Vector2(0f, 110f);
-        banner.AddComponent<Image>().color = new Color(0, 0, 0, 0.35f);
+        // The real LevelPlay banner ad shows as a native overlay; keep the band empty (disable placeholder).
+        var bnImg = banner.AddComponent<Image>();
+        bnImg.color = new Color(0, 0, 0, 0.35f);
+        bnImg.enabled = false;
         var bnLabel = AddTmp(banner.transform, "BANNER AD PLACEMENT (FULL WIDTH)", new Color(1, 1, 1, 0.6f), 24, TextAlignmentOptions.Center, FontStyles.Bold);
         var bnLblRt = bnLabel.rectTransform;
         bnLblRt.anchorMin = Vector2.zero; bnLblRt.anchorMax = Vector2.one;
         bnLblRt.offsetMin = Vector2.zero; bnLblRt.offsetMax = Vector2.zero;
+        bnLabel.gameObject.SetActive(false);
 
         _built = true;
         root.SetActive(false);

@@ -41,6 +41,8 @@ public class InGameSettingsController : MonoBehaviour
     public GameObject confirmExitPanel;     // "ARE YOU SURE?" popup
     public Button confirmYesButton;         // EXIT, YES -> leave to home
     public Button confirmNoButton;          // NO, NO -> back to game
+    [Tooltip("Optional label on the exit panel (e.g. AdsLoading).")]
+    public TMP_Text exitAdStatusText;
 
     private const string PREF_MUTE = "SoundMuted";
     private const string PREF_SPEED = "GameSpeedIndex";
@@ -197,14 +199,40 @@ public class InGameSettingsController : MonoBehaviour
         confirmExitPanel.transform.localScale = Vector3.one * 0.85f;
         confirmExitPanel.transform.DOKill();
         confirmExitPanel.transform.DOScale(1f, 0.25f).SetEase(Ease.OutBack).SetUpdate(true);
+
+        if (AdsManager.Instance != null)
+            AdsManager.Instance.PreloadAds();
+
+        UpdateExitAdStatusLabel();
     }
 
-    // EXIT, YES -> leave match and go Home.
+    void UpdateExitAdStatusLabel()
+    {
+        if (exitAdStatusText == null && confirmExitPanel != null)
+        {
+            Transform t = confirmExitPanel.transform.Find("AdsLoading");
+            if (t != null) exitAdStatusText = t.GetComponent<TMP_Text>();
+        }
+
+        if (exitAdStatusText == null) return;
+
+        bool interstitialReady = AdsManager.Instance != null && AdsManager.Instance.IsInterstitialReady();
+        bool rewardedReady = AdsManager.Instance != null && AdsManager.Instance.IsRewardedAdReady();
+        exitAdStatusText.text = interstitialReady || rewardedReady
+            ? "Ad ready"
+            : "Loading ad…";
+    }
+
+    // EXIT, YES -> show fullscreen ad (if any), then leave match and go Home.
     public void ConfirmExitYes()
     {
         if (confirmExitPanel != null) confirmExitPanel.SetActive(false);
         if (settingsPanel != null) settingsPanel.SetActive(false);
-        DoExitToHome();
+
+        if (AdsManager.Instance != null)
+            AdsManager.Instance.ShowBestEffortFullscreenAd(DoExitToHome);
+        else
+            DoExitToHome();
     }
 
     // NO, NO -> dismiss confirmation, stay in the game.

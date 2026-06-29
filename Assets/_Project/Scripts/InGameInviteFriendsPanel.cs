@@ -3,7 +3,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using DG.Tweening;
-using Photon.Realtime;
 
 /// <summary>
 /// In-game "INVITE FRIEND" panel opened by the host via the REPLACE action on a bot seat.
@@ -86,9 +85,25 @@ public class InGameInviteFriendsPanel : MonoBehaviour
         panelRoot.SetActive(false);
     }
 
+    void Start()
+    {
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.FriendsStatusChanged += OnFriendsStatusChanged;
+    }
+
     void OnDestroy()
     {
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.FriendsStatusChanged -= OnFriendsStatusChanged;
         if (Instance == this) Instance = null;
+    }
+
+    /// <summary>TASK 18/25: repaint the friend rows' Online/In Game/Offline status when live
+    /// presence loads or changes while this panel is open.</summary>
+    void OnFriendsStatusChanged()
+    {
+        if (_group != null && _group.gameObject.activeSelf)
+            PopulateRows();
     }
 
     void ResolveThemeAssets()
@@ -105,6 +120,9 @@ public class InGameInviteFriendsPanel : MonoBehaviour
     {
         if (!_built) BuildPanel();
         if (_group == null) return;
+
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.RefreshFriendsStatus();
 
         PopulateRows();
 
@@ -209,6 +227,22 @@ public class InGameInviteFriendsPanel : MonoBehaviour
 
         BuildScrollView(frame.transform);
 
+        // Full-width banner ad placeholder (matches leaderboard / add-friend panels).
+        GameObject banner = NewRect("BannerAdPlaceholder", root.transform);
+        RectTransform bnRt = banner.GetComponent<RectTransform>();
+        bnRt.anchorMin = new Vector2(0f, 0f);
+        bnRt.anchorMax = new Vector2(1f, 0f);
+        bnRt.pivot = new Vector2(0.5f, 0f);
+        bnRt.offsetMin = Vector2.zero;
+        bnRt.offsetMax = new Vector2(0f, 110f);
+        // The real LevelPlay banner ad shows as a native overlay; keep the band empty (disable placeholder).
+        var bnImg = banner.AddComponent<Image>();
+        bnImg.color = new Color(0, 0, 0, 0.35f);
+        bnImg.enabled = false;
+        var bnLabel = AddTmp(banner.transform, "BANNER AD PLACEMENT (FULL WIDTH)", new Color(1, 1, 1, 0.6f), 24, TextAlignmentOptions.Center, FontStyles.Bold);
+        Stretch(bnLabel.rectTransform);
+        bnLabel.gameObject.SetActive(false);
+
         _built = true;
         root.SetActive(false);
     }
@@ -289,7 +323,8 @@ public class InGameInviteFriendsPanel : MonoBehaviour
     GameObject CreateFriendRow(PlayWithFriendsManager mgr, string friendId)
     {
         string displayName = mgr.GetFriendDisplayName(friendId);
-        FriendInfo info = mgr.GetFriendPhotonInfo(friendId);
+        bool online = mgr.IsFriendOnline(friendId);
+        bool inGame = mgr.IsFriendInGame(friendId);
 
         GameObject row = NewRect("FriendRow", _rowsContent);
         RectTransform rowRt = row.GetComponent<RectTransform>();
@@ -309,7 +344,8 @@ public class InGameInviteFriendsPanel : MonoBehaviour
         nbRt.anchoredPosition = new Vector2(20, 0);
 
         string status = "\u26AB Offline";
-        if (info != null) status = info.IsOnline ? (info.IsInRoom ? "\uD83C\uDFAE In Game" : "\uD83D\uDFE2 Online") : "\u26AB Offline";
+        if (inGame) status = "\uD83C\uDFAE In Game";
+        else if (online) status = "\uD83D\uDFE2 Online";
         var nameTxt = AddTmp(nameBox.transform, $"{displayName}\n<size=20>{status}</size>", Color.white, 30, TextAlignmentOptions.Left, FontStyles.Bold);
         var nameRt = nameTxt.rectTransform;
         nameRt.anchorMin = Vector2.zero; nameRt.anchorMax = Vector2.one;

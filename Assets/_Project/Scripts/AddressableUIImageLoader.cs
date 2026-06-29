@@ -33,6 +33,13 @@ public class AddressableUIImageLoader : MonoBehaviour
             return;
         }
 
+        // Respect a sprite that was deliberately assigned in the editor.
+        // If the Image already has a sprite, keep exactly what was set and do not
+        // override it from Addressables at runtime. Only blank (null) Images load
+        // their sprite from the addressableKey.
+        if (_image.sprite != null)
+            return;
+
         if (string.IsNullOrWhiteSpace(addressableKey))
         {
             Debug.LogWarning($"[AddressableUIImageLoader] addressableKey is empty on '{name}'.", this);

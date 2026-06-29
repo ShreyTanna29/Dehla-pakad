@@ -10,6 +10,9 @@ using TMPro;
 /// </summary>
 public class StatisticsScreenController : MonoBehaviour
 {
+    [Tooltip("When enabled, toggle/donut colors set in the Editor are not overwritten at runtime.")]
+    [SerializeField] private bool preserveManualAppearance = true;
+
     static readonly Color ToggleActive = new Color(0.69f, 0.27f, 0.11f, 1f); // #B0461C
     static readonly Color ToggleInactiveText = new Color(0.54f, 0.35f, 0.17f, 1f);
     static readonly Color ToggleActiveText = Color.white;
@@ -37,7 +40,8 @@ public class StatisticsScreenController : MonoBehaviour
     {
         Resolve();
         Wire();
-        Refresh();
+        if (!preserveManualAppearance)
+            Refresh();
     }
 
     void Resolve()
@@ -99,8 +103,14 @@ public class StatisticsScreenController : MonoBehaviour
         // The period dropdown handles its own open/close; we only react to a selection.
         if (_periodDropdown != null)
         {
-            _periodDropdown.OnSelected = (idx, val) => { _periodIndex = idx; Refresh(); };
-            _periodDropdown.SetValueSilent(_periodIndex);
+            _periodDropdown.OnSelected = (idx, val) =>
+            {
+                _periodIndex = idx;
+                if (!preserveManualAppearance)
+                    Refresh();
+            };
+            if (!preserveManualAppearance)
+                _periodDropdown.SetValueSilent(_periodIndex);
         }
         else if (_btnPeriod != null)
         {
@@ -113,24 +123,29 @@ public class StatisticsScreenController : MonoBehaviour
     void SetCategory(bool vsBots)
     {
         _vsBots = vsBots;
-        Refresh();
+        if (!preserveManualAppearance)
+            Refresh();
     }
 
     void CyclePeriod()
     {
         _periodIndex = (_periodIndex + 1) % Periods.Length;
-        if (_periodLabel != null) _periodLabel.text = Periods[_periodIndex];
-        // Note: data is all-time; period selection is a display preference until timestamped history exists.
-        Refresh();
+        if (!preserveManualAppearance)
+        {
+            if (_periodLabel != null) _periodLabel.text = Periods[_periodIndex];
+            Refresh();
+        }
     }
 
     void Refresh()
     {
-        // toggle styling
-        if (_vsBotsImg != null) _vsBotsImg.color = _vsBots ? ToggleActive : new Color(0, 0, 0, 0);
-        if (_onlineImg != null) _onlineImg.color = _vsBots ? new Color(0, 0, 0, 0) : ToggleActive;
-        if (_vsBotsLabel != null) _vsBotsLabel.color = _vsBots ? ToggleActiveText : ToggleInactiveText;
-        if (_onlineLabel != null) _onlineLabel.color = _vsBots ? ToggleInactiveText : ToggleActiveText;
+        if (!preserveManualAppearance)
+        {
+            if (_vsBotsImg != null) _vsBotsImg.color = _vsBots ? ToggleActive : new Color(0, 0, 0, 0);
+            if (_onlineImg != null) _onlineImg.color = _vsBots ? new Color(0, 0, 0, 0) : ToggleActive;
+            if (_vsBotsLabel != null) _vsBotsLabel.color = _vsBots ? ToggleActiveText : ToggleInactiveText;
+            if (_onlineLabel != null) _onlineLabel.color = _vsBots ? ToggleInactiveText : ToggleActiveText;
+        }
 
         ProfileStatsStore.CategoryStats s = ProfileStatsStore.Get(_vsBots);
         bool any = s.gamesPlayed > 0;
@@ -161,9 +176,12 @@ public class StatisticsScreenController : MonoBehaviour
             float frac = total > 0 ? cum / total : 0f;
             if (_segs[i] != null)
             {
-                _segs[i].color = DonutColors[i];
-                _segs[i].fillAmount = frac;
-                _segs[i].gameObject.SetActive(total > 0);
+                if (!preserveManualAppearance)
+                {
+                    _segs[i].color = DonutColors[i];
+                    _segs[i].fillAmount = frac;
+                    _segs[i].gameObject.SetActive(total > 0);
+                }
             }
             if (_legendCounts[i] != null) _legendCounts[i].text = counts[i].ToString();
         }

@@ -122,6 +122,23 @@ public class TurnManager : MonoBehaviourPunCallbacks
         if (timerText != null) timerText.text = "Wait...";
         if (timerFillBar != null) timerFillBar.fillAmount = 0;
         if (DynamicTimerSetup.Instance != null) DynamicTimerSetup.Instance.HideAll();
+
+        // Hide the standalone timer panel so the "YOUR TURN" text does not linger over the
+        // menu/Modes screen after a game ends or the player backs out. Panel_Timer lives at the
+        // root Canvas (a sibling of the game panel), so hiding the game panel does NOT hide it —
+        // we must hide it explicitly here. EnsureTimerVisible() re-activates it automatically
+        // when the next turn starts, so the in-game timer keeps working.
+        HideTimerUi();
+    }
+
+    void HideTimerUi()
+    {
+        ResolveTimerUi();
+        if (timerText != null && timerText.transform.parent != null)
+            timerText.transform.parent.gameObject.SetActive(false);
+        if (timerFillBar != null && timerFillBar.transform.parent != null
+            && DynamicTimerSetup.Instance == null)
+            timerFillBar.transform.parent.gameObject.SetActive(false);
     }
 
     // 🚀 MASTER SWITCH: If the previous master left mid-timer, the new one takes over.
@@ -158,6 +175,11 @@ public class TurnManager : MonoBehaviourPunCallbacks
         {
             if (PlayerHand.IsTrickLocked) yield break;
 
+            // Task 10: a turn timeout is NOT a disconnect. When the 18s timer elapses we ONLY
+            // auto-play a valid card for the current actor — we never mark the player offline,
+            // inactive, abandoned, or kick/replace them with a bot. (Offline/abandon handling lives
+            // exclusively in NetworkManager and is driven by real Photon disconnect events, never by
+            // this timer.) This keeps a slow/AFK human in their seat with a card auto-played for them.
             if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null
                 && DeckManager.Instance.IsActorBotControlled(currentActorTurn)
                 && PlayerHand.LocalInstance != null)

@@ -39,6 +39,10 @@ public class PlayerProfileManager : MonoBehaviour
 
     [Header("Profile View UI (Stats)")]
     public GameObject panelPlayerProfile;
+
+    [Tooltip("Keeps the entire Player Profile panel exactly as authored in the Editor — no runtime text, image, layout, or stat overrides.")]
+    [SerializeField] private bool preserveManualProfileLayout = true;
+
     public TMPro.TMP_Text textProfileName;
     public TMPro.TMP_Text textCoins;
     public UnityEngine.UI.Image imgCurrentAvatar;
@@ -53,6 +57,7 @@ public class PlayerProfileManager : MonoBehaviour
 
     private int selectedAvatarIndex = -1;
     private string _pendingProfileUserId;
+    private string _pendingDefaultUsername;
     private bool _isEditingExistingProfile;
 
     private const string PREFS_USERNAME = "PlayerUsername";
@@ -254,6 +259,7 @@ public class PlayerProfileManager : MonoBehaviour
     public void CheckAndLoadUserProfile(string userId, string defaultName)
     {
         _pendingProfileUserId = userId;
+        _pendingDefaultUsername = defaultName;
         Debug.Log($"[ProfileManager] Checking profile for {userId}...");
 
         FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).GetReference("users").Child(userId)
@@ -296,6 +302,37 @@ public class PlayerProfileManager : MonoBehaviour
     {
         ShowProfileSetup(false);
         PrefillProfileSetupFromSnapshot(snapshot);
+
+        if (inputPlayerName != null && string.IsNullOrWhiteSpace(inputPlayerName.text)
+            && !string.IsNullOrWhiteSpace(_pendingDefaultUsername)
+            && IsValidUsername(_pendingDefaultUsername, out _))
+        {
+            inputPlayerName.text = _pendingDefaultUsername.Trim();
+        }
+    }
+
+    /// <summary>Derives a default username from the Google account email (local-part, max 15 chars).</summary>
+    public static string GenerateDefaultUsername(string email)
+    {
+        if (string.IsNullOrEmpty(email)) return "GuestPlayer";
+
+        string name = email.Split('@')[0];
+
+        if (name.Length > 15)
+            name = name.Substring(0, 15);
+
+        // Keep only letters/digits so it passes username validation.
+        var cleaned = new System.Text.StringBuilder(name.Length);
+        foreach (char c in name)
+        {
+            if (char.IsLetterOrDigit(c))
+                cleaned.Append(c);
+        }
+
+        if (cleaned.Length < 2)
+            return "GuestPlayer";
+
+        return cleaned.ToString();
     }
 
     void CacheProfileLocally(string username, int avatarIndex)
@@ -482,14 +519,27 @@ public class PlayerProfileManager : MonoBehaviour
         string uid = user.UserId;
         DeleteFirebaseUserData(uid, () => AttemptFirebaseAccountDelete(user, false, onComplete));
 #else
-        // ---- Editor: the native Google/Firebase SDK runs mobile-only code here and throws a
-        // "typeof signature not found"/reflection error. Simulate a successful delete instead so
-        // the flow can be tested in the Editor without touching native code. Works perfectly on Android. ----
-        Debug.Log("Account deleted simulated in Editor");
-        PlayerPrefs.DeleteAll();
-        PlayerPrefs.Save();
-        onComplete?.Invoke(true, null);
+        // ---- Editor: simulate delete, then sign out via the centralized logout flow. ----
+        Debug.Log("[ProfileManager] Account delete simulated in Editor");
+        string uid = FirebaseAuth.DefaultInstance?.CurrentUser?.UserId;
+        if (!string.IsNullOrEmpty(uid))
+            DeleteFirebaseUserData(uid, () => FinishEditorDeleteSimulation(onComplete));
+        else
+            FinishEditorDeleteSimulation(onComplete);
 #endif
+    }
+
+    void FinishEditorDeleteSimulation(System.Action<bool, string> onComplete)
+    {
+        if (LogoutManager.Instance != null)
+        {
+            LogoutManager.Instance.Logout();
+            onComplete?.Invoke(true, null);
+            return;
+        }
+
+        ClearAllDataAndSignOut();
+        onComplete?.Invoke(true, null);
     }
 
     void DeleteFirebaseUserData(string uid, System.Action onDone)
@@ -657,8 +707,18 @@ public class PlayerProfileManager : MonoBehaviour
         string username = PlayerPrefs.GetString(PREFS_USERNAME, string.Empty);
         int avatarIndex = PlayerPrefs.GetInt(PREFS_AVATAR_INDEX, 0);
 
-        if (textHomeProfileName != null)
-            textHomeProfileName.text = username;
+        // Home screen name/avatar is dynamic player identity and must always reflect the
+        // logged-in user. It is intentionally NOT gated by preserveManualProfileLayout, which
+        // only protects the Player Profile (stats) panel. ClearHomeProfileDisplay() blanks the
+        // home name at login, so it must be restored here or it stays empty.
+        if (!string.IsNullOrEmpty(username))
+        {
+            if (textHomeProfileName != null)
+                textHomeProfileName.text = username;
+
+            if (GoogleLogin.Instance != null && GoogleLogin.Instance.profileNameText != null)
+                GoogleLogin.Instance.profileNameText.text = username;
+        }
 
         if (imgHomeProfileAvatar != null && profileSprites != null && profileSprites.Length > avatarIndex)
         {
@@ -666,17 +726,22 @@ public class PlayerProfileManager : MonoBehaviour
             imgHomeProfileAvatar.preserveAspect = true;
         }
 
-        if (textProfileName != null)
-            textProfileName.text = username;
+        if (!preserveManualProfileLayout)
+        {
+            if (textProfileName != null)
+                textProfileName.text = username;
 
-        if (imgCurrentAvatar != null && profileSprites != null && profileSprites.Length > avatarIndex)
-            imgCurrentAvatar.sprite = profileSprites[avatarIndex];
+            if (imgCurrentAvatar != null && profileSprites != null && profileSprites.Length > avatarIndex)
+                imgCurrentAvatar.sprite = profileSprites[avatarIndex];
+        }
 
         if (!string.IsNullOrEmpty(username))
             PhotonNetwork.NickName = username;
 
         PublishAvatarToNetwork(avatarIndex);
-        RefreshUidDisplays();
+
+        if (!preserveManualProfileLayout)
+            RefreshUidDisplays();
     }
 
     /// <summary>
@@ -870,20 +935,24 @@ public class PlayerProfileManager : MonoBehaviour
             return;
         }
 
-        UpdateProfileUI();
+        if (!preserveManualProfileLayout)
+        {
+            UpdateProfileUI();
+
+            if (textTotalMatches != null) textTotalMatches.text = "0";
+            if (textWins != null) textWins.text = "0";
+            if (textWinRatio != null) textWinRatio.text = "0%";
+            if (textTotalKOT != null) textTotalKOT.text = "0";
+
+            CanvasGroup cg = panelPlayerProfile.GetComponent<CanvasGroup>();
+            if (cg == null) cg = panelPlayerProfile.AddComponent<CanvasGroup>();
+            cg.alpha = 1f;
+            cg.interactable = true;
+            cg.blocksRaycasts = true;
+        }
+
         panelPlayerProfile.SetActive(true);
         panelPlayerProfile.transform.SetAsLastSibling();
-
-        CanvasGroup cg = panelPlayerProfile.GetComponent<CanvasGroup>();
-        if (cg == null) cg = panelPlayerProfile.AddComponent<CanvasGroup>();
-        cg.alpha = 1f;
-        cg.interactable = true;
-        cg.blocksRaycasts = true;
-
-        if (textTotalMatches != null) textTotalMatches.text = "0";
-        if (textWins != null) textWins.text = "0";
-        if (textWinRatio != null) textWinRatio.text = "0%";
-        if (textTotalKOT != null) textTotalKOT.text = "0";
     }
 
     public void OnEditProfileClicked()

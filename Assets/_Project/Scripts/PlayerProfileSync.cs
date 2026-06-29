@@ -16,8 +16,10 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
     public TMP_Text txtRightName;   
 
     [Header("Name Label Styling")]
-    [Tooltip("Font size applied to the seat name labels (and the local player's name) in the game screen.")]
-    public float seatNameFontSize = 42f;
+    [Tooltip("Font size applied to the seat name labels when overrideSeatNameFont is enabled.")]
+    public float seatNameFontSize = 24f;
+    [Tooltip("When disabled, TMP font size / auto-size set in the Editor are preserved.")]
+    [SerializeField] private bool overrideSeatNameFont = false;
     bool _nameFontApplied;
 
     [Header("Avatar Settings")]
@@ -120,7 +122,7 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
     // Task 12: enlarge the seat name labels (and local name) for readability.
     void ApplySeatNameFontSize()
     {
-        if (_nameFontApplied) return;
+        if (!overrideSeatNameFont || _nameFontApplied) return;
         bool anyApplied = false;
         anyApplied |= SetFontSize(txtLeftName);
         anyApplied |= SetFontSize(txtTopName);
@@ -132,8 +134,17 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
     bool SetFontSize(TMP_Text label)
     {
         if (label == null) return false;
-        label.enableAutoSizing = false;
-        label.fontSize = seatNameFontSize;
+        // Task 12: enlarge names. For auto-sizing labels keep auto-sizing but raise the max cap
+        // (and current size) so they render noticeably bigger; for fixed labels set the size directly.
+        if (label.enableAutoSizing)
+        {
+            if (label.fontSizeMax < seatNameFontSize) label.fontSizeMax = seatNameFontSize;
+            if (label.fontSize < seatNameFontSize) label.fontSize = seatNameFontSize;
+        }
+        else
+        {
+            label.fontSize = seatNameFontSize;
+        }
         return true;
     }
 
@@ -203,16 +214,22 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
         foreach (Player p in PhotonRoomPlayers.GetSorted())
         {
             if (p == null || p.IsLocal) continue;
+
+            // Task 24: a seat handed to a bot (the host replaced this player, or this real actor was
+            // marked a bot) must be painted exclusively by the bot loop below — never as a present
+            // human. This covers the case where the replaced player still LINGERS in the room as an
+            // ACTIVE member because PhotonNetwork.CloseConnection is not permitted on every server
+            // tier, which previously left their seat showing the real name AND avatar ("phantom
+            // present player"). Skip bot-controlled actors here regardless of active/inactive state.
+            if (DeckManager.Instance != null && DeckManager.Instance.IsActorBotControlled(p.ActorNumber))
+                continue;
+
             int seatIndex = GetSeatIndex(p.ActorNumber);
-            
+
             string displayName = p.NickName;
             if (p.IsInactive)
-            {
-                if (DeckManager.Instance != null && DeckManager.Instance.IsActorBotControlled(p.ActorNumber))
-                    continue;
                 displayName += "\n(Disconnected)";
-            }
-            
+
             SetSeatText(seatIndex, displayName);
             AssignAvatarBySeat(seatIndex, p.ActorNumber);
         }

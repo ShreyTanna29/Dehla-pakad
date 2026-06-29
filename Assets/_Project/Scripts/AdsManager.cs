@@ -9,12 +9,11 @@ public class AdsManager : MonoBehaviour
 {
     public static AdsManager Instance { get; private set; }
 
-    private const string AppKey = "800076896";
-
-    // Ad unit IDs from the LevelPlay dashboard (Android).
-    private const string BannerAdUnitId = "Banner_Android";
-    private const string InterstitialAdUnitId = "Interstitial_Android";
-    private const string RewardedAdUnitId = "Rewarded_Android";
+    // LevelPlay app key + ad unit IDs (Unity Ads via LevelPlay mediation — Android).
+    private const string AppKey = "9z0r2p9t0taaamdo";
+    private const string BannerAdUnitId = "p6rgvxqq8mizlfek";       // Native/bottom banner — leaderboard
+    private const string InterstitialAdUnitId = "fjzp9u7hkfwgm8vc"; // Full-screen — exit confirm
+    private const string RewardedAdUnitId = "gfkade502ycigqvn";     // Watch Ad button — 1 coin
 
     private LevelPlayBannerAd _bannerAd;
     private LevelPlayInterstitialAd _interstitialAd;
@@ -24,10 +23,25 @@ public class AdsManager : MonoBehaviour
     private bool _sdkInitialized;
     private bool _adsCreated;
     private System.Action _interstitialClosedCallback;
+    private System.Action _rewardedClosedCallback;
+    private bool _rewardedExitFlow;
 
     public bool IsInitialized => _sdkInitialized;
 
     #region Lifecycle
+
+    /// <summary>
+    /// Guarantees the ads singleton exists at startup even when no AdsManager is placed in the
+    /// scene. Mirrors the bootstrap pattern used by AppStateManager so ad calls
+    /// (banner / interstitial / rewarded) never silently no-op on a null Instance.
+    /// </summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void Bootstrap()
+    {
+        if (Instance != null) return;
+        var go = new GameObject("AdsManager");
+        go.AddComponent<AdsManager>();
+    }
 
     private void Awake()
     {
@@ -204,6 +218,41 @@ public class AdsManager : MonoBehaviour
         return _sdkInitialized && _interstitialAd != null && _interstitialAd.IsAdReady();
     }
 
+    /// <summary>
+    /// Shows the best available full-screen ad (interstitial, else rewarded). Invokes
+    /// <paramref name="onClosed"/> when dismissed or when no ad is ready.
+    /// </summary>
+    public void ShowBestEffortFullscreenAd(System.Action onClosed)
+    {
+        if (IsInterstitialReady())
+        {
+            ShowInterstitialThenRun(onClosed);
+            return;
+        }
+
+        if (IsRewardedAdReady())
+        {
+            _rewardedExitFlow = true;
+            _rewardedClosedCallback = onClosed;
+            Debug.Log("[AdsManager] Interstitial not ready — showing rewarded as fallback.");
+            ShowRewardedAd();
+            return;
+        }
+
+        Debug.LogWarning("[AdsManager] No fullscreen ad ready — continuing without ad.");
+        LoadInterstitial();
+        LoadRewardedAd();
+        onClosed?.Invoke();
+    }
+
+    /// <summary>Preloads banner + fullscreen ads (call when opening panels that will show ads).</summary>
+    public void PreloadAds()
+    {
+        LoadBanner();
+        LoadInterstitial();
+        LoadRewardedAd();
+    }
+
     #endregion
 
     #region Public API — Rewarded
@@ -254,6 +303,7 @@ public class AdsManager : MonoBehaviour
         if (isActiveAndEnabled)
             SubscribeAdEvents();
 
+        LoadBanner();
         LoadInterstitial();
         LoadRewardedAd();
     }
@@ -479,12 +529,46 @@ public class AdsManager : MonoBehaviour
     private void OnRewardedDisplayFailed(LevelPlayAdInfo adInfo, LevelPlayAdError error)
     {
         Debug.LogWarning($"[AdsManager] [Rewarded] onRewardedVideoAdShowFailed: {adInfo}, error: {error}");
+
+        if (_rewardedExitFlow)
+        {
+            _rewardedExitFlow = false;
+            System.Action cb = _rewardedClosedCallback;
+            _rewardedClosedCallback = null;
+            cb?.Invoke();
+        }
     }
+
+    private const int RewardedAdCoinAmount = 1;
 
     private void OnRewardedVideoRewarded(LevelPlayAdInfo adInfo, LevelPlayReward reward)
     {
-        Debug.Log("Reward Player!");
         Debug.Log($"[AdsManager] [Rewarded] onRewardedVideoAdRewarded: ad={adInfo}, reward={reward}");
+
+        if (_rewardedExitFlow)
+        {
+            _rewardedExitFlow = false;
+            return;
+        }
+
+        if (CurrencyAndInventoryManager.Instance != null)
+        {
+            CurrencyAndInventoryManager.Instance.AddCoins(RewardedAdCoinAmount);
+            Debug.Log($"[AdsManager] Rewarded player {RewardedAdCoinAmount} coins for watching an ad.");
+
+            if (GoogleLogin.Instance != null && GoogleLogin.Instance.homePanel != null && GoogleLogin.Instance.homePanel.activeInHierarchy)
+            {
+                ProfileToast.Show(GoogleLogin.Instance.homePanel.transform, $"Coins +{RewardedAdCoinAmount} awarded!");
+            }
+            else if (UiSafeLookup.TryGet("Button_WatchAd", out GameObject watchAd) && watchAd != null)
+            {
+                ProfileToast.Show(watchAd.transform, $"Coins +{RewardedAdCoinAmount} awarded!");
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[AdsManager] CurrencyAndInventoryManager.Instance not found — could not award coins.");
+        }
     }
 
     private void OnRewardedClicked(LevelPlayAdInfo adInfo)
@@ -496,6 +580,24 @@ public class AdsManager : MonoBehaviour
     {
         Debug.Log($"[AdsManager] [Rewarded] onRewardedVideoAdClosed: {adInfo}");
         LoadRewardedAd();
+
+        if (_rewardedExitFlow)
+        {
+            _rewardedExitFlow = false;
+            System.Action exitCb = _rewardedClosedCallback;
+            _rewardedClosedCallback = null;
+            exitCb?.Invoke();
+            return;
+        }
+
+        _rewardedClosedCallback = null;
+
+        if (UiSafeLookup.TryGet("Button_WatchAd", out GameObject watchAd) && watchAd != null)
+        {
+            var pulse = watchAd.GetComponent<WatchAdButtonController>();
+            if (pulse != null && watchAd.activeInHierarchy)
+                pulse.StartPulse();
+        }
     }
 
     #endregion

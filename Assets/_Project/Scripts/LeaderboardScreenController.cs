@@ -14,6 +14,9 @@ using TMPro;
 /// </summary>
 public class LeaderboardScreenController : MonoBehaviour
 {
+    [Tooltip("When enabled, tab/toggle colors set in the Editor are not overwritten at runtime.")]
+    [SerializeField] private bool preserveManualAppearance = true;
+
     static readonly Color TabActive = Color.white;
     static readonly Color TabInactive = new Color(1f, 1f, 1f, 0.5f);
     static readonly Color LabelActive = Color.white;
@@ -52,12 +55,13 @@ public class LeaderboardScreenController : MonoBehaviour
     {
         Resolve();
         Wire();
-        Refresh();
+        if (!preserveManualAppearance)
+            Refresh();
     }
 
     void Update()
     {
-        if (_endsIn == null) return;
+        if (preserveManualAppearance || _endsIn == null) return;
         TimeSpan left = NextWeeklyReset() - DateTime.UtcNow;
         if (left.Ticks < 0) left = TimeSpan.Zero;
         _endsIn.text = $"Ends in : {left.Days}d {left.Hours}h {left.Minutes}m {left.Seconds}s";
@@ -109,29 +113,34 @@ public class LeaderboardScreenController : MonoBehaviour
         if (_tCountry) { _tCountry.onClick.RemoveAllListeners(); _tCountry.onClick.AddListener(() => SetTab("Country")); }
         if (_tFriends) { _tFriends.onClick.RemoveAllListeners(); _tFriends.onClick.AddListener(() => SetTab("Friends")); }
 
-        if (_btnBots) { _btnBots.onClick.RemoveAllListeners(); _btnBots.onClick.AddListener(() => { _vsBots = true; Refresh(); }); }
-        if (_btnOnline) { _btnOnline.onClick.RemoveAllListeners(); _btnOnline.onClick.AddListener(() => { _vsBots = false; Refresh(); }); }
-        if (_btnSkill) { _btnSkill.onClick.RemoveAllListeners(); _btnSkill.onClick.AddListener(() => { _bySkill = true; Refresh(); }); }
-        if (_btnHigh) { _btnHigh.onClick.RemoveAllListeners(); _btnHigh.onClick.AddListener(() => { _bySkill = false; Refresh(); }); }
+        if (_btnBots) { _btnBots.onClick.RemoveAllListeners(); _btnBots.onClick.AddListener(() => { _vsBots = true; if (!preserveManualAppearance) Refresh(); }); }
+        if (_btnOnline) { _btnOnline.onClick.RemoveAllListeners(); _btnOnline.onClick.AddListener(() => { _vsBots = false; if (!preserveManualAppearance) Refresh(); }); }
+        if (_btnSkill) { _btnSkill.onClick.RemoveAllListeners(); _btnSkill.onClick.AddListener(() => { _bySkill = true; if (!preserveManualAppearance) Refresh(); }); }
+        if (_btnHigh) { _btnHigh.onClick.RemoveAllListeners(); _btnHigh.onClick.AddListener(() => { _bySkill = false; if (!preserveManualAppearance) Refresh(); }); }
 
-        if (_period != null) _period.OnSelected = (i, v) => Refresh();
+        if (_period != null) _period.OnSelected = (i, v) => { if (!preserveManualAppearance) Refresh(); };
         _wired = true;
     }
 
-    void SetTab(string tab) { _tab = tab; Refresh(); }
+    void SetTab(string tab)
+    {
+        _tab = tab;
+        if (!preserveManualAppearance)
+            Refresh();
+    }
 
     void Refresh()
     {
-        // tab styling
-        Style(_tWorldBg, _tWorldL, _tab == "World");
-        Style(_tCountryBg, _tCountryL, _tab == "Country");
-        Style(_tFriendsBg, _tFriendsL, _tab == "Friends");
-
-        // toggle styling — clean two-cell segmented look (filled selected, faint unselected)
-        StyleSeg(_botsBg, _botsL, _vsBots);
-        StyleSeg(_onlineBg, _onlineL, !_vsBots);
-        StyleSeg(_skillBg, _skillL, _bySkill);
-        StyleSeg(_highBg, _highL, !_bySkill);
+        if (!preserveManualAppearance)
+        {
+            Style(_tWorldBg, _tWorldL, _tab == "World");
+            Style(_tCountryBg, _tCountryL, _tab == "Country");
+            Style(_tFriendsBg, _tFriendsL, _tab == "Friends");
+            StyleSeg(_botsBg, _botsL, _vsBots);
+            StyleSeg(_onlineBg, _onlineL, !_vsBots);
+            StyleSeg(_skillBg, _skillL, _bySkill);
+            StyleSeg(_highBg, _highL, !_bySkill);
+        }
 
         List<Entry> list = BuildEntries();
         list.Sort((a, b) => Value(b).CompareTo(Value(a)));

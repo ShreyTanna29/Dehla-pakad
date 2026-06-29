@@ -34,9 +34,9 @@ public class PastGamesScreenController : MonoBehaviour
             Destroy(c.gameObject);
         }
 
-        var history = ProfileStatsStore.History;
+        var history = ProfileStatsStore.FetchAllPastGames();
         if (emptyLabel != null) emptyLabel.SetActive(history == null || history.Count == 0);
-        if (history == null) return;
+        if (history == null || history.Count == 0) return;
 
         rowTemplate.SetActive(false);
 

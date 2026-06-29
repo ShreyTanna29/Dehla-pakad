@@ -135,25 +135,42 @@ public class CurrencyAndInventoryManager : MonoBehaviour
     #region Coins
 
     /// <summary>
-    /// Task 43 — Placeholder for signup / first-login / daily currency rewards.
-    /// Grants a one-time signup bonus, guarded by a PlayerPrefs flag so it only happens once.
-    /// Extend with daily-login, win-streak, or referral rewards as needed.
+    /// Signup / first-login rewards. Values should match the project's currency document when available.
+    /// TODO: wire daily-login, win-streak, and referral rewards from currency config when provided.
     /// </summary>
     public void ProcessRewardsLogic()
     {
         const string SignupRewardKey = "Reward_SignupGranted";
-        const int SignupBonus = 500;
 
         if (PlayerPrefs.GetInt(SignupRewardKey, 0) == 1)
-            return; // already granted — do nothing
+            return;
 
-        AddCoins(SignupBonus);
+        AddCoins(DefaultNewAccountCoins);
+        GrantDefaultFreeVoicePacks();
         PlayerPrefs.SetInt(SignupRewardKey, 1);
         PlayerPrefs.Save();
-        Debug.Log($"[Rewards] Signup bonus granted: +{SignupBonus} coins.");
-
-        // TODO: daily-login reward, win-streak reward, referral reward, etc.
+        Debug.Log($"[Rewards] Signup bonus granted: +{DefaultNewAccountCoins} coins.");
     }
+
+    /// <summary>Basic voice packs are free for all users — safe placeholders until audio assets ship.</summary>
+    public void GrantDefaultFreeVoicePacks()
+    {
+        bool changed = false;
+        foreach (string id in DefaultFreeVoicePackIds)
+        {
+            if (HasItem(id)) continue;
+            ownedItems.Add(id);
+            changed = true;
+        }
+        if (changed)
+            SyncInventory();
+    }
+
+    static readonly string[] DefaultFreeVoicePackIds =
+    {
+        "voice_default_1",
+        "voice_default_2"
+    };
 
     /// <summary>Adds coins (e.g. from an IAP) and syncs the new balance to Firebase.</summary>
     public void AddCoins(int amount)
@@ -341,13 +358,10 @@ public class CurrencyAndInventoryManager : MonoBehaviour
             DataSnapshot snapshot = task.Result;
             bool isNewAccount = ApplySnapshot(snapshot);
 
-            // Brand-new account (no coins stored yet): grant the starting balance and persist it.
             if (isNewAccount)
-            {
-                coins = DefaultNewAccountCoins;
-                SyncCoins();
-                Debug.Log($"[Currency] New account detected — granted {DefaultNewAccountCoins} starting coins.");
-            }
+                ProcessRewardsLogic();
+            else
+                GrantDefaultFreeVoicePacks();
 
             _dataLoaded = true;
             OnCoinsChanged?.Invoke();

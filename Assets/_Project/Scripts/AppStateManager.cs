@@ -14,17 +14,23 @@ public class AppStateManager : MonoBehaviour
 {
     public static AppStateManager Instance { get; private set; }
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void Bootstrap()
+    {
+        if (Instance != null) return;
+        var go = new GameObject("AppStateManager");
+        go.AddComponent<AppStateManager>();
+    }
+
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // --- TASK 22: keep the app alive while minimized / in the background ---
-        // The OS may still kill the process under memory pressure; this prevents Unity from
-        // suspending the player itself.
         Application.runInBackground = true;
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
+        ApplyLandscapeOrientation();
     }
 
     void Start()
@@ -53,11 +59,11 @@ public class AppStateManager : MonoBehaviour
     // ============================================================
     void OnApplicationPause(bool paused)
     {
-        // Re-assert background policy on resume; some platforms reset it.
         if (!paused)
         {
             Application.runInBackground = true;
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            ApplyLandscapeOrientation();
         }
         Debug.Log($"[AppStateManager] OnApplicationPause(paused={paused})");
     }

@@ -66,6 +66,12 @@ public class ResultManager : MonoBehaviourPunCallbacks
     const float InterRoundLeaderboardSeconds = 5f;
     const float MatchEndLeaderboardSeconds = 10f;
 
+    // Task 15: full-screen-bottom banner ad reserve. The board is lifted clear of this band so the
+    // leaderboard never overlaps the bottom banner ad. Kept in one place so the banner placeholder
+    // and the board lift stay in sync.
+    const float BannerAdHeightPx = 110f;
+    const float BannerAdSafeMarginPx = 24f;
+
     private PlayerResult[] playerResults = new PlayerResult[4];
     private Transform _builtRoot;
     private Image _dimOverlay;
@@ -248,12 +254,16 @@ public class ResultManager : MonoBehaviourPunCallbacks
         _dimOverlay.color = new Color(0f, 0f, 0f, 0.55f);
         _dimOverlay.raycastTarget = true;
 
-        // Task 16: tapping outside the board (on the full-screen overlay) closes the leaderboard.
+        // Task 16: tapping outside the board (on the full-screen overlay) closes the leaderboard —
+        // but ONLY when the panel is shown manually. Task 13: during an automatic inter-round /
+        // match-end transition the leaderboard must stay up for its full duration, so we do NOT wire
+        // tap-to-close while _autoTransitionMode is active (a stray tap was dismissing it instantly).
         var overlayBtn = _dimOverlay.GetComponent<Button>();
         if (overlayBtn == null) overlayBtn = _dimOverlay.gameObject.AddComponent<Button>();
         overlayBtn.transition = Selectable.Transition.None;
         overlayBtn.onClick.RemoveAllListeners();
-        overlayBtn.onClick.AddListener(CloseResult);
+        if (!_autoTransitionMode)
+            overlayBtn.onClick.AddListener(CloseResult);
     }
 
     string GetInitialPlayerName(int i)=> i == 0 ? "You" : "Dehla_AI_" + i;
@@ -360,21 +370,55 @@ public class ResultManager : MonoBehaviourPunCallbacks
         if (TurnManager.Instance != null)
             TurnManager.Instance.StopTimer();
 
-        EnsurePlayerResults();
-        RefreshPlayerNamesAndActors();
-        CalculateScores();
-        AssignRanks();
-        FinalizeCurrentRoundScores();
+        // Task 17 root cause: the next-round trigger used to be scheduled AFTER the (heavy, fragile)
+        // scoring + Panel_Winning UI build. Any exception thrown while computing scores or building
+        // the leaderboard aborted OnRoundCompleted before BeginRoundEndSequence/RoundTransitionRoutine
+        // was ever reached — so the next round never started. We now compute scores and render the
+        // leaderboard defensively (try/catch) and mark the transition as running FIRST, guaranteeing
+        // the next-round deal is always scheduled regardless of any UI/scoring failure.
+        try
+        {
+            EnsurePlayerResults();
+            RefreshPlayerNamesAndActors();
+            CalculateScores();
+            AssignRanks();
+            FinalizeCurrentRoundScores();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[Result] Round scoring failed (continuing round lifecycle): {e}");
+        }
 
         bool matchOver = IsMatchOver();
         if (matchOver)
             GameFlowState.SetPhase(GameFlowPhase.GameFinished, forceRecovery: true);
 
-        ShowRoundLeaderboard(matchOver);
-
+        // Set BEFORE the leaderboard render so an exception below can never block the trigger.
         _roundTransitionRunning = true;
         bool authoritative = PhotonNetwork.IsMasterClient || PhotonNetwork.OfflineMode;
-        StartCoroutine(RoundTransitionRoutine(matchOver, authoritative));
+
+        try
+        {
+            ShowRoundLeaderboard(matchOver);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[Result] Leaderboard render failed (continuing round lifecycle): {e}");
+        }
+
+        if (matchOver)
+            StartCoroutine(RoundTransitionRoutine(matchOver, authoritative));
+        else if (GameManager.Instance != null)
+            GameManager.Instance.BeginRoundEndSequence(authoritative);
+        else
+            StartCoroutine(RoundTransitionRoutine(matchOver, authoritative));
+    }
+
+    /// <summary>Called by <see cref="GameManager"/> once the leaderboard window and hide are complete.</summary>
+    public void NotifyRoundEndSequenceComplete()
+    {
+        HideResultPanelImmediate();
+        _roundTransitionRunning = false;
     }
 
     IEnumerator RoundTransitionRoutine(bool matchOver, bool authoritative)
@@ -408,7 +452,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
             if (PhotonNetwork.IsMasterClient || PhotonNetwork.OfflineMode)
                 DeckManager.Instance.ResetRoundStateForNextRound();
             if (DeckManager.Instance.photonView != null)
-                DeckManager.Instance.photonView.RPC(nameof(DeckManager.RPC_BeginNextRound), RpcTarget.All, nextRound);
+                DeckManager.Instance.photonView.RPC(nameof(DeckManager.RPC_BeginNextRound), RpcTarget.AllBuffered, nextRound);
         }
     }
 
@@ -427,7 +471,26 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     public void CloseResult()
     {
+        // Task 13: while an automatic round/match transition is in progress the leaderboard owns its
+        // own display window (inter-round 5s / match-end 10s) and is torn down by the transition
+        // routine. Ignore manual close requests during that window so it can never be dismissed early.
+        if (_autoTransitionMode && _roundTransitionRunning) return;
         HideResultPanelImmediate();
+    }
+
+    /// <summary>
+    /// Hard, immediate leaderboard teardown callable from the deal pipeline. Guarantees that NO
+    /// client begins rendering the next deal while its leaderboard is still on screen (the per-client
+    /// 5s hide timers can drift, so the dealing RPC could otherwise arrive before a client hides).
+    /// </summary>
+    public void ForceHideLeaderboardNow()
+    {
+        if (_roundTransitionRunning)
+        {
+            StopAllCoroutines();          // cancel this client's own pending 5s hide
+            _roundTransitionRunning = false;
+        }
+        HideResultPanelImmediate();       // instant hide (no tween)
     }
 
     void EnsurePlayerResults()
@@ -525,12 +588,15 @@ public class ResultManager : MonoBehaviourPunCallbacks
             frame.localScale = Vector3.one;
             frame.SetAsLastSibling();
 
-            // Lift the board above the banner without shrinking it (no offsetMin / sizeDelta hacks).
+            // Task 15: lift the board fully above the bottom banner ad (no shrinking / no
+            // offsetMin / sizeDelta hacks). The board bottom must clear the banner band
+            // (BannerAdHeightPx) plus a small safe margin so the two never overlap.
             var frt = frame as RectTransform;
             if (frt != null)
             {
                 Vector2 pos = frt.anchoredPosition;
-                if (pos.y < 55f) pos.y = 55f;
+                float minY = BannerAdHeightPx + BannerAdSafeMarginPx; // ~134px above center baseline
+                if (pos.y < minY) pos.y = minY;
                 frt.anchoredPosition = pos;
             }
         }
@@ -663,6 +729,17 @@ public class ResultManager : MonoBehaviourPunCallbacks
             playerResults[i].score = totals[i];
         }
 
+        // Task 6: friends 2v2 — final standings are by TEAM (combined dehlas), not 4 individuals.
+        if (IsFriendsTeamMode())
+        {
+            int teamA = totals[0] + totals[2];
+            int teamB = totals[1] + totals[3];
+            playerResults[0].score = playerResults[2].score = teamA;
+            playerResults[1].score = playerResults[3].score = teamB;
+            AssignTeamRanks();
+            return;
+        }
+
         var ranked = totals.Select((value, index) => (value, index)).OrderByDescending(x => x.value).ToList();
         for (int r = 0; r < ranked.Count; r++)
             playerResults[ranked[r].index].rank = r + 1;
@@ -689,17 +766,113 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     void CalculateScores()
     {
-        // Simple scoring based on Dehlas and tricks
-        foreach (var p in playerResults)
+        // Task 28: a player's leaderboard score is their CUMULATIVE Dehlas captured across every
+        // round played so far (Dehla Pakad's actual scoring metric) — NOT a per-round trick/dehla
+        // blend. This makes the inter-round ranks reflect the true running standings and stay
+        // consistent with the match-end ranking (AssignMatchRanksFromHistory), which also sums
+        // dehlas per seat. Tricks won are retained only as a deterministic tiebreak in
+        // CompareForLeaderboard. The current (not-yet-finalized) round is added from the live
+        // playerResults, while previous rounds come from roundHistory.
+        for (int seat = 0; seat < playerResults.Length; seat++)
         {
-            p.score = (p.tricksWon * 10) + (p.dehlasCollected * 20);
+            PlayerResult p = playerResults[seat];
+            if (p == null) continue;
+
+            int cumulativeDehlas = p.dehlasCollected; // current round (not yet in roundHistory)
+            foreach (RoundResult rr in roundHistory)
+            {
+                // Skip the current round if it has already been finalized into history, so it is
+                // never double-counted (e.g. when the panel is re-shown).
+                if (rr == null || rr.roundNumber == currentRound) continue;
+                if (rr.dehlasPerSeat != null && seat < rr.dehlasPerSeat.Length)
+                    cumulativeDehlas += rr.dehlasPerSeat[seat];
+            }
+
+            p.score = cumulativeDehlas;
             p.isCompleted = true;
         }
+
+        // Task 6: in FRIENDS 2v2 each partnership shares a single score (combined dehlas), so the
+        // leaderboard ranks/wins by TEAM instead of 4 individuals. 1v1v1v1 (bots/online) is untouched.
+        if (IsFriendsTeamMode())
+            ApplyTeamScores();
+    }
+
+    /// <summary>
+    /// Task 6 — Friends 2v2 team format. Active ONLY in a private friends room running logic mode 2
+    /// (LogicB / 2v2, synced via room property "LM"). Bots/Online (1v1v1v1, logic mode 1) return
+    /// false so their per-individual scoring is left completely unchanged.
+    /// </summary>
+    bool IsFriendsTeamMode()
+    {
+        if (!DeckManager.IsPrivateFriendsRoom()) return false;
+        return GetLogicMode() == 2;
+    }
+
+    /// <summary>Reads the active logic mode (1 = 1v1v1v1, 2 = 2v2). Prefers the synced room prop "LM".</summary>
+    static int GetLogicMode()
+    {
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("LM", out object lm) && lm is int li)
+            return li;
+        if (ModeManager.Instance != null) return ModeManager.Instance.currentLogicMode;
+        return 1;
+    }
+
+    /// <summary>
+    /// Task 6 — Partners sit ACROSS the table: visual seats {0,2} = Team A, seats {1,3} = Team B
+    /// (seat 0 is always the local player). Each member's leaderboard SCORE becomes their team's
+    /// combined dehlas so ranking groups partners together and produces a team win. Individual
+    /// dehlasCollected / tricksWon are intentionally left intact for per-seat display and tiebreaks.
+    /// </summary>
+    void ApplyTeamScores()
+    {
+        float teamA = playerResults[0].score + playerResults[2].score;
+        float teamB = playerResults[1].score + playerResults[3].score;
+        playerResults[0].score = playerResults[2].score = teamA;
+        playerResults[1].score = playerResults[3].score = teamB;
+    }
+
+    /// <summary>
+    /// Task 6 — Assigns a TEAM rank: both members of the higher-scoring partnership get rank 1, the
+    /// other pair rank 2. Assumes <see cref="ApplyTeamScores"/> has already written team totals into
+    /// each member's score. Tie-break is client-independent (lowest actorNumber in the team wins) so
+    /// every client agrees on the winning team.
+    /// </summary>
+    void AssignTeamRanks()
+    {
+        float teamA = playerResults[0].score; // == playerResults[2].score
+        float teamB = playerResults[1].score; // == playerResults[3].score
+
+        int rankA;
+        if (teamA != teamB)
+        {
+            rankA = teamA > teamB ? 1 : 2;
+        }
+        else
+        {
+            int minActorA = Mathf.Min(playerResults[0].actorNumber, playerResults[2].actorNumber);
+            int minActorB = Mathf.Min(playerResults[1].actorNumber, playerResults[3].actorNumber);
+            rankA = minActorA <= minActorB ? 1 : 2;
+        }
+        int rankB = rankA == 1 ? 2 : 1;
+
+        playerResults[0].rank = playerResults[2].rank = rankA;
+        playerResults[1].rank = playerResults[3].rank = rankB;
     }
 
     void AssignRanks()
     {
         EnsurePlayerResults();
+
+        // Task 6: friends 2v2 ranks by team (rank 1/1, 2/2). Bots/online keep per-individual ranks.
+        if (IsFriendsTeamMode())
+        {
+            AssignTeamRanks();
+            return;
+        }
+
         UpdateAndSortLeaderboard(new List<PlayerResult>(playerResults));
     }
 
@@ -782,7 +955,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
         {
             EnsureStaticLeaderboard(rowsContainer);
             RefreshLeaderboardHeader(rowsContainer);
-            FillLeaderboardData(rowsContainer);
+            UpdateLeaderboardUI(rowsContainer);
         }
         else
         {
@@ -826,8 +999,55 @@ public class ResultManager : MonoBehaviourPunCallbacks
     void EnsureStaticLeaderboard(Transform container)
     {
         if (container == null) return;
-        if (container.Find("HeaderRow") != null) return; // already authored / built earlier
-        BuildStaticLeaderboard(container, StaticLeaderboardRows);
+        if (container.Find("HeaderRow") == null)
+            BuildStaticLeaderboard(container, StaticLeaderboardRows);
+
+        // Additive, non-destructive: older scenes that already have a HeaderRow but no persistent
+        // TOTAL row (it used to be runtime-only) get the editable TotalsRow created once here.
+        if (container.Find("TotalsRow") == null)
+            BuildEditableTotalsRow(container, ComputeInnerWidth(container), 64f);
+    }
+
+    /// <summary>
+    /// Creates the persistent, hand-editable "TotalsRow" GameObject (6 TMP cells: TOTAL + 4 player
+    /// totals + grand total). Default styling is applied ONCE on creation so it looks correct out of
+    /// the box; afterwards the runtime fill never restyles it, so your Inspector font/color edits show
+    /// in game exactly as authored.
+    /// </summary>
+    void BuildEditableTotalsRow(Transform container, float innerW, float rowH)
+    {
+        if (container == null || container.Find("TotalsRow") != null) return;
+
+        string[] totalCells = new string[6];
+        totalCells[0] = "TOTAL";
+        for (int s = 1; s < 6; s++) totalCells[s] = "0";
+
+        GameObject rowGo = CreateScoreRow("TotalsRow", container, totalCells, innerW, rowH, ScoreDarkColor, true);
+        rowGo.transform.SetAsLastSibling();
+    }
+
+    /// <summary>
+    /// PUBLIC helper to materialise the editable TOTAL row into the scene at edit time without
+    /// rebuilding the rest of the skeleton (non-destructive). Resolves the panel/container itself,
+    /// so it can be invoked standalone (e.g. from a one-off editor command). Returns true if the row
+    /// now exists.
+    /// </summary>
+    public bool EnsureEditableTotalRow()
+    {
+        if (!ResolveResultPanel() || resultPanel == null)
+        {
+            Debug.LogError("[Result] EnsureEditableTotalRow — Panel_Winning / resultPanel could not be resolved.");
+            return false;
+        }
+
+        Transform mainFrame = resultPanel.transform.Find("MainFrame");
+        if (mainFrame == null) { Debug.LogError("[Result] EnsureEditableTotalRow — MainFrame missing."); return false; }
+
+        Transform container = scoreboardContainer != null ? scoreboardContainer : mainFrame.Find("PlayerRowsContainer");
+        if (container == null) { Debug.LogError("[Result] EnsureEditableTotalRow — PlayerRowsContainer missing."); return false; }
+
+        BuildEditableTotalsRow(container, ComputeInnerWidth(container), 64f);
+        return container.Find("TotalsRow") != null;
     }
 
     /// <summary>
@@ -857,6 +1077,12 @@ public class ResultManager : MonoBehaviourPunCallbacks
             CreateScoreRow("RoundRow_" + r, container, cells, innerW, rowH, TextWhiteColor, false);
         }
 
+        // Persistent, EDITABLE "TOTAL" row. It now lives in the scene skeleton (exactly like the
+        // RoundRow_N rows) so its font / color / size can be hand-edited in the Inspector and will
+        // SURVIVE at runtime. The runtime fill (BuildOrUpdateTotalsRow) only writes the number
+        // values into this authored row — it never restyles it.
+        BuildEditableTotalsRow(container, innerW, rowH);
+
         // Faint vertical dividers behind the table: after ROUNDS and before TOTAL.
         BuildVerticalDividers(container, innerW);
     }
@@ -880,10 +1106,47 @@ public class ResultManager : MonoBehaviourPunCallbacks
     /// runs past the static row count. The header row (avatars + names) is left untouched so it stays
     /// exactly as authored in the scene.
     /// </summary>
+    /// <summary>Fills round rows and the TOTAL row. Total-row formatting is locked to match normal rows.</summary>
+    public void UpdateLeaderboardUI(Transform container)
+    {
+        FillLeaderboardData(container);
+    }
+
     void FillLeaderboardData(Transform container)
     {
         _dynamicRows.Clear();
 
+        // Task 6: FRIENDS 2v2 shows a 4-column board (ROUNDS | Team1 | Team2 | TOTAL). Each team
+        // header stacks its two partners' names (P1 over P3, P2 over P4) and every round/total value
+        // is that partnership's COMBINED dehlas. Bots/Online (1v1v1v1) keep the authored 6-column
+        // board untouched. The authored scene rows are simply hidden in friends mode and restored
+        // otherwise, so nothing in the scene is destroyed.
+        if (IsFriendsTeamMode())
+        {
+            SetAuthoredLeaderboardRowsActive(container, false);
+            BuildFriendsTeamLeaderboard(container);
+        }
+        else
+        {
+            SetAuthoredLeaderboardRowsActive(container, true);
+            FillIndividualLeaderboardRows(container);
+        }
+
+        // Unity's nested layout groups do not always solve in the same frame the panel is shown
+        // (rects are still zero-sized when the cells are created). Defer one frame, flush the canvas,
+        // then force an immediate rebuild so every column resolves to its share and lines up with the
+        // vertical dividers.
+        if (container is RectTransform containerRect)
+            StartCoroutine(RebuildLeaderboardLayout(containerRect));
+    }
+
+    /// <summary>
+    /// The original 1v1v1v1 fill: ROUNDS + four player columns + TOTAL, using the authored scene
+    /// rows (R1..Rn + TotalsRow). Overflow round rows are only created if a match runs past the
+    /// static row count.
+    /// </summary>
+    void FillIndividualLeaderboardRows(Transform container)
+    {
         Transform header = container.Find("HeaderRow");
         if (header != null) _dynamicRows.Add(header.gameObject);
 
@@ -918,13 +1181,31 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
         // Task 28: cumulative standings row so the actual ranking is visible at a glance.
         BuildOrUpdateTotalsRow(container);
+    }
 
-        // Unity's nested layout groups do not always solve in the same frame the panel is shown
-        // (rects are still zero-sized when the cells are created). Defer one frame, flush the canvas,
-        // then force an immediate rebuild so every column resolves to its innerW/6 share and lines up
-        // with the vertical dividers.
-        if (container is RectTransform containerRect)
-            StartCoroutine(RebuildLeaderboardLayout(containerRect));
+    /// <summary>
+    /// Enables/disables the authored 6-column scene rows (HeaderRow, RoundRow_1..n, TotalsRow) and
+    /// their two authored vertical dividers. Friends mode hides them and draws its own 4-column board;
+    /// individual mode re-enables them. Never destroys — the authored layout must persist.
+    /// </summary>
+    void SetAuthoredLeaderboardRowsActive(Transform container, bool active)
+    {
+        if (container == null) return;
+
+        SetChildActiveByName(container, "HeaderRow", active);
+        SetChildActiveByName(container, "TotalsRow", active);
+        for (int r = 1; r <= StaticLeaderboardRows; r++)
+            SetChildActiveByName(container, "RoundRow_" + r, active);
+
+        // Authored 6-column dividers only (friends dividers are named "FriendsVDivider").
+        foreach (Transform child in container)
+            if (child.name == "VDivider") child.gameObject.SetActive(active);
+    }
+
+    static void SetChildActiveByName(Transform parent, string childName, bool active)
+    {
+        Transform t = parent.Find(childName);
+        if (t != null && t.gameObject.activeSelf != active) t.gameObject.SetActive(active);
     }
 
     /// <summary>Forces the leaderboard layout to resolve after the rows have been generated.</summary>
@@ -956,8 +1237,20 @@ public class ResultManager : MonoBehaviourPunCallbacks
         for (int s = 0; s < 4; s++) cellTexts[s + 1] = totals[s].ToString();
         cellTexts[5] = grand.ToString();
 
-        GameObject rowGo = CreateScoreRow("TotalsRow", container, cellTexts, ComputeInnerWidth(container), 64f, ScoreDarkColor, true);
-        _overflowRows.Add(rowGo);
+        // Prefer the PERSISTENT, authored "TotalsRow" from the scene skeleton so your Inspector
+        // font / color / size survive. Only fall back to a runtime-created row if (very old scene)
+        // none exists yet.
+        Transform existing = container.Find("TotalsRow");
+        bool authored = existing != null;
+
+        GameObject rowGo = authored
+            ? existing.gameObject
+            : CreateScoreRow("TotalsRow", container, cellTexts, ComputeInnerWidth(container), 64f, ScoreDarkColor, true);
+
+        // Only the runtime fallback row is tracked for destruction. The authored row must persist.
+        if (!authored)
+            _overflowRows.Add(rowGo);
+
         rowGo.transform.SetAsLastSibling();
         rowGo.SetActive(true);
         _dynamicRows.Add(rowGo);
@@ -972,10 +1265,183 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
         for (int s = 0; s < 6; s++)
         {
-            ApplyCellStyle(tmps[s], s == 0);
-            tmps[s].color = ScoreDarkColor;
-            tmps[s].fontStyle = FontStyles.Bold;
+            TextMeshProUGUI totalRowText = tmps[s];
+
+            // Always write the freshly computed value (rich-text-free) into the cell.
+            totalRowText.text = StripRichTextTags(cellTexts[s]);
+
+            // STYLING POLICY:
+            //  - Authored row  -> DO NOT touch font / size / color / alignment. Whatever you set in
+            //                     the Inspector is exactly what shows in game (your request).
+            //  - Fallback row  -> apply safe defaults so an unstyled runtime row still looks correct.
+            if (!authored)
+            {
+                totalRowText.fontSize = LeaderboardCellFontSize;
+                totalRowText.fontStyle = FontStyles.Bold;
+                totalRowText.color = Color.black;
+                totalRowText.enableAutoSizing = false;
+                totalRowText.alignment = s == 0
+                    ? TextAlignmentOptions.MidlineLeft
+                    : TextAlignmentOptions.Center;
+            }
         }
+    }
+
+    /// <summary>
+    /// Task 6 — Friends 2v2 only. Builds the whole 4-column board at runtime: ROUNDS | Team1 | Team2 |
+    /// TOTAL. Team1 = seats {0,2} (Player 1 over Player 3), Team2 = seats {1,3} (Player 2 over Player
+    /// 4). Each round cell is the partnership's COMBINED dehlas for that round, the TOTAL row is the
+    /// combined dehlas across all rounds. Everything is tracked as overflow so it is destroyed and
+    /// rebuilt cleanly each show. No-op in 1v1v1v1 (bots/online).
+    /// </summary>
+    void BuildFriendsTeamLeaderboard(Transform container)
+    {
+        if (container == null) return;
+
+        ResolveThemeSprites();
+        float innerW = ComputeInnerWidth(container);
+        const float headerH = 120f;
+        const float rowH = 64f;
+
+        // Header: ROUNDS | Team1 (P1 over P3) | Team2 (P2 over P4) | TOTAL
+        GameObject headerGo = NewRow("FriendsHeaderRow", container, innerW, headerH);
+        AddSideHeaderLabel(headerGo.transform, "ROUNDS", true, LeaderLabelColor, 30, FontStyles.Bold);
+        CreateFriendsTeamHeaderCell(headerGo.transform, 0, 2); // Team 1
+        CreateFriendsTeamHeaderCell(headerGo.transform, 1, 3); // Team 2
+        AddCellLabel(headerGo.transform, "TOTAL", LeaderLabelColor, 30, FontStyles.Bold);
+        AddRowDashedLine(headerGo, innerW, headerH);
+        RegisterFriendsRow(headerGo);
+
+        // Per-round combined team scores.
+        int slots = maxRounds > 0 ? maxRounds : Mathf.Max(roundHistory.Count, 1);
+        int totalRows = Mathf.Max(slots, StaticLeaderboardRows);
+        int grandA = 0, grandB = 0;
+
+        for (int r = 1; r <= totalRows; r++)
+        {
+            RoundResult round = roundHistory.Find(rr => rr.roundNumber == r);
+            string aVal = "", bVal = "", rowTotal = "";
+            if (round != null && round.dehlasPerSeat != null && round.dehlasPerSeat.Length >= 4)
+            {
+                int a = round.dehlasPerSeat[0] + round.dehlasPerSeat[2];
+                int b = round.dehlasPerSeat[1] + round.dehlasPerSeat[3];
+                aVal = a.ToString();
+                bVal = b.ToString();
+                rowTotal = (a + b).ToString();
+                grandA += a;
+                grandB += b;
+            }
+
+            string[] cells = { "R" + r, aVal, bVal, rowTotal };
+            GameObject rowGo = CreateScoreRow("FriendsRoundRow_" + r, container, cells, innerW, rowH, Color.black, true);
+            StyleFriendsRowCells(rowGo, Color.black);
+            RegisterFriendsRow(rowGo);
+        }
+
+        // Combined TOTAL row.
+        string[] totalCells = { "TOTAL", grandA.ToString(), grandB.ToString(), (grandA + grandB).ToString() };
+        GameObject totalsGo = CreateScoreRow("FriendsTotalsRow", container, totalCells, innerW, rowH, ScoreDarkColor, true);
+        StyleFriendsRowCells(totalsGo, ScoreDarkColor);
+        RegisterFriendsRow(totalsGo);
+
+        // Two dividers matching the 4-column grid: after ROUNDS and before TOTAL.
+        BuildFriendsDividers(container, innerW);
+    }
+
+    /// <summary>One team header cell with two stacked player plates: top seat (e.g. Player 1) above,
+    /// bottom seat (e.g. Player 3) slightly below — each an avatar beside a brown name plate.</summary>
+    void CreateFriendsTeamHeaderCell(Transform rowParent, int topSeat, int bottomSeat)
+    {
+        var cell = new GameObject("FriendsTeamHeaderCell", typeof(RectTransform));
+        cell.transform.SetParent(rowParent, false);
+        MakeEqualColumn(cell);
+
+        CreateStackedNamePlate(cell.transform, topSeat, 28f);     // upper player
+        CreateStackedNamePlate(cell.transform, bottomSeat, -28f); // lower player
+    }
+
+    /// <summary>A small avatar + brown name plate mini-row at vertical offset <paramref name="y"/>.</summary>
+    void CreateStackedNamePlate(Transform cellParent, int seatIndex, float y)
+    {
+        var group = CreateRect("PlayerPlate", cellParent, new Vector2(0f, y), new Vector2(196f, 44f));
+
+        var avatarGo = CreateRect("AvatarImage", group.transform, new Vector2(-80f, 0f), new Vector2(40f, 40f));
+        var avatarImg = AddImage(avatarGo, Color.white);
+        avatarImg.preserveAspect = true;
+        avatarImg.raycastTarget = false;
+        Sprite avatar = GetAvatarSprite(GetActorNumberBySeat(seatIndex));
+        if (avatar != null) avatarImg.sprite = avatar;
+        else if (playerAvatarSprite != null) avatarImg.sprite = playerAvatarSprite;
+
+        var nameBox = CreateRect("NameBox", group.transform, new Vector2(22f, 0f), new Vector2(140f, 36f));
+        var nameImg = AddImage(nameBox, NameBoxColor);
+        if (_roundedSprite != null) { nameImg.sprite = _roundedSprite; nameImg.type = UnityEngine.UI.Image.Type.Sliced; }
+        nameImg.raycastTarget = false;
+
+        var nameTxt = AddTmp(nameBox.transform, GetSeatDisplayName(seatIndex), Color.white, 16, TextAlignmentOptions.Center, FontStyles.Bold);
+        nameTxt.rectTransform.anchorMin = Vector2.zero;
+        nameTxt.rectTransform.anchorMax = Vector2.one;
+        nameTxt.rectTransform.offsetMin = new Vector2(6, 2);
+        nameTxt.rectTransform.offsetMax = new Vector2(-6, -2);
+        nameTxt.overflowMode = TextOverflowModes.Ellipsis;
+        nameTxt.enableAutoSizing = true;
+        nameTxt.fontSizeMin = 9;
+        nameTxt.fontSizeMax = 16;
+    }
+
+    /// <summary>Locks every text cell in a runtime friends row to the shared cell style + a color.</summary>
+    void StyleFriendsRowCells(GameObject rowGo, Color color)
+    {
+        if (rowGo == null) return;
+        int i = 0;
+        foreach (Transform child in rowGo.transform)
+        {
+            var tmp = child.GetComponent<TextMeshProUGUI>();
+            if (tmp == null) continue;
+            ApplyCellStyle(tmp, i == 0); // index 0 = the ROUNDS/R#/TOTAL label (left aligned)
+            tmp.color = color;
+            i++;
+        }
+    }
+
+    /// <summary>Registers a runtime friends row for destruction-each-show and the reveal animation.</summary>
+    void RegisterFriendsRow(GameObject rowGo)
+    {
+        if (rowGo == null) return;
+        _overflowRows.Add(rowGo);
+        rowGo.transform.SetAsLastSibling();
+        rowGo.SetActive(true);
+        rowGo.transform.localScale = Vector3.one;
+        var cg = rowGo.GetComponent<CanvasGroup>();
+        if (cg != null) cg.alpha = 1f;
+        _dynamicRows.Add(rowGo);
+    }
+
+    /// <summary>Two faint vertical dividers for the friends 4-column grid: after ROUNDS, before TOTAL.</summary>
+    void BuildFriendsDividers(Transform container, float innerW)
+    {
+        var crt = container as RectTransform;
+        float h = (crt != null && crt.rect.height > 1f) ? crt.rect.height - 40f : 540f;
+        float col = innerW / 4f;
+        AddFriendsVerticalDivider(container, -innerW / 2f + col, h);        // after ROUNDS
+        AddFriendsVerticalDivider(container, -innerW / 2f + col * 3f, h);   // before TOTAL
+    }
+
+    void AddFriendsVerticalDivider(Transform container, float x, float height)
+    {
+        var go = CreateRect("FriendsVDivider", container, new Vector2(x, 0f), new Vector2(3f, height));
+        var le = go.AddComponent<LayoutElement>();
+        le.ignoreLayout = true;
+        var img = AddImage(go, new Color(0.12f, 0.06f, 0.02f, 0.45f));
+        img.raycastTarget = false;
+        go.transform.SetAsFirstSibling();
+        _overflowRows.Add(go); // destroyed/rebuilt each show like the friends rows
+    }
+
+    static string StripRichTextTags(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", string.Empty);
     }
 
     /// <summary>Writes the round number, per-player dehla scores and the row total into a row's text cells.</summary>
@@ -1001,25 +1467,35 @@ public class ResultManager : MonoBehaviourPunCallbacks
             for (int s = 1; s < 6; s++) cells[s].text = "";
         }
 
-        bool isLatest = round != null && round.roundNumber == currentRound;
-        // Dark, high-contrast text on the light-wood board (bold readable per design).
-        Color rowColor = isLatest ? new Color(0.10f, 0.42f, 0.18f, 1f) : new Color(0.16f, 0.09f, 0.04f, 1f);
+        // EVERY round row (R1..R5), label + score values, uses pure BLACK text.
+        // No golden/green/brown per-round highlighting — every round is styled identically.
         for (int s = 0; s < 6; s++)
         {
-            // Task 13 / 31: large, BOLD score cells — round label left, numbers right-aligned.
-            ApplyCellStyle(cells[s], s == 0);
-            cells[s].color = rowColor;
+            ApplyCellStyle(cells[s], s == 0); // fixed size + Bold (shared with the TOTAL row)
+            cells[s].color = Color.black;     // black for every round score
         }
     }
 
-    /// <summary>Task 13/31: large bold cells — round label left-aligned, score numbers right-aligned.</summary>
+    /// <summary>
+    /// Large bold cells. The row label (ROUNDS / R1.. / TOTAL) is left-aligned like the header's
+    /// "ROUNDS" cell; every value cell is CENTER-aligned so each number sits exactly under its
+    /// centered player avatar (and the grand total under the centered "TOTAL" header).
+    /// </summary>
+    /// <summary>
+    /// Fixed font size shared by EVERY leaderboard cell (R1..Rn rows AND the TOTAL row) so they
+    /// render at an identical size/weight. Auto-sizing is intentionally disabled: because rows can
+    /// have different RectTransform heights, auto-sizing produced mismatched rendered sizes (the
+    /// TOTAL row looked bigger/smaller than the R1 row). Locking the size fixes that from code only.
+    /// </summary>
+    const int LeaderboardCellFontSize = 34;
+
     void ApplyCellStyle(TextMeshProUGUI cell, bool isRowLabel)
     {
         if (cell == null) return;
-        cell.fontStyle = FontStyles.Bold;
-        cell.enableAutoSizing = true;
-        cell.fontSizeMin = 18;
-        cell.fontSizeMax = 42;
+        // Lock weight + size from code so the TOTAL row exactly matches the R1..Rn rows.
+        cell.fontStyle = FontStyles.Bold;            // same weight as the "R1" rows
+        cell.enableAutoSizing = false;               // deterministic: no height-driven size drift
+        cell.fontSize = LeaderboardCellFontSize;     // fixed 24 for every cell
         cell.overflowMode = TextOverflowModes.Overflow;
         if (isRowLabel)
         {
@@ -1028,8 +1504,8 @@ public class ResultManager : MonoBehaviourPunCallbacks
         }
         else
         {
-            cell.alignment = TextAlignmentOptions.MidlineRight;
-            cell.margin = new Vector4(0f, 0f, 18f, 0f);
+            cell.alignment = TextAlignmentOptions.Center;
+            cell.margin = Vector4.zero;
         }
     }
 
@@ -1411,22 +1887,13 @@ public class ResultManager : MonoBehaviourPunCallbacks
     {
         var cell = CreateRect("ValueCell", parent, Vector2.zero, new Vector2(width, height));
         
-        // Define colors
-        Color textColor = Color.white; // Default readable white on wood
-        int fontSize = 28;
-        FontStyles style = isBold ? FontStyles.Bold : FontStyles.Normal;
-
-        if (isWinner)
-        {
-            textColor = new Color(1f, 0.82f, 0.2f, 1f); // Golden Highlight for Winner
-            style = FontStyles.Bold;
-            fontSize = 30;
-        }
-        else if (isCurrentRound)
-        {
-            textColor = new Color(0.45f, 1f, 0.5f, 1f); // Bright green for current active round
-            style = FontStyles.Bold;
-        }
+        // NOTE: this helper is NOT used by the live leaderboard (BuildResultPanelUI ->
+        // FillRowCells / BuildOrUpdateTotalsRow). The golden "winner" highlight and green
+        // "current round" color have been removed so NO code path can reintroduce golden
+        // score text. isWinner / isCurrentRound are kept only for signature compatibility.
+        Color textColor = Color.black;                 // all values black — no golden, no green
+        int fontSize = LeaderboardCellFontSize;        // same fixed size as the live rows
+        FontStyles style = FontStyles.Bold;            // matches the R1 / TOTAL weight
 
         var txt = AddTmp(cell.transform, text, textColor, fontSize, TextAlignmentOptions.Center, style);
         txt.rectTransform.anchoredPosition = Vector2.zero;
@@ -1582,12 +2049,15 @@ public class ResultManager : MonoBehaviourPunCallbacks
         rt.anchorMax = new Vector2(1f, 0f);
         rt.pivot = new Vector2(0.5f, 0f);
         rt.offsetMin = new Vector2(0f, 0f);
-        rt.offsetMax = new Vector2(0f, 110f); // full width, 110px tall, flush to screen bottom
+        rt.offsetMax = new Vector2(0f, BannerAdHeightPx); // full width banner band, flush to screen bottom (Task 15)
 
         ResolveThemeSprites();
         var bg = AddImage(banner, new Color(0.96f, 0.94f, 0.90f, 0.97f));
         if (_roundedSprite != null) { bg.sprite = _roundedSprite; bg.type = UnityEngine.UI.Image.Type.Sliced; }
-        bg.raycastTarget = true;
+        bg.raycastTarget = false;
+        // The real LevelPlay banner ad is shown as a native overlay at the bottom of the screen.
+        // Disable the placeholder background so the space is left empty for the live ad.
+        bg.enabled = false;
 
         // Subtle top highlight strip for an engraved, AAA edge.
         Transform topT = banner.transform.Find("TopEdge");
@@ -1600,6 +2070,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
         topRt.offsetMax = Vector2.zero;
         var topImg = AddImage(top, new Color(1f, 0.85f, 0.5f, 0.18f));
         topImg.raycastTarget = false;
+        topImg.enabled = false;
 
         // Placeholder label.
         Transform lblT = banner.transform.Find("Label");
@@ -1617,6 +2088,8 @@ public class ResultManager : MonoBehaviourPunCallbacks
         lrt.anchorMax = Vector2.one;
         lrt.offsetMin = Vector2.zero;
         lrt.offsetMax = Vector2.zero;
+        // Hide the "BANNER AD PLACEMENT" placeholder text — the live ad fills the band instead.
+        lbl.gameObject.SetActive(false);
 
         banner.transform.SetAsLastSibling(); // above the dim overlay
     }

@@ -817,6 +817,11 @@ private static bool _resultPanelShown = false;
         _autoLastCardScheduledActor = -1;
         dealRevealLimit = -1;
         dealAnimateFromIndex = 0;
+        // Task 23: reset the per-card deal-animation dedup set each round. Without this it keeps the
+        // previous round's card identities, so any new-round card sharing a suit+rank with a card the
+        // player held before would be treated as "already dealt" and snap in without its fly-in —
+        // producing an inconsistent (half-animated) deal on rounds 2+.
+        _dealtCardKeys.Clear();
         isDealingComplete = false;
         tableTurnOrder.Clear();
         botActorsThinking.Clear();
@@ -1139,10 +1144,20 @@ private static bool _resultPanelShown = false;
     void AutoPlayLastCardIfApplicable(int actorNumber)
     {
         if (PhotonNetwork.LocalPlayer == null || PhotonNetwork.LocalPlayer.ActorNumber != actorNumber) return;
-        if (myCards == null || myCards.Count != 1) return;
+        if (myCards == null || myCards.Count == 0) return;
         if (IsGameplayInputBlocked || IsTrickLocked) return;
         if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber)) return;
         if (_autoLastCardScheduledActor == actorNumber) return;
+
+        // Task 21: auto-play when the player has no real choice — either it is the final card in the
+        // hand, OR exactly one legal card remains for the current trick. In both cases tapping is
+        // pointless and forcing the player to tap can stall the trick/round, so we play it for them.
+        bool finalCard = myCards.Count == 1;
+        if (!finalCard)
+        {
+            List<CardData> legal = GetValidCards(myCards, currentTrick, actorNumber);
+            if (legal == null || legal.Count != 1) return;
+        }
 
         _autoLastCardScheduledActor = actorNumber;
         StartCoroutine(AutoPlayLastCardRoutine(actorNumber));
@@ -1157,17 +1172,30 @@ private static bool _resultPanelShown = false;
 
         if (PhotonNetwork.LocalPlayer == null || PhotonNetwork.LocalPlayer.ActorNumber != actorNumber) yield break;
         if (currentTurnActor != actorNumber) yield break;
-        if (myCards == null || myCards.Count != 1) yield break;
+        if (myCards == null || myCards.Count == 0) yield break;
         if (IsTrickLocked || IsGameplayInputBlocked || CardInteract.isPlayingCard) yield break;
         if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber)) yield break;
 
-        CardData last = myCards[0];
-        GameObject cardObj = FindLocalCardObject(last);
+        // Re-resolve the card to play after the delay (hand/legality may have changed): play the
+        // final card if only one remains, otherwise the single legal option (Task 21).
+        CardData toPlay;
+        if (myCards.Count == 1)
+        {
+            toPlay = myCards[0];
+        }
+        else
+        {
+            List<CardData> legal = GetValidCards(myCards, currentTrick, actorNumber);
+            if (legal == null || legal.Count != 1) yield break; // a real choice re-appeared — let the player tap
+            toPlay = legal[0];
+        }
+
+        GameObject cardObj = FindLocalCardObject(toPlay);
         if (cardObj == null) yield break;
 
         CardInteract.canPlayCards = true;
         CardInteract.isPlayingCard = true;
-        OnLocalPlayerPlayedCard(last, cardObj);
+        OnLocalPlayerPlayedCard(toPlay, cardObj);
     }
 
     GameObject FindLocalCardObject(CardData card)
@@ -1578,9 +1606,9 @@ private static bool _resultPanelShown = false;
             if (matchingCardsLeft == 1 && myCards.Count > 1)
             {
                 Debug.LogWarning("[Hidden Trump] Hidden patta abhi nahi khel sakte!");
-                CardInteract.isPlayingCard = false;
-                CardInteract.ClearGlobalSelection();
+                AbortLocalCardPlay(cardObj);            // un-stick: keep the card live
                 RefreshHandUI(false, true);
+                ApplyRules(true);                        // re-raise valid cards (still my turn)
                 return;
             }
         }
@@ -1588,18 +1616,20 @@ private static bool _resultPanelShown = false;
         int localActor = PhotonNetwork.LocalPlayer.ActorNumber;
         if (currentTrick != null && currentTrick.Any(c => c.actorNumber == localActor))
         {
-            CardInteract.isPlayingCard = false;
+            AbortLocalCardPlay(cardObj);                 // already played this trick — un-stick the card
             return;
         }
         if (!CanAcceptCardPlay(localActor, (int)cardData.cardSuit, (int)cardData.cardRank))
         {
-            CardInteract.isPlayingCard = false;
+            AbortLocalCardPlay(cardObj);
+            // Re-apply rules so the card re-raises if it is still our turn.
+            ApplyRules(PhotonNetwork.LocalPlayer.ActorNumber == currentTurnActor);
             return;
         }
         if (!IsCardLegalPlay(myCards, currentTrick, cardData, localActor))
         {
             Debug.LogWarning("[Play] Blocked hidden or illegal card.");
-            CardInteract.isPlayingCard = false;
+            AbortLocalCardPlay(cardObj);
             ApplyRules(true);
             return;
         }
@@ -1620,6 +1650,32 @@ private static bool _resultPanelShown = false;
             photonView.RPC("RPC_PlayCard", RpcTarget.All, localActor, (int)cardData.cardSuit, (int)cardData.cardRank);
 
         StartUnlockPlayFailsafe();
+    }
+
+    /// <summary>
+    /// Un-sticks a card whose local play attempt was rejected/aborted. CardInteract.PlayThisCard()
+    /// optimistically sets isPlayed = true BEFORE the play is validated; if any guard rejects the
+    /// play we must clear that flag again. Otherwise the card stays permanently dim &amp; non-playable
+    /// because BOTH RefreshHandUI's destroy loop AND HighlightPlayableCards skip isPlayed cards —
+    /// this is the "first tapped card won't raise / is non-playable" bug.
+    /// </summary>
+    void AbortLocalCardPlay(GameObject cardObj)
+    {
+        CardInteract.isPlayingCard = false;
+
+        if (cardObj != null)
+        {
+            CardInteract ci = cardObj.GetComponent<CardInteract>()
+                ?? cardObj.GetComponentInChildren<CardInteract>()
+                ?? cardObj.GetComponentInParent<CardInteract>();
+            if (ci != null)
+            {
+                ci.isPlayed = false;        // critical: return the card to a live, playable state
+                ci.isValidToPlay = false;   // re-evaluated by ApplyRules / HighlightPlayableCards
+            }
+        }
+
+        CardInteract.ClearGlobalSelection();
     }
 
     void StartUnlockPlayFailsafe()
@@ -1915,20 +1971,21 @@ private static bool _resultPanelShown = false;
         StartCoroutine(DealAnimationOnlyRoutine(cardsInBatch, revealUpTo));
     }
 
-    public const float DealFlyDuration = 0.35f;
-    public const float DealFlyDestroyDelay = 0.3f;
+    public const float DealFlyDuration = 0.2f;
+    public const float DealFlyDestroyDelay = 0.22f;
     public const float DealCardLaunchGap = 0.04f;
-    public const float DealShrinkDuration = 0.25f;
+    public const float DealShrinkDuration = 0.2f;
     public const float DealPacketCardSpread = 12f;
-    public const float DealRoundSettlePause = 0.06f;
+    public const float DealSeatSettlePause = 0.12f;
+    public const float DealRoundSettlePause = 0.12f;
 
     public static float GetDealBatchDuration(int cardsInBatch)
     {
         // Real per-seat runtime of DealAnimationOnlyRoutine: cardsInBatch launch-gaps + the 0.2s
         // per-seat settle pause; final 0.2s tail at the end. This matches the actual animation
         // so callers can add a precise inter-batch gap on top (see DeckManager FullDealingSequenceRoutine).
-        float perSeat = cardsInBatch * DealCardLaunchGap + 0.2f;
-        return 4f * perSeat + 0.2f;
+        float perSeat = cardsInBatch * DealCardLaunchGap + DealSeatSettlePause;
+        return 4f * perSeat + DealRoundSettlePause;
     }
 
     static string GetDealRoundLabel(int cardsInBatch)
@@ -2067,17 +2124,17 @@ private static bool _resultPanelShown = false;
 
                 Vector2 target = midwayAnchor + new Vector2(spreadOffset * 0.5f, 0f);
 
-                cardRt.DOAnchorPos(target, DealFlyDuration).SetEase(Ease.OutSine);
-                cardRt.DOScale(new Vector3(0.5f, 0.5f, 1f), DealShrinkDuration).SetEase(Ease.OutQuad);
+                cardRt.DOAnchorPos(target, DealFlyDuration).SetEase(Ease.OutCubic);
+                cardRt.DOScale(new Vector3(0.5f, 0.5f, 1f), DealShrinkDuration).SetEase(Ease.OutBack);
                 Object.Destroy(flyingCard, DealFlyDestroyDelay);
 
                 yield return new WaitForSeconds(DealCardLaunchGap);
             }
 
-            yield return new WaitForSeconds(0.2f);
+            yield return new WaitForSeconds(DealSeatSettlePause);
         }
 
-        yield return new WaitForSeconds(0.2f);
+        yield return new WaitForSeconds(DealRoundSettlePause);
 
         // Task 26: progressively reveal the local player's hand as each batch is dealt — the
         // newly dealt cards fan in horizontally beside the previously dealt ones.
@@ -2307,7 +2364,7 @@ private static bool _resultPanelShown = false;
             {
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yPos - 100f);
                 int animOrder = i - dealAnimateFromIndex;
-                rt.DOAnchorPosY(yPos, 0.35f).SetEase(Ease.OutBack).SetDelay(animOrder * 0.02f).SetUpdate(true);
+                rt.DOAnchorPosY(yPos, 0.2f).SetEase(Ease.OutBack).SetDelay(animOrder * 0.015f).SetUpdate(true);
                 _dealtCardKeys.Add(dealKey);
                 if (cardInteract != null) cardInteract.isDealt = true;
             }

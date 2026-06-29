@@ -50,12 +50,20 @@ public class InventoryUIController : MonoBehaviour
     public Button[] tabButtons;
 
     [Tooltip("Category for each tab button, index-matched to Tab Buttons.")]
-    public string[] tabCategories = { "Cards", "Wallpapers", "Avatars" };
+    public string[] tabCategories = { "Cards", "Wallpapers", "Avatars", "Voice" };
 
-    [Header("Catalog (leave empty to use built-in sample data)")]
+    [Header("Manual Layout")]
+    [Tooltip("When enabled, the scene-authored shop grid and tab panels are never destroyed or rebuilt at runtime.")]
+    [SerializeField] private bool preserveManualLayout = true;
+
+    [Tooltip("Optional per-tab content roots (Cards / Wallpapers / Avatars). Index-matched to Tab Buttons.")]
+    [SerializeField] private GameObject[] tabContentPanels;
+
+    [Header("Catalog (only used when Preserve Manual Layout is off)")]
     public List<ShopItem> catalog = new List<ShopItem>();
 
-    static readonly Color TabSelectedColor = new Color(0xB8 / 255f, 0x45 / 255f, 0x1F / 255f, 1f);
+    // Shop tab colors — selected #B8451F, unselected #F2A85C.
+    static readonly Color TabSelectedColor   = new Color(0xB8 / 255f, 0x45 / 255f, 0x1F / 255f, 1f);
     static readonly Color TabUnselectedColor = new Color(0xF2 / 255f, 0xA8 / 255f, 0x5C / 255f, 1f);
 
     private string _currentCategory;
@@ -67,7 +75,7 @@ public class InventoryUIController : MonoBehaviour
 
     private void Awake()
     {
-        if (catalog == null || catalog.Count == 0)
+        if (!preserveManualLayout && (catalog == null || catalog.Count == 0))
             catalog = BuildSampleCatalog();
 
         WireTabs();
@@ -82,7 +90,13 @@ public class InventoryUIController : MonoBehaviour
         string startCategory = (tabCategories != null && tabCategories.Length > startIndex)
             ? tabCategories[startIndex]
             : "Cards";
-        PopulateGrid(string.IsNullOrEmpty(_currentCategory) ? startCategory : _currentCategory);
+        string category = string.IsNullOrEmpty(_currentCategory) ? startCategory : _currentCategory;
+
+        if (preserveManualLayout)
+            ShowManualTabContent(category);
+        else
+            PopulateGrid(category);
+
         UpdateTabVisuals(startIndex);
     }
 
@@ -128,7 +142,27 @@ public class InventoryUIController : MonoBehaviour
     {
         if (tabCategories == null || index < 0 || index >= tabCategories.Length) return;
         UpdateTabVisuals(index);
-        PopulateGrid(tabCategories[index]);
+
+        if (preserveManualLayout)
+            ShowManualTabContent(tabCategories[index]);
+        else
+            PopulateGrid(tabCategories[index]);
+    }
+
+    /// <summary>Shows the manually placed tab content without destroying or rebuilding the grid.</summary>
+    void ShowManualTabContent(string category)
+    {
+        _currentCategory = category;
+        int idx = ResolveTabIndex(category);
+
+        if (tabContentPanels != null && tabContentPanels.Length > 0)
+        {
+            for (int i = 0; i < tabContentPanels.Length; i++)
+            {
+                if (tabContentPanels[i] != null)
+                    tabContentPanels[i].SetActive(i == idx);
+            }
+        }
     }
 
     int ResolveTabIndex(string category)
@@ -153,8 +187,6 @@ public class InventoryUIController : MonoBehaviour
         {
             Button btn = tabButtons[i];
             if (btn == null) continue;
-
-            btn.transition = Selectable.Transition.None;
 
             Image tabBg = btn.targetGraphic as Image;
             if (tabBg == null)
@@ -196,8 +228,10 @@ public class InventoryUIController : MonoBehaviour
 
     private void RefreshGrid()
     {
-        if (!string.IsNullOrEmpty(_currentCategory))
-            PopulateGrid(_currentCategory);
+        if (preserveManualLayout || string.IsNullOrEmpty(_currentCategory))
+            return;
+
+        PopulateGrid(_currentCategory);
     }
 
     private void ConfigureCard(GameObject card, ShopItem item)
@@ -334,6 +368,10 @@ public class InventoryUIController : MonoBehaviour
             new ShopItem("avatar_raja",   "Raja",          0,    "Avatars"),
             new ShopItem("avatar_rani",   "Rani",          120,  "Avatars"),
             new ShopItem("avatar_wizard", "Wizard",        400,  "Avatars"),
+
+            // Voice (Coming Soon — basic packs are free via CurrencyAndInventoryManager)
+            new ShopItem("voice_pack_1",  "Voice Pack 1",  0,    "Voice"),
+            new ShopItem("voice_pack_2",  "Voice Pack 2",  0,    "Voice"),
         };
     }
 

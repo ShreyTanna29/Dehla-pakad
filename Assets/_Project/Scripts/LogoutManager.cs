@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Photon.Pun;
 
 /// <summary>
 /// TASK 1 (Robust Logout) + TASK 2 (Delete Account).
@@ -92,6 +93,17 @@ public class LogoutManager : MonoBehaviour
         // Clear stale match / matchmaking state.
         if (DeckManager.botActorNumbers != null) DeckManager.botActorNumbers.Clear();
         PlayWithFriendsManager.PendingJoinPin = null;
+
+        // TASK 1 — disconnect Photon so a logged-out user is never left in a room/match.
+        // PhotonNetwork.Disconnect() raises OnDisconnected with DisconnectByClientLogic, which
+        // NetworkManager.OnDisconnected explicitly ignores (no auto-reconnect, no connection-lost
+        // panel). We set the phase back to Home above first so any callbacks treat this as a clean
+        // exit. This also covers the case where the previous account stayed connected to Photon.
+        if (PhotonNetwork.IsConnected)
+        {
+            Debug.Log("[LogoutManager] Disconnecting Photon for logout.");
+            PhotonNetwork.Disconnect();
+        }
 
         // Reset gameplay input locks.
         CardInteract.canPlayCards = false;

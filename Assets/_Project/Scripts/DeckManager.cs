@@ -26,6 +26,18 @@ public class DeckManager : MonoBehaviourPunCallbacks
     private Dictionary<int, int> masterTrackingCounts = new Dictionary<int, int>();
     public int currentDealBatch = 0;
     private bool _localIsDealingComplete = false;
+
+    // Buffered deal RPCs can arrive before NetworkPlayer exists on slow clients.
+    bool _hasPendingLocalHand;
+    int _pendingTargetActor;
+    int[] _pendingSuits;
+    int[] _pendingRanks;
+    Coroutine _pendingHandCoroutine;
+
+    bool _hasPendingDealAnim;
+    int _pendingDealCardsInBatch;
+    int _pendingDealRevealUpTo;
+    Coroutine _pendingDealAnimCoroutine;
     public bool IsDealingComplete 
     { 
         get {
@@ -358,6 +370,10 @@ public class DeckManager : MonoBehaviourPunCallbacks
             ReconcileExcessPhantomBots();
             if (botHands.TryGetValue(actorNumber, out List<CardData> botH))
                 PersistHandToRoom(actorNumber, botH);
+            // Keep the authoritative "BOTS" room property in sync whenever a seat becomes a bot
+            // (e.g. the host REMOVE flow). Without this, a reconnecting or late-joining client that
+            // rebuilds bot seats via RestoreBotsFromRoom would not see this actor as a bot -> seat desync.
+            SyncBotsToRoom();
         }
 
         if (PlayerProfileSync.Instance != null)
@@ -564,6 +580,18 @@ public class DeckManager : MonoBehaviourPunCallbacks
         {
             if (PlayWithFriendsManager.Instance != null)
                 PlayWithFriendsManager.Instance.ExecuteFriendsGameStart();
+        }
+
+        // The master changed the authoritative bot-seat list mid-match (a friend replaced a bot,
+        // or a player was removed and a bot took the seat). Non-master clients refresh their local
+        // bot seats live so seat labels and bot control stay correct without needing a reconnect.
+        if (propertiesThatChanged.ContainsKey("BOTS") && !PhotonNetwork.IsMasterClient)
+        {
+            RestoreBotsFromRoom();
+            if (PlayerProfileSync.Instance != null)
+                PlayerProfileSync.Instance.UpdateAllNames();
+            if (PlayerHand.LocalInstance != null)
+                PlayerHand.LocalInstance.RebuildSeatOrderPublic();
         }
     }
 
@@ -776,12 +804,35 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (photonView != null)
             photonView.RPC("RPC_MarkPlayerAsBot", RpcTarget.Others, actor);
 
-        // Task 24: kick the player so Photon room membership (which drives "In Game" status) clears,
-        // then re-poll friends status promptly instead of waiting for the 45s presence heartbeat.
+        // Task 24: make the removal RELIABLE on every server tier. PhotonNetwork.CloseConnection
+        // requires a dashboard permission that is disabled on this app ("CloseConnection is disabled"),
+        // so relying on it alone leaves the replaced player lingering as an active room member — still
+        // controllable and still reported as "In Game" to their friends, with their seat painted as a
+        // phantom present player on other clients. A targeted RPC tells that specific player to leave
+        // the match themselves; CloseConnection is still attempted below as a fast path where allowed.
+        if (photonView != null)
+            photonView.RPC("RPC_ForceLeaveAfterReplace", player);
+
         PhotonNetwork.CloseConnection(player);
 
         if (PlayWithFriendsManager.Instance != null)
             PlayWithFriendsManager.Instance.RefreshInGameStatusSoon();
+    }
+
+    /// <summary>
+    /// Task 24 — Runs on the player the host just replaced with a bot. Leaves the room and returns
+    /// home so the replaced player no longer appears in the match (or as "In Game") on any client,
+    /// even when PhotonNetwork.CloseConnection is unavailable. Idempotent: a no-op if already left.
+    /// </summary>
+    [PunRPC]
+    void RPC_ForceLeaveAfterReplace()
+    {
+        if (!PhotonNetwork.InRoom) return;
+        Debug.Log("[Replace] Removed by host — leaving the match.");
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.LeaveRoomAndCleanup();
+        else
+            PhotonNetwork.LeaveRoom();
     }
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
@@ -1023,6 +1074,52 @@ public class DeckManager : MonoBehaviourPunCallbacks
             PlayerProfileSync.Instance.UpdateAllNames();
     }
 
+    // ==========================================================================
+    // FRIENDS-LOBBY RPC RELAYS (BUG 3 fix)
+    // PlayWithFriendsManager routes its friends RPCs through THIS GameObject's
+    // always-active PhotonView (GetReliableRpcView). PUN only resolves an RPC's
+    // target method among components on the PhotonView's OWN GameObject, so the
+    // [PunRPC] methods declared on PlayWithFriendsManager (a different GameObject)
+    // were never found on receivers. These relays live on DeckManager and forward
+    // to the singleton so the start/modes signals actually reach every client.
+    // ==========================================================================
+    [PunRPC]
+    public void RPC_Friends_StartGameForEveryone()
+    {
+        Debug.Log("[DeckManager] Relay RPC_Friends_StartGameForEveryone");
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.ExecuteFriendsGameStart();
+        else
+            RpcStartGameSync();
+    }
+
+    /// <summary>Fallback sync when PlayWithFriendsManager is unavailable on a client.</summary>
+    [PunRPC]
+    public void RpcStartGameSync()
+    {
+        Debug.Log("[DeckManager] RpcStartGameSync — forcing in-game UI on all clients.");
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.SnapScreenCover();
+            NetworkManager.Instance.BeginGameTransitionWithBlackFade(() =>
+            {
+                GameFlowState.SetPhase(GameFlowPhase.InGame, forceRecovery: true);
+                NetworkManager.Instance.ResetGameStartGuards();
+                NetworkManager.Instance.BeginGameAfterRoomReady(showLoadingOverlay: false);
+            }, skipFadeIn: true);
+        }
+    }
+
+    [PunRPC]
+    public void RPC_Friends_ShowModesPanel()
+    {
+        Debug.Log("[DeckManager] Relay RPC_Friends_ShowModesPanel");
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.ExecuteShowModesPanelToClients();
+        else
+            Debug.LogWarning("[DeckManager] PWF.Instance null on modes relay");
+    }
+
     [PunRPC]
     public void RPC_ResetAllHands()
     {
@@ -1069,11 +1166,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (isDealCoroutineRunning) return;
 
         PrepareLocalDealingStateForNextRound();
-
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowGameScene();
-
-        StartCoroutine(WaitAndStartDealing());
+        StartCoroutine(WaitAndDealCards());
     }
 
     /// <summary>Clears local dealing flags so the next round can deal (fixes stuck IsDealingComplete).</summary>
@@ -1085,11 +1178,20 @@ public class DeckManager : MonoBehaviourPunCallbacks
         _localIsDealingComplete = false;
     }
 
-    IEnumerator WaitAndStartDealing()
+    /// <summary>
+    /// Master waits for all clients to load game UI before sending buffered deal RPCs.
+    /// </summary>
+    IEnumerator WaitAndDealCards()
     {
-        float timeout = 1.5f;
+        Debug.Log("[DeckManager] WaitAndDealCards — 2s sync buffer for all clients...");
 
-        while (PlayerHand.LocalInstance == null && timeout > 0)
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowGameScene();
+
+        yield return new WaitForSeconds(2.0f);
+
+        float timeout = 4f;
+        while (PlayerHand.LocalInstance == null && timeout > 0f)
         {
             if (NetworkManager.Instance != null)
                 NetworkManager.Instance.EnsureLocalNetworkPlayer();
@@ -1100,12 +1202,18 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         if (PlayerHand.LocalInstance == null)
         {
-            Debug.LogError("[GameStart ERROR] Missing PlayerHand even after waiting!");
+            Debug.LogError("[DeckManager] WaitAndDealCards aborted — local PlayerHand missing.");
+            isDealCoroutineRunning = false;
             yield break;
         }
 
-        Debug.Log("[GameStart] PlayerHand found! StartFullDealingSequence Started");
-        StartCoroutine(FullDealingSequenceRoutine());
+        Debug.Log("[DeckManager] WaitAndDealCards complete — starting deal sequence.");
+        yield return StartCoroutine(FullDealingSequenceRoutine());
+    }
+
+    IEnumerator WaitAndStartDealing()
+    {
+        yield return StartCoroutine(WaitAndDealCards());
     }
 
     IEnumerator FullDealingSequenceRoutine()
@@ -1136,11 +1244,11 @@ public class DeckManager : MonoBehaviourPunCallbacks
             int cardsThisBatch = dealBatches[batch];
             revealedSoFar += cardsThisBatch;
             Debug.Log($"[DeckManager] Deal round {currentDealBatch}/{dealBatches.Length} (reveal up to {revealedSoFar})");
-            photonView.RPC("RPC_PlayDealAnimation", RpcTarget.All, cardsThisBatch, revealedSoFar);
+            photonView.RPC("RPC_PlayDealAnimation", RpcTarget.AllBuffered, cardsThisBatch, revealedSoFar);
 
             // FIX: GetDealBatchDuration now equals the real animation runtime; add a fixed 0.5s
             // gap between batches (previously the overestimated duration produced a ~1s idle gap).
-            yield return new WaitForSeconds(PlayerHand.GetDealBatchDuration(cardsThisBatch) + 0.5f);
+            yield return new WaitForSeconds(PlayerHand.GetDealBatchDuration(cardsThisBatch) + 0.2f);
         }
 
         List<int> seats = GetActiveSeatActorsSorted();
@@ -1149,7 +1257,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
             int starterActor = seats[0];
 
             yield return new WaitForSeconds(0.2f);
-            photonView.RPC("RPC_DealingComplete", RpcTarget.All, starterActor);
+            photonView.RPC("RPC_DealingComplete", RpcTarget.AllBuffered, starterActor);
         }
         else
         {
@@ -1222,7 +1330,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
                 CardData hiddenCard = hand[cardsPerPlayer - 1];
                 if (photonView != null)
                 {
-                    photonView.RPC(nameof(RPC_SetHiddenTrumpInfo), RpcTarget.All,
+                    photonView.RPC(nameof(RPC_SetHiddenTrumpInfo), RpcTarget.AllBuffered,
                         seatActor, (int)hiddenCard.cardSuit, (int)hiddenCard.cardRank);
                 }
                 else
@@ -1244,7 +1352,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
                 for (int i = 0; i < cardsPerPlayer; i++) { suits[i] = (int)hand[i].cardSuit; ranks[i] = (int)hand[i].cardRank; }
                 masterTrackingCounts[seatActor] = cardsPerPlayer;
                 humanHandsOnMaster[seatActor] = new List<CardData>(hand);
-                photonView.RPC("RPC_AssignFullHand", RpcTarget.All, seatActor, suits, ranks);
+                photonView.RPC("RPC_AssignFullHand", RpcTarget.AllBuffered, seatActor, suits, ranks);
             }
 
             playerIdx++;
@@ -1326,6 +1434,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
     {
         IsDealingComplete = true;
         gameStarted = true;
+        // Guarantee the loading panel is dismissed on EVERY client. The master hides it locally
+        // inside FullDealingSequenceRoutine, but non-master clients never received any hide signal
+        // and stayed stuck on "Loading game..." forever. This RPC runs on all clients, so it is the
+        // authoritative "game is ready" point to clear loading everywhere.
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.HideLoading();
         if (TrumpManager.Instance != null)
             TrumpManager.Instance.RefreshFromRoomProperties(false);
         if (PlayerHand.LocalInstance != null) PlayerHand.LocalInstance.OnDealingComplete(starterActor);
@@ -1336,9 +1450,47 @@ public class DeckManager : MonoBehaviourPunCallbacks
     {
         if (IsDealingComplete) return;
 
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.HideLoading();
+
         GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);
+
         if (PlayerHand.LocalInstance != null)
+        {
             PlayerHand.LocalInstance.PlayDealAnimationOnly(cardsInBatch, revealUpTo);
+            return;
+        }
+
+        _hasPendingDealAnim = true;
+        _pendingDealCardsInBatch = cardsInBatch;
+        _pendingDealRevealUpTo = revealUpTo;
+        if (_pendingDealAnimCoroutine == null && isActiveAndEnabled)
+            _pendingDealAnimCoroutine = StartCoroutine(ApplyPendingDealAnimationRoutine());
+    }
+
+    IEnumerator ApplyPendingDealAnimationRoutine()
+    {
+        float timeout = 8f;
+        while (_hasPendingDealAnim && timeout > 0f)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.EnsureLocalNetworkPlayer();
+            PlayerHand.ResolveLocalHand();
+
+            if (PlayerHand.LocalInstance != null)
+            {
+                PlayerHand.LocalInstance.PlayDealAnimationOnly(_pendingDealCardsInBatch, _pendingDealRevealUpTo);
+                _hasPendingDealAnim = false;
+                _pendingDealAnimCoroutine = null;
+                yield break;
+            }
+
+            yield return null;
+            timeout -= Time.deltaTime;
+        }
+
+        Debug.LogError("[DeckManager] Pending deal animation timed out.");
+        _pendingDealAnimCoroutine = null;
     }
 
     public void ResetRoundStateForNextRound()
@@ -1373,8 +1525,14 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     public void RPC_BeginNextRound(int newRound)
     {
+        // STRICT SEQUENCE GATE: guarantee the leaderboard is gone on THIS client BEFORE any
+        // dealing visuals begin. Without this, cross-client 5s-timer skew could let cards deal
+        // underneath a still-visible leaderboard on slower peers.
         if (ResultManager.Instance != null)
+        {
+            ResultManager.Instance.ForceHideLeaderboardNow();
             ResultManager.Instance.ApplyNextRoundStart(newRound);
+        }
 
         PrepareLocalDealingStateForNextRound();
         GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);
@@ -1389,8 +1547,46 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     void RPC_AssignFullHand(int targetActor, int[] suitIndices, int[] rankIndices)
     {
+        if (PhotonNetwork.LocalPlayer == null || targetActor != PhotonNetwork.LocalPlayer.ActorNumber)
+            return;
+
         if (PlayerHand.LocalInstance != null)
+        {
             PlayerHand.LocalInstance.AssignFullHandLocal(targetActor, suitIndices, rankIndices);
+            return;
+        }
+
+        _hasPendingLocalHand = true;
+        _pendingTargetActor = targetActor;
+        _pendingSuits = suitIndices;
+        _pendingRanks = rankIndices;
+        if (_pendingHandCoroutine == null && isActiveAndEnabled)
+            _pendingHandCoroutine = StartCoroutine(ApplyPendingLocalHandRoutine());
+    }
+
+    IEnumerator ApplyPendingLocalHandRoutine()
+    {
+        float timeout = 8f;
+        while (_hasPendingLocalHand && timeout > 0f)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.EnsureLocalNetworkPlayer();
+            PlayerHand.ResolveLocalHand();
+
+            if (PlayerHand.LocalInstance != null)
+            {
+                PlayerHand.LocalInstance.AssignFullHandLocal(_pendingTargetActor, _pendingSuits, _pendingRanks);
+                _hasPendingLocalHand = false;
+                _pendingHandCoroutine = null;
+                yield break;
+            }
+
+            yield return null;
+            timeout -= Time.deltaTime;
+        }
+
+        Debug.LogError("[DeckManager] Pending hand assignment timed out — client may see empty hand.");
+        _pendingHandCoroutine = null;
     }
 
     // PlayWithFriendsPanel's PhotonView often has ViewID 0 while inactive — forward lobby RPCs here.

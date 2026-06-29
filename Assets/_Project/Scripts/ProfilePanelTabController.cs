@@ -23,10 +23,9 @@ public class ProfilePanelTabController : MonoBehaviour
     public List<Tab> tabs = new List<Tab>();
     public string defaultTab = "Profile";
 
-    static readonly Color ActiveLabel = Color.white;
-    static readonly Color InactiveLabel = new Color(1f, 0.93f, 0.82f, 0.62f);
-    static readonly Color ActiveBg = Color.white;
-    static readonly Color InactiveBg = new Color(1f, 1f, 1f, 0.5f);
+    [Header("Appearance")]
+    [Tooltip("When enabled, nav sprites and label colors set in the Editor are never overwritten at runtime.")]
+    [SerializeField] private bool preserveManualNavAppearance = true;
 
     bool _wired;
     string _current;
@@ -58,8 +57,15 @@ public class ProfilePanelTabController : MonoBehaviour
             if (t == null) continue;
             bool active = t.id == id;
             if (t.screen != null) t.screen.SetActive(active);
-            if (t.label != null) t.label.color = active ? ActiveLabel : InactiveLabel;
-            if (t.navBg != null) t.navBg.color = active ? ActiveBg : InactiveBg;
+
+            // Only switch which screen is visible — images and text colors stay as authored in the scene.
+            if (preserveManualNavAppearance)
+                continue;
+
+            if (t.label != null)
+                t.label.color = active
+                    ? new Color(0.984f, 0.937f, 0.851f, 1f)
+                    : new Color(0.227f, 0.141f, 0.071f, 1f);
         }
     }
 }

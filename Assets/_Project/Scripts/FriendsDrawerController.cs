@@ -25,6 +25,7 @@ public class FriendsDrawerController : MonoBehaviour
     bool _openedFromGame;
     Image _inGameDimOverlay;
     Image _homeDimOverlay;
+    Transform _explicitOverlayRoot;
 
     void Awake()
     {
@@ -120,6 +121,17 @@ public class FriendsDrawerController : MonoBehaviour
     }
 
     /// <summary>
+    /// Shows the home friends drawer on top of an explicitly provided UI root (e.g. the room
+    /// lobby, which lives on the active main Canvas — not the inactive in-game canvas).
+    /// </summary>
+    public void OpenDrawerDuringGame(Transform overlayRoot)
+    {
+        _explicitOverlayRoot = overlayRoot;
+        OpenDrawerDuringGame();
+        _explicitOverlayRoot = null;
+    }
+
+    /// <summary>
     /// Shows the home friends drawer on top of the active game UI (used by in-game REPLACE).
     /// </summary>
     public void OpenDrawerDuringGame()
@@ -132,7 +144,7 @@ public class FriendsDrawerController : MonoBehaviour
             _homeSiblingIndex = friendListPanel.GetSiblingIndex();
         }
 
-        Transform gameRoot = ResolveGameUiRoot();
+        Transform gameRoot = _explicitOverlayRoot != null ? _explicitOverlayRoot : ResolveGameUiRoot();
         if (gameRoot != null)
         {
             EnsureInGameDimOverlay(gameRoot);

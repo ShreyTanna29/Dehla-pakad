@@ -49,6 +49,9 @@ public class ModeManager : MonoBehaviourPunCallbacks
     private bool findMatchAfterLobby = false;
     private bool isFriendsMatchMode = false;
 
+    /// <summary>True while the user is in the Play With Friends / 2v2 flow.</summary>
+    public bool IsFriendsMatchMode => isFriendsMatchMode;
+
     // Guards to prevent duplicate start/deal calls from the Mode Panel Start button.
     private bool gameStartInProgress;
 
@@ -312,14 +315,17 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
 
-        if (panelHomeScreen != null)
-            panelHomeScreen.SetActive(false);
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.EnsurePersistentBackdrop();
 
         if (panelModes != null)
         {
             panelModes.SetActive(true);
             panelModes.transform.SetAsLastSibling();
         }
+
+        if (panelHomeScreen != null)
+            panelHomeScreen.SetActive(false);
 
         ResetButtonScales();
         WireCut2TrumpButton();
@@ -352,6 +358,18 @@ public class ModeManager : MonoBehaviourPunCallbacks
             SetLogicButtonVisible("Button_LogicC", false);
         }
 
+        SaveSelectedModes();
+        UpdateModeTitleLabel();
+    }
+
+    /// <summary>Bots/Online = 1v1v1v1 (LogicA). Friends = 2v2 (LogicB) only.</summary>
+    void EnforceModeLogicRules()
+    {
+        int required = isFriendsMatchMode ? 2 : 1;
+        if (currentLogicMode == required) return;
+
+        Debug.Log($"[Modes] Enforcing logic mode {required} for {(isFriendsMatchMode ? "Friends 2v2" : "Bots/Online 1v1v1v1")}.");
+        currentLogicMode = required;
         SaveSelectedModes();
         UpdateModeTitleLabel();
     }
@@ -435,6 +453,12 @@ public class ModeManager : MonoBehaviourPunCallbacks
         isFriendsMatchMode = false;
         gameStartInProgress = false;
 
+        // Release any lingering private room before returning Home.
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.LeaveRoomAndCleanup();
+        else if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.LeavePrivateRoomIfAny();
+
         // Show Home FIRST, then hide Modes — guarantees no blank (blue) frame where no panel is active.
         if (panelHomeScreen != null)
         {
@@ -490,6 +514,21 @@ public class ModeManager : MonoBehaviourPunCallbacks
         // New flow: open the Modes panel FIRST. The seat (Play-with-Friends) panel
         // opens later, after the host taps Play on the modes screen.
         OpenModePanelInternal(true);
+
+        // BUG 1 fix: create the private friends room EAGERLY (friends path only) so a
+        // Photon room/PIN exists before the host clicks any invite. Previously the room
+        // was only created at OnSeatPanelOpened() after mode selection, so early invite
+        // clicks were parked in _pendingInviteFriendId and sent only after Play.
+        // CreatePrivateRoom() already guards against double-creation (returns early when
+        // PhotonNetwork.InRoom). The host's seat panel re-uses the same room later.
+        if (PlayWithFriendsManager.Instance != null && !PhotonNetwork.InRoom)
+        {
+            Debug.Log("[Friends][BUG1] Eagerly creating private room on Play With Friends entry.");
+            // Mark this as an eager invite-room so join-time handlers keep the host on the Modes
+            // panel (the seat lobby opens later when the host taps Play).
+            PlayWithFriendsManager.Instance.SuppressSeatLobbyOnJoin = true;
+            PlayWithFriendsManager.Instance.CreatePrivateRoom();
+        }
     }
 
     public void OnClick_ClosePlayWithFriends()
@@ -720,6 +759,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("[StartRoute] Mode panel Start clicked");
 
+        EnforceModeLogicRules();
+
         bool isPrivateFriends = PhotonNetwork.InRoom
             && PhotonNetwork.CurrentRoom != null
             && !PhotonNetwork.CurrentRoom.IsVisible
@@ -731,20 +772,30 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         Debug.Log($"[StartRoute] MatchType = {(isPrivateFriends ? "PlayWithFriends (private room)" : matchType.ToString())} | isPlayBotsMode={isBots}");
 
-        // NEW FLOW: Friends mode chosen but no private room yet -> the host has just
-        // finished selecting modes. Open the seat/lobby panel so a room can be created
-        // and friends can join. The match starts later from that panel's Start button
-        // (enabled once all 4 seats are filled).
-        if (isFriendsMatchMode && !isPrivateFriends)
+        // NEW FLOW: Friends mode and the host has not yet opened the seat/lobby panel ->
+        // the host just finished selecting modes. Open the seat/lobby panel so the room
+        // (already created eagerly on Play-With-Friends entry) is shown with its PIN and
+        // friends can join. The match starts later from that panel's Start button
+        // (host only, enabled once the table is full or bots are included).
+        //
+        // BUG FIX: we must ALSO enter this branch when a private room already exists, because
+        // OnClick_PlayFriends() creates the room eagerly (so SuppressSeatLobbyOnJoin stays true
+        // until the host opens the lobby). Without this, the first Start click would see
+        // isPrivateFriends == true, skip the lobby, and immediately launch a bot game.
+        bool seatLobbyNotOpenedYet = PlayWithFriendsManager.Instance != null
+            && PlayWithFriendsManager.Instance.SuppressSeatLobbyOnJoin;
+        if (isFriendsMatchMode && (!isPrivateFriends || seatLobbyNotOpenedYet))
         {
             Debug.Log("[StartRoute] Friends mode -> opening seat panel (modes already chosen)");
             SaveSelectedModes();
-            if (panelModes != null) panelModes.SetActive(false);
             if (panelPlayWithFriends != null)
             {
                 panelPlayWithFriends.SetActive(true);
                 panelPlayWithFriends.transform.SetAsLastSibling();
             }
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ResetRoomLobbyCanvasGroup();
+            if (panelModes != null) panelModes.SetActive(false);
             if (PlayWithFriendsManager.Instance != null)
                 PlayWithFriendsManager.Instance.OnSeatPanelOpened();
             return;
@@ -762,14 +813,30 @@ public class ModeManager : MonoBehaviourPunCallbacks
         // 1) PRIVATE FRIENDS ROUTE -----------------------------------------
         if (isPrivateFriends)
         {
-            Debug.Log("[StartRoute] Private Friends route");
+            bool hostConfirmed = PlayWithFriendsManager.Instance != null
+                && PlayWithFriendsManager.Instance.ConsumeHostSeatStartConfirmation();
+
+            if (!hostConfirmed)
+            {
+                Debug.Log("[StartRoute] Private room active but host has not confirmed from seat panel — showing lobby (no auto-start).");
+                if (panelPlayWithFriends != null)
+                {
+                    panelPlayWithFriends.SetActive(true);
+                    panelPlayWithFriends.transform.SetAsLastSibling();
+                }
+                if (NetworkManager.Instance != null)
+                    NetworkManager.Instance.ResetRoomLobbyCanvasGroup();
+                if (panelModes != null) panelModes.SetActive(false);
+                if (PlayWithFriendsManager.Instance != null)
+                    PlayWithFriendsManager.Instance.ShowPrivateRoomLobbyUI();
+                return;
+            }
+
+            Debug.Log("[StartRoute] Private Friends route (host confirmed from seat panel)");
             gameStartInProgress = true;
 
             if (PlayWithFriendsManager.Instance != null)
-            {
-                // Host saves modes to room props + RPCs everyone to start together.
                 PlayWithFriendsManager.Instance.FinalStartWithSelectedModes();
-            }
             else
             {
                 Debug.LogError("[StartRoute] PlayWithFriendsManager.Instance missing — cannot start private game.");
@@ -990,8 +1057,21 @@ public class ModeManager : MonoBehaviourPunCallbacks
             bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs1) && (bool)gs1;
             if (!rejoining)
             {
+                // Eager invite-room: host must stay on the Modes panel until they tap Play.
+                if (PlayWithFriendsManager.Instance != null
+                    && PlayWithFriendsManager.Instance.SuppressSeatLobbyOnJoin
+                    && PhotonNetwork.IsMasterClient)
+                {
+                    Debug.Log("[ModeManager] Eager invite-room — host keeps Modes panel visible.");
+                    if (NetworkManager.Instance != null)
+                        NetworkManager.Instance.EnsureFriendsModesPanelVisible();
+                    yield break;
+                }
+
                 Debug.Log("Private Room Joined. Waiting in Lobby...");
-                GameFlowState.SetPhase(GameFlowPhase.InRoom);
+                GameFlowState.SetPhase(GameFlowPhase.InRoom, forceRecovery: true);
+
+                // Lobby fade is owned by NetworkManager.SmoothTransitionToRoomLobby().
                 yield break;
             }
         }
@@ -1087,9 +1167,14 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         Debug.LogError($"[Photon] JoinRoomFailed | {returnCode} | {message}");
         gameStartInProgress = false;
-        GameFlowState.SetPhase(GameFlowPhase.Matchmaking);
+        GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
         if (MatchmakingManager.Instance != null) MatchmakingManager.Instance.StopSearching(false);
-        if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.OnJoinRoomFailedRestoreUi();
+            if (PlayWithFriendsManager.Instance != null)
+                PlayWithFriendsManager.Instance.ShowJoinError("Invalid PIN or Room Full!");
+        }
     }
 
 }
