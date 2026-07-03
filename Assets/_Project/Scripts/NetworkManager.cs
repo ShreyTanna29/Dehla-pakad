@@ -1910,6 +1910,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void ForceClearBlackOverlay()
     {
+        if (_joinFadeRoutine != null)
+        {
+            StopCoroutine(_joinFadeRoutine);
+            _joinFadeRoutine = null;
+        }
+
         if (blackTransitionCanvasGroup != null)
         {
             blackTransitionCanvasGroup.DOKill();
@@ -1918,6 +1924,29 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             blackTransitionCanvasGroup.interactable = false;
             blackTransitionCanvasGroup.gameObject.SetActive(false);
         }
+
+        GameObject sceneOverlay = GameObject.Find("BlackTransitionOverlay");
+        if (sceneOverlay != null && (blackTransitionCanvasGroup == null
+            || sceneOverlay != blackTransitionCanvasGroup.gameObject))
+        {
+            var cg = sceneOverlay.GetComponent<CanvasGroup>();
+            if (cg != null)
+            {
+                cg.DOKill();
+                cg.alpha = 0f;
+                cg.blocksRaycasts = false;
+                cg.interactable = false;
+            }
+            sceneOverlay.SetActive(false);
+        }
+    }
+
+    /// <summary>Stops PIN-join fade coroutines and clears black/loading overlays.</summary>
+    public void CancelPinJoinUiOverlays()
+    {
+        _lobbyTransitionRunning = false;
+        ForceClearBlackOverlay();
+        HideLoadingInstant();
     }
 
     /// <summary>If every main panel is hidden, restore the correct screen for the current flow phase.</summary>
@@ -3088,11 +3117,16 @@ yield return new WaitForSeconds(1f);
                 && PhotonNetwork.Server == Photon.Realtime.ServerConnection.MasterServer)
             {
                 string pin = PlayWithFriendsManager.PendingJoinPin;
-                PlayWithFriendsManager.PendingJoinPin = null;
                 if (!string.IsNullOrEmpty(pin))
                 {
                     Debug.Log("[Photon] Joining queued room after leave: " + pin);
-                    BeginJoinRoomWithLoadingFade(pin, "Joining game...");
+                    if (PlayWithFriendsManager.Instance != null)
+                        PlayWithFriendsManager.Instance.TryFlushPendingJoin();
+                    else
+                    {
+                        PlayWithFriendsManager.PendingJoinPin = null;
+                        PhotonNetwork.JoinRoom(pin);
+                    }
                 }
                 yield break;
             }
@@ -3225,6 +3259,15 @@ yield return new WaitForSeconds(1f);
         }
 
         PlayWithFriendsManager.PendingJoinPin = null;
+
+        if (ModeManager.Instance != null && ModeManager.Instance.IsFriendsMatchMode
+            && PlayWithFriendsManager.Instance != null)
+        {
+            CancelPinJoinUiOverlays();
+            return;
+        }
+
+        CancelPinJoinUiOverlays();
         OnJoinRoomFailedRestoreUi();
         if (PlayWithFriendsManager.Instance != null)
             PlayWithFriendsManager.Instance.ShowJoinError("Invalid PIN or Room Full!");

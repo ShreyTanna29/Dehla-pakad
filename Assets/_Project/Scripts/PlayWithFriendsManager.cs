@@ -833,26 +833,36 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public override void OnConnectedToMaster()
     {
         TryFlushPendingPrivateRoomCreate();
-
-        if (!string.IsNullOrEmpty(PendingJoinPin) && !PhotonNetwork.InRoom)
-        {
-            string pin = PendingJoinPin;
-            PendingJoinPin = null;
-
-            Debug.Log($"[Friends] Photon ready — joining queued room '{pin}'");
-            if (NetworkManager.Instance != null)
-                NetworkManager.Instance.BeginJoinRoomWithLoadingFade(pin, "Joining game...");
-            else
-                PhotonNetwork.JoinRoom(pin);
-        }
-
+        TryFlushPendingJoin();
         CheckFriendsOnlineStatus();
     }
 
     public override void OnJoinedLobby()
     {
         TryFlushPendingPrivateRoomCreate();
+        TryFlushPendingJoin();
         CheckFriendsOnlineStatus();
+    }
+
+    public void TryFlushPendingJoin()
+    {
+        if (!string.IsNullOrEmpty(PendingJoinPin) && !PhotonNetwork.InRoom)
+        {
+            if (!NetworkManager.IsPhotonMasterReadyForRooms())
+            {
+                Debug.Log("[Friends] Client not ready yet (JoiningLobby). Deferring PIN join.");
+                return;
+            }
+
+            string pin = PendingJoinPin;
+            PendingJoinPin = null;
+
+            Debug.Log($"[Friends] Photon ready — joining queued room '{pin}'");
+
+            _joinInProgress = true;
+            if (!PhotonNetwork.JoinRoom(pin))
+                RestoreModesPanelAfterFailedJoin("Invalid PIN or Room Full!");
+        }
     }
 
     // ==========================================
@@ -862,31 +872,13 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public void JoinRoomWithPIN()
     {
         Debug.Log("[Friends] Joining room by PIN");
-        if (errorText != null) errorText.gameObject.SetActive(false);
-
         if (pinInputField == null || string.IsNullOrEmpty(pinInputField.text))
         {
             ShowUIError("Enter valid PIN!");
             return;
         }
 
-        if (!PhotonNetwork.IsConnectedAndReady)
-        {
-            if (!NetworkManager.HasInternet())
-            {
-                ShowUIError("No internet connection.");
-                return;
-            }
-            if (NetworkManager.Instance != null)
-                NetworkManager.Instance.ConnectToPhoton();
-            ShowUIError("Connecting... please wait.");
-            return;
-        }
-
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.BeginJoinRoomWithLoadingFade(pinInputField.text.Trim(), "Joining game...");
-        else
-            PhotonNetwork.JoinRoom(pinInputField.text.Trim());
+        JoinRoomWithPINText(pinInputField.text);
     }
 
     /// <summary>
@@ -895,34 +887,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     /// </summary>
     public void JoinRoomWithPINText(string pin)
     {
-        Debug.Log("[Friends] Joining room by PIN: " + pin);
         if (errorText != null) errorText.gameObject.SetActive(false);
-
-        if (string.IsNullOrEmpty(pin) || string.IsNullOrWhiteSpace(pin))
-        {
-            ShowUIError("Enter valid PIN!");
-            return;
-        }
-
-        if (!PhotonNetwork.IsConnectedAndReady)
-        {
-            if (!NetworkManager.HasInternet())
-            {
-                ShowUIError("No internet connection.");
-                return;
-            }
-
-            PendingJoinPin = pin.Trim();
-            if (NetworkManager.Instance != null)
-            {
-                NetworkManager.Instance.ConnectToPhoton();
-                NetworkManager.Instance.ShowLoading("Joining game...");
-            }
-            ShowUIError("Connecting... please wait.");
-            return;
-        }
-
-        string targetPin = pin.Trim();
+        if (string.IsNullOrEmpty(pin) || string.IsNullOrWhiteSpace(pin)) return;
 
         if (_joinInProgress)
         {
@@ -930,37 +896,62 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        // If we are already sitting in a room (typically our OWN eagerly-created private room
-        // from tapping Play With Friends), we must leave it before we can join the friend's
-        // room. Queue the PIN and leave; NetworkManager.OnLeftRoom honors PendingJoinPin and
-        // joins it once we are back on the master server (instead of bouncing to Home).
+        string targetPin = pin.Trim();
+
+        if (!PhotonNetwork.IsConnectedAndReady)
+        {
+            PendingJoinPin = targetPin;
+            if (NetworkManager.Instance != null) NetworkManager.Instance.ConnectToPhoton();
+            ShowUIError("Connecting... please wait.");
+            return;
+        }
+
         if (PhotonNetwork.InRoom)
         {
-            if (PhotonNetwork.CurrentRoom != null && PhotonNetwork.CurrentRoom.Name == targetPin)
+            if (PhotonNetwork.CurrentRoom.Name == targetPin)
             {
-                _joinInProgress = false;
                 ShowPrivateRoomLobbyUI();
                 return;
             }
-
             _joinInProgress = true;
             SuppressSeatLobbyOnJoin = false;
             PendingJoinPin = targetPin;
-            if (NetworkManager.Instance != null)
-            {
-                NetworkManager.Instance.SnapScreenCover();
-                NetworkManager.Instance.ShowLoading("Joining game...");
-            }
             PhotonNetwork.LeaveRoom();
+            return;
+        }
+
+        if (!NetworkManager.IsPhotonMasterReadyForRooms())
+        {
+            PendingJoinPin = targetPin;
+            ShowUIError("Connecting... please wait.");
             return;
         }
 
         _joinInProgress = true;
         PendingJoinPin = null;
+        ShowUIError("Joining Table...");
+
+        if (!PhotonNetwork.JoinRoom(targetPin))
+            RestoreModesPanelAfterFailedJoin("Invalid PIN or Room Full!");
+    }
+
+    void RestoreModesPanelAfterFailedJoin(string errorMsg)
+    {
+        _joinInProgress = false;
+        PendingJoinPin = null;
+
         if (NetworkManager.Instance != null)
-            NetworkManager.Instance.BeginJoinRoomWithLoadingFade(targetPin, "Joining game...");
-        else
-            PhotonNetwork.JoinRoom(targetPin);
+            NetworkManager.Instance.CancelPinJoinUiOverlays();
+
+        GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+
+        if (ModeManager.Instance != null && ModeManager.Instance.IsFriendsMatchMode)
+        {
+            ModeManager.Instance.ShowModesScreenOnly();
+            ModeManager.Instance.ShowJoinTablePanel();
+        }
+
+        ShowUIError(errorMsg);
     }
 
     public void ShowJoinError(string errorMsg)
@@ -971,13 +962,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
-        _joinInProgress = false;
-        PendingJoinPin = null;
         Debug.LogError("Room Join Failed: " + message);
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.OnJoinRoomFailedRestoreUi();
-        else
-            ShowUIError("Invalid PIN or Room Full!");
+        RestoreModesPanelAfterFailedJoin("Invalid PIN or Room Full!");
     }
 
     /// <summary>
@@ -3370,10 +3356,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.BeginJoinRoomWithLoadingFade(roomPin, "Joining friend's table...");
-        else
-            JoinRoomWithPINText(roomPin);
+        JoinRoomWithPINText(roomPin);
     }
 
     /// <summary>Declines a pending game invite and removes it from Firebase.</summary>
