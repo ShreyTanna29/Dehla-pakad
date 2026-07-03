@@ -42,6 +42,7 @@ public class GoogleLogin : MonoBehaviour
     private const float PhotonReadyMaxWait = 12f;
     private bool isFirebaseReady = false;
     private bool _loginFlowStarted;
+    private bool _pendingGuestLogin;
     public bool IsFirebaseReady { get { if(isFirebaseReady) {} return isFirebaseReady; } }
 
     /// <summary>True only after login + profile setup (or existing profile load) finished.</summary>
@@ -99,6 +100,8 @@ public class GoogleLogin : MonoBehaviour
 
     void Start()
     {
+        ResolveLoginButtons();
+
         // Setup Google Sign-In Configuration
         configuration = new GoogleSignInConfiguration
         {
@@ -121,6 +124,15 @@ public class GoogleLogin : MonoBehaviour
         }
 
         InitializeFirebase();
+    }
+
+    void ResolveLoginButtons()
+    {
+        if (googleSignInButton == null && UiSafeLookup.TryGetButton("Button_GoogleLogin", out UnityEngine.UI.Button googleBtn))
+            googleSignInButton = googleBtn;
+
+        if (btnGuestLogin == null && UiSafeLookup.TryGetButton("Button_GuestLogin", out UnityEngine.UI.Button guestBtn))
+            btnGuestLogin = guestBtn;
     }
 
     private void InitializeFirebase()
@@ -148,6 +160,13 @@ public class GoogleLogin : MonoBehaviour
                 if (TryAutoLogin())
                 {
                     UpdateStatus("Welcome back...");
+                    return;
+                }
+
+                if (_pendingGuestLogin)
+                {
+                    _pendingGuestLogin = false;
+                    BeginGuestSignIn();
                     return;
                 }
 
@@ -400,7 +419,11 @@ public class GoogleLogin : MonoBehaviour
 
         string defaultName;
         if (isGuest)
-            defaultName = "Guest_" + UnityEngine.Random.Range(1000, 9999);
+        {
+            PlayerPrefs.DeleteKey("PlayerEmail");
+            PlayerPrefs.Save();
+            defaultName = "Guest" + UnityEngine.Random.Range(1000, 9999);
+        }
         else if (!string.IsNullOrWhiteSpace(user.DisplayName))
             defaultName = user.DisplayName.Trim();
         else
@@ -454,14 +477,35 @@ public class GoogleLogin : MonoBehaviour
     }
 
     /// <summary>Bound to the "Play as Guest" button. Signs in anonymously and reuses the profile flow.</summary>
-    public void SignInAsGuest()
+    public void SignInAsGuest() => AttemptGuestLogin();
+
+    public void AttemptGuestLogin()
     {
-        Debug.Log("Guest Login Button Clicked! Starting anonymous sign-in.");
+        try
+        {
+            BeginGuestSignIn();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[GoogleLogin] AttemptGuestLogin failed: {ex}");
+            UpdateStatus("Guest Login Failed, try again.");
+            _loginFlowStarted = false;
+            _pendingGuestLogin = false;
+            SetLoginButtonsInteractable(true);
+        }
+    }
+
+    void BeginGuestSignIn()
+    {
+        Debug.Log("[LoginFlow] Guest Login Button Clicked! Starting anonymous sign-in.");
         _loginFlowStarted = true;
+        SetLoginButtonsInteractable(false);
 
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
             UpdateStatus("No Internet Connection!");
+            _loginFlowStarted = false;
+            SetLoginButtonsInteractable(true);
             return;
         }
 
@@ -471,6 +515,7 @@ public class GoogleLogin : MonoBehaviour
 #else
         if (!isFirebaseReady || auth == null)
         {
+            _pendingGuestLogin = true;
             UpdateStatus("Firebase Initializing...");
             InitializeFirebase();
             return;
@@ -484,6 +529,13 @@ public class GoogleLogin : MonoBehaviour
 #endif
     }
 
+    void ResetGuestLoginFailure()
+    {
+        _loginFlowStarted = false;
+        _pendingGuestLogin = false;
+        SetLoginButtonsInteractable(true);
+    }
+
     private void OnGuestSignInFinished(Task<AuthResult> task)
     {
         if (task.IsFaulted || task.IsCanceled)
@@ -493,6 +545,7 @@ public class GoogleLogin : MonoBehaviour
 
             Debug.LogError("❌ Guest Login Failed: " + task.Exception);
             UpdateStatus("Guest Login Failed");
+            ResetGuestLoginFailure();
             ShowLoginPanel();
             return;
         }
@@ -504,6 +557,7 @@ public class GoogleLogin : MonoBehaviour
                 NetworkManager.Instance.HideLoading();
 
             UpdateStatus("Guest Login Failed");
+            ResetGuestLoginFailure();
             ShowLoginPanel();
             return;
         }
@@ -672,11 +726,12 @@ public class GoogleLogin : MonoBehaviour
                 NetworkManager.Instance.ShowLoading("Loading profile setup...");
 
             PlayerProfileManager.Instance.CheckAndLoadUserProfile(
-                SimulatedGuestUserId, "Guest_" + UnityEngine.Random.Range(1000, 9999));
+                SimulatedGuestUserId, "Guest" + UnityEngine.Random.Range(1000, 9999));
         }
         else
         {
             UpdateStatus("Profile manager missing");
+            ResetGuestLoginFailure();
         }
     }
 

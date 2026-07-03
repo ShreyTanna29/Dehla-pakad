@@ -106,6 +106,10 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     public Transform gameUiSearchRoot;
     public Transform tableCenterTransform;
 
+    [Header("Table Center Trick Layout")]
+    [SerializeField] float centerCardSpacing = 130f;
+    [SerializeField] float centerCardYOffset = 30f;
+
     [Header("AAA Dealing Animation")]
     [UnityEngine.Serialization.FormerlySerializedAs("flyingCardPrefab")]
     public GameObject dummyCardPrefab;
@@ -447,15 +451,16 @@ public class PlayerHand : MonoBehaviourPunCallbacks
 
     public Vector3 GetFinalPositionForSeat(int seat)
     {
-        const float gap = 100f;
+        float gap = centerCardSpacing;
+        float yLift = centerCardYOffset;
 
         switch (seat)
         {
-            case 0: return new Vector3(0f, -gap, 0f);
-            case 1: return new Vector3(-gap, 0f, 0f);
-            case 2: return new Vector3(0f, gap, 0f);
-            case 3: return new Vector3(gap, 0f, 0f);
-            default: return Vector3.zero;
+            case 0: return new Vector3(0f, -gap + yLift, 0f);
+            case 1: return new Vector3(-gap, yLift, 0f);
+            case 2: return new Vector3(0f, gap + yLift, 0f);
+            case 3: return new Vector3(gap, yLift, 0f);
+            default: return new Vector3(0f, yLift, 0f);
         }
     }
 
@@ -856,6 +861,53 @@ private static bool _resultPanelShown = false;
                 fan.localScale = Vector3.one * 0.9f;
                 fan.gameObject.SetActive(false);
             }
+        }
+    }
+
+    /// <summary>Destroys runtime card UI from the table/hand areas when leaving a match.</summary>
+    public static void CleanupRuntimeCardUi()
+    {
+        if (LocalInstance != null)
+        {
+            LocalInstance.ResetHand();
+            return;
+        }
+
+        string[] areas =
+        {
+            "Player_Hand_Area", "Table_Center",
+            "Opponent_Left", "Opponent_Top", "Opponent_Right"
+        };
+
+        foreach (string area in areas)
+            DestroyRuntimeCardsUnder(area);
+    }
+
+    static void DestroyRuntimeCardsUnder(string uiName)
+    {
+        if (!UiSafeLookup.TryGet(uiName, out GameObject areaGo) || areaGo == null) return;
+
+        Transform area = areaGo.transform;
+        for (int i = area.childCount - 1; i >= 0; i--)
+        {
+            Transform child = area.GetChild(i);
+            if (child == null) continue;
+            if (child.GetComponent<CardDisplay>() == null && !child.name.Contains("Card"))
+                continue;
+            child.DOKill();
+            Object.Destroy(child.gameObject);
+        }
+
+        Transform fan = area.Find("CardFan");
+        if (fan != null)
+        {
+            for (int i = fan.childCount - 1; i >= 0; i--)
+            {
+                Transform child = fan.GetChild(i);
+                child.DOKill();
+                Object.Destroy(child.gameObject);
+            }
+            fan.gameObject.SetActive(false);
         }
     }
 

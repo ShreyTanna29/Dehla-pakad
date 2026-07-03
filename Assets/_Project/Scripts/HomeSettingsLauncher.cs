@@ -39,8 +39,12 @@ public class HomeSettingsLauncher : MonoBehaviour
 
     void OpenPanel()
     {
-        if (_panel == null) Bind();
-        if (_panel != null) _panel.Open();
+        if (_button == null || _panel == null)
+            Bind();
+        if (_button != null)
+            _button.interactable = true;
+        if (_panel != null)
+            _panel.Open();
     }
 
     static Transform FindDeepInScene(string name)

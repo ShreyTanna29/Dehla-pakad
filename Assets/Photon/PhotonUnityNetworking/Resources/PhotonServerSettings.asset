@@ -85,6 +85,11 @@ MonoBehaviour:
   - RPC_Friends_StartGameForEveryone
   - RpcStartGameSync
   - RPC_ForceLeaveAfterReplace
+  - RPC_PlayVoiceId
+  - RPC_PlayVoiceIndex
+  - RPC_PlayVoice
+  - RPC_PlayVoiceLine
+  - RPC_ShowEmoji
   DisableAutoOpenWizard: 1
   ShowSettings: 0
   DevRegionSetOnce: 1

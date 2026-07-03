@@ -54,6 +54,9 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
         if (PlayerStatsPopupController.Instance != null)
             PlayerStatsPopupController.Instance.WireSeatAvatars();
 
+        if (EmojiManager.Instance != null)
+            EmojiManager.Instance.InitializeGameScene();
+
         Debug.Log("[GameInit] Player profiles initialized");
     }
 

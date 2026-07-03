@@ -96,6 +96,9 @@ public class InGameSettingsController : MonoBehaviour
         settingsPanel.SetActive(true);
         settingsPanel.transform.SetAsLastSibling();
 
+        if (openButton != null)
+            openButton.interactable = true;
+
         if (panelRect != null)
         {
             float w = panelRect.rect.width;
@@ -107,10 +110,9 @@ public class InGameSettingsController : MonoBehaviour
         if (panelCanvasGroup != null)
         {
             panelCanvasGroup.DOKill();
-            panelCanvasGroup.alpha = 0f;
+            panelCanvasGroup.alpha = 1f;
             panelCanvasGroup.interactable = true;
             panelCanvasGroup.blocksRaycasts = true;
-            panelCanvasGroup.DOFade(1f, 0.25f).SetUpdate(true);
         }
 
         isMuted = PlayerPrefs.GetInt(PREF_MUTE, 0) == 1;
@@ -127,7 +129,11 @@ public class InGameSettingsController : MonoBehaviour
             float w = panelRect.rect.width;
             panelRect.DOKill();
             panelRect.DOAnchorPosX(w, 0.25f).SetEase(Ease.InCubic).SetUpdate(true)
-                .OnComplete(() => { if (settingsPanel != null) settingsPanel.SetActive(false); });
+                .OnComplete(() =>
+                {
+                    if (settingsPanel != null) settingsPanel.SetActive(false);
+                    if (panelCanvasGroup != null) panelCanvasGroup.alpha = 0f;
+                });
         }
         else
         {
@@ -136,8 +142,10 @@ public class InGameSettingsController : MonoBehaviour
 
         if (panelCanvasGroup != null)
         {
+            panelCanvasGroup.DOKill();
             panelCanvasGroup.interactable = false;
             panelCanvasGroup.blocksRaycasts = false;
+            panelCanvasGroup.alpha = 0f;
         }
     }
 
@@ -254,18 +262,48 @@ public class InGameSettingsController : MonoBehaviour
 
     void DoExitToHome()
     {
-        GameFlowState.SetPhase(GameFlowPhase.Home);
+        DismissAllPanels();
 
-        // Guard against a double-leave (e.g. Back pressed twice): LeaveRoom while already leaving
-        // makes Photon log an operation error. Only leave when actually in a room and not mid-leave.
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.LeaveRoomAndCleanup();
+            return;
+        }
+
+        GameFlowState.SetPhase(GameFlowPhase.Home);
         bool leaving = PhotonNetwork.NetworkClientState == ClientState.Leaving;
         if (PhotonNetwork.InRoom && !leaving)
+            PhotonNetwork.LeaveRoom();
+        else if (ModeManager.Instance != null)
+            ModeManager.Instance.ReturnToHomeClean();
+    }
+
+    /// <summary>Closes in-game settings and exit confirmation popups.</summary>
+    public void DismissAllPanels()
+    {
+        if (settingsPanel != null)
         {
-            PhotonNetwork.LeaveRoom();            // NetworkManager.OnLeftRoom -> ReturnToHomeScreen
+            settingsPanel.SetActive(false);
+            if (panelCanvasGroup != null)
+            {
+                panelCanvasGroup.DOKill();
+                panelCanvasGroup.alpha = 0f;
+                panelCanvasGroup.interactable = false;
+                panelCanvasGroup.blocksRaycasts = false;
+            }
         }
-        else if (!PhotonNetwork.InRoom && !leaving && NetworkManager.Instance != null)
+
+        if (confirmExitPanel != null)
         {
-            NetworkManager.Instance.ReturnToHomeScreen();
+            confirmExitPanel.SetActive(false);
+            var cg = confirmExitPanel.GetComponent<CanvasGroup>();
+            if (cg != null)
+            {
+                cg.DOKill();
+                cg.alpha = 0f;
+                cg.interactable = false;
+                cg.blocksRaycasts = false;
+            }
         }
     }
 

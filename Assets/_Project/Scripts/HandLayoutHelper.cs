@@ -114,9 +114,10 @@ public static class HandLayoutHelper
 
     static float ComputeHandSpacing(float fitSpacing, float prefabCardWidth)
     {
+        const float spacingBoost = 30f;
         float preferredMaxSpacing = 4f;
         float maxOverlap = prefabCardWidth * 0.72f;
         float minSpacing = -maxOverlap;
-        return Mathf.Clamp(fitSpacing, minSpacing, preferredMaxSpacing);
+        return Mathf.Clamp(fitSpacing, minSpacing, preferredMaxSpacing) + spacingBoost;
     }
 }

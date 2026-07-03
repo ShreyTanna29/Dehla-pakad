@@ -17,10 +17,14 @@ public class LoadingAnimation : MonoBehaviour
 
     public bool shouldRotate = false;
     public bool shouldPulse = false;
+    [Tooltip("When false, NetworkManager drives the slider during game load.")]
+    public bool useSimulatedProgress = true;
 
     void OnEnable()
     {
         progress = 0f;
+        if (loadingSlider == null)
+            loadingSlider = GetComponentInChildren<UnityEngine.UI.Slider>(true);
         if (loadingSlider != null) loadingSlider.value = 0f;
     }
 
@@ -51,11 +55,10 @@ public class LoadingAnimation : MonoBehaviour
 
     void Update()
     {
-        if (loadingSlider != null)
-        {
-            progress += Time.deltaTime * 0.2f; // Simulate 5 seconds loading
-            if (progress > 1f) progress = 0f; // Reset for looping animation effect
-            loadingSlider.value = progress;
-        }
+        if (!useSimulatedProgress || loadingSlider == null) return;
+
+        progress += Time.deltaTime * 0.2f;
+        if (progress > 1f) progress = 0f;
+        loadingSlider.value = progress;
     }
 }

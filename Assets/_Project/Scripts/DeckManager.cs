@@ -76,7 +76,13 @@ public class DeckManager : MonoBehaviourPunCallbacks
         }
     }
     private bool isDealCoroutineRunning = false;
+    private Coroutine _dealSequenceCoroutine;
+    private Coroutine _joinedRoomCoroutine;
+    private int _pendingDealingCompleteStarter = -1;
+    private Coroutine _pendingDealingCompleteCoroutine;
     private Coroutine matchmakingCoroutine;
+    /// <summary>When true, buffered deal RPCs from a prior match are ignored (menu / leave).</summary>
+    private bool _ignoringMatchRpcs;
 
     int CardsPerPlayer => TaashRules.CardsPerPlayer;
 
@@ -471,9 +477,80 @@ public class DeckManager : MonoBehaviourPunCallbacks
             TurnManager.Instance.SetPaused(paused);
     }
 
+    public void StopOnlineMatchmaking()
+    {
+        if (matchmakingCoroutine != null)
+        {
+            StopCoroutine(matchmakingCoroutine);
+            matchmakingCoroutine = null;
+            Debug.Log("[DeckManager] Online matchmaking countdown stopped.");
+        }
+    }
+
+    public void StopAllDealCoroutines()
+    {
+        if (_dealSequenceCoroutine != null)
+        {
+            StopCoroutine(_dealSequenceCoroutine);
+            _dealSequenceCoroutine = null;
+        }
+
+        if (_joinedRoomCoroutine != null)
+        {
+            StopCoroutine(_joinedRoomCoroutine);
+            _joinedRoomCoroutine = null;
+        }
+
+        if (_pendingHandCoroutine != null)
+        {
+            StopCoroutine(_pendingHandCoroutine);
+            _pendingHandCoroutine = null;
+        }
+
+        if (_pendingDealAnimCoroutine != null)
+        {
+            StopCoroutine(_pendingDealAnimCoroutine);
+            _pendingDealAnimCoroutine = null;
+        }
+
+        if (_pendingDealingCompleteCoroutine != null)
+        {
+            StopCoroutine(_pendingDealingCompleteCoroutine);
+            _pendingDealingCompleteCoroutine = null;
+        }
+
+        _hasPendingLocalHand = false;
+        _hasPendingDealAnim = false;
+        _pendingDealingCompleteStarter = -1;
+        isDealCoroutineRunning = false;
+    }
+
+    /// <summary>Lightweight reset when opening a new mode from Home without tearing down Photon.</summary>
+    public void PrepareForNewMatchFromMenu()
+    {
+        Debug.Log("[DeckManager] PrepareForNewMatchFromMenu");
+        _ignoringMatchRpcs = true;
+        StopOnlineMatchmaking();
+        StopAllDealCoroutines();
+        _localGameStarted = false;
+        _localIsDealingComplete = false;
+        deckIndex = 0;
+        currentDealBatch = 0;
+        botActorNumbers.Clear();
+        botHands.Clear();
+        humanHandsOnMaster.Clear();
+        masterTrackingCounts.Clear();
+        masterDeck.Clear();
+        PlayerHand.CleanupRuntimeCardUi();
+    }
+
     public void ResetMatchState()
     {
         Debug.Log("[DeckManager] Resetting match state for a fresh game.");
+
+        _ignoringMatchRpcs = true;
+        StopOnlineMatchmaking();
+        StopAllDealCoroutines();
         
         // 🚀 Authoritative Reset — only when fully joined. During a LeaveRoom teardown InRoom is
         // still true but writing properties is rejected/logged, so require ClientState == Joined.
@@ -493,25 +570,27 @@ public class DeckManager : MonoBehaviourPunCallbacks
             Debug.Log("[DeckManager] Cleared Room Properties for new match.");
         }
 
+        _localGameStarted = false;
+        _localIsDealingComplete = false;
         IsDealingComplete = false;
         gameStarted = false;
         deckIndex = 0;
         currentDealBatch = 0;
+        masterDeck.Clear();
         
         botActorNumbers.Clear();
         botHands.Clear();
         humanHandsOnMaster.Clear();
         masterTrackingCounts.Clear();
 
-        if (PlayerHand.LocalInstance != null)
-        {
-            PlayerHand.LocalInstance.ResetHand();
-        }
+        PlayerHand.CleanupRuntimeCardUi();
     }
 
     public override void OnJoinedRoom()
     {
-        StartCoroutine(HandleDeckJoinedRoomDeferred());
+        if (_joinedRoomCoroutine != null)
+            StopCoroutine(_joinedRoomCoroutine);
+        _joinedRoomCoroutine = StartCoroutine(HandleDeckJoinedRoomDeferred());
     }
 
     IEnumerator HandleDeckJoinedRoomDeferred()
@@ -554,6 +633,8 @@ public class DeckManager : MonoBehaviourPunCallbacks
             if (PhotonNetwork.OfflineMode) FillBotsAndStart();
             else OnRoomJoinedCheckStart();
         }
+
+        _joinedRoomCoroutine = null;
     }
 
     // Task 7: true once the host has locked modes / started the friends match (room property "ModesLocked").
@@ -896,8 +977,24 @@ public class DeckManager : MonoBehaviourPunCallbacks
         // 🚀 REJOIN CHECK: If we already have a game started, don't reset state
         if (gameStarted)
         {
-            Debug.Log("[DeckManager] Rejoined existing match. Maintaining state.");
-            return;
+            bool validRejoin = IsDealingComplete && GetActiveSeatActorsSorted().Count == MaxTableSeats;
+            if (validRejoin)
+            {
+                Debug.Log("[DeckManager] Rejoined existing match. Maintaining state.");
+                return;
+            }
+
+            if (PhotonNetwork.IsMasterClient)
+            {
+                Debug.LogWarning("[DeckManager] Stale gameStarted flag without valid seats — clearing for new match.");
+                _localGameStarted = false;
+                _localIsDealingComplete = false;
+            }
+            else
+            {
+                Debug.Log("[DeckManager] Waiting for master to reset stale match flags.");
+                return;
+            }
         }
 
         if (PhotonNetwork.OfflineMode)
@@ -927,6 +1024,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
         float timer = matchmakingTimeout;
         while (timer > 0 && !gameStarted && PhotonNetwork.InRoom)
         {
+            if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
+            {
+                matchmakingCoroutine = null;
+                yield break;
+            }
+
             int currentPlayers = GetRealPlayerCountInRoom();
             int botsIfStartNow = Mathf.Max(0, MaxTableSeats - currentPlayers);
 
@@ -963,6 +1066,17 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public void FillBotsAndStart()
     {
+        _ignoringMatchRpcs = false;
+
+        if (!IsPrivateFriendsRoom()
+            && !PhotonNetwork.OfflineMode
+            && MatchmakingManager.Instance != null
+            && MatchmakingManager.Instance.WasCancelledByUser)
+        {
+            Debug.Log("[DeckManager] FillBotsAndStart skipped — online matchmaking was cancelled.");
+            return;
+        }
+
         if (gameStarted && !IsPrivateFriendsRoom())
         {
             Debug.LogWarning("[DeckManager] FillBotsAndStart called but game already started.");
@@ -1030,6 +1144,8 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     void RPC_InitializeMatch(int[] bots)
     {
+        _ignoringMatchRpcs = false;
+
         if (ResultManager.Instance != null)
             ResultManager.Instance.InitializeForMatch();
 
@@ -1164,9 +1280,21 @@ public class DeckManager : MonoBehaviourPunCallbacks
     {
         if (!PhotonNetwork.IsMasterClient) return;
         if (isDealCoroutineRunning) return;
+        if (_ignoringMatchRpcs)
+        {
+            Debug.Log("[DeckManager] StartFullDealingSequence blocked — match RPCs ignored (menu/leave).");
+            return;
+        }
+        if (!IsMatchContextReadyForDealing())
+        {
+            Debug.LogWarning("[DeckManager] StartFullDealingSequence blocked — not in active match context.");
+            return;
+        }
 
         PrepareLocalDealingStateForNextRound();
-        StartCoroutine(WaitAndDealCards());
+        if (_dealSequenceCoroutine != null)
+            StopCoroutine(_dealSequenceCoroutine);
+        _dealSequenceCoroutine = StartCoroutine(WaitAndDealCards());
     }
 
     /// <summary>Clears local dealing flags so the next round can deal (fixes stuck IsDealingComplete).</summary>
@@ -1185,10 +1313,22 @@ public class DeckManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("[DeckManager] WaitAndDealCards — 2s sync buffer for all clients...");
 
+        if (!IsMatchContextReadyForDealing())
+        {
+            isDealCoroutineRunning = false;
+            yield break;
+        }
+
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.ShowGameScene();
 
         yield return new WaitForSeconds(2.0f);
+
+        if (!IsMatchContextReadyForDealing())
+        {
+            isDealCoroutineRunning = false;
+            yield break;
+        }
 
         float timeout = 4f;
         while (PlayerHand.LocalInstance == null && timeout > 0f)
@@ -1209,6 +1349,37 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         Debug.Log("[DeckManager] WaitAndDealCards complete — starting deal sequence.");
         yield return StartCoroutine(FullDealingSequenceRoutine());
+        _dealSequenceCoroutine = null;
+    }
+
+    bool IsMatchContextReadyForDealing()
+    {
+        if (_ignoringMatchRpcs) return false;
+        return PhotonNetwork.InRoom || PhotonNetwork.OfflineMode;
+    }
+
+    public bool IsMatchContextReadyForDealingPublic() => IsMatchContextReadyForDealing();
+
+    public void EnableMatchRpcs() => _ignoringMatchRpcs = false;
+
+    IEnumerator WaitForSeatsReady(float timeoutSeconds = 8f)
+    {
+        while (timeoutSeconds > 0f)
+        {
+            if (!IsMatchContextReadyForDealing())
+            {
+                Debug.Log("[DeckManager] Seat wait aborted — no active match context.");
+                yield break;
+            }
+
+            if (GetActiveSeatActorsSorted().Count == MaxTableSeats)
+                yield break;
+
+            yield return null;
+            timeoutSeconds -= Time.unscaledDeltaTime;
+        }
+
+        Debug.LogError($"[DeckManager] Seat wait timed out — seats {GetActiveSeatActorsSorted().Count}/{MaxTableSeats}");
     }
 
     IEnumerator WaitAndStartDealing()
@@ -1221,6 +1392,22 @@ public class DeckManager : MonoBehaviourPunCallbacks
         Debug.Log("[DeckManager] FullDealingSequenceRoutine started.");
         isDealCoroutineRunning = true;
         currentDealBatch = 0;
+
+        if (!IsMatchContextReadyForDealing())
+        {
+            Debug.Log("[DeckManager] FullDealingSequenceRoutine aborted — left match.");
+            isDealCoroutineRunning = false;
+            yield break;
+        }
+
+        yield return WaitForSeatsReady();
+
+        if (!IsMatchContextReadyForDealing() || GetActiveSeatActorsSorted().Count != MaxTableSeats)
+        {
+            Debug.LogError("[DeckManager] FullDealingSequenceRoutine aborted — seats not ready.");
+            isDealCoroutineRunning = false;
+            yield break;
+        }
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
@@ -1257,13 +1444,59 @@ public class DeckManager : MonoBehaviourPunCallbacks
             int starterActor = seats[0];
 
             yield return new WaitForSeconds(0.2f);
+            if (!IsMatchContextReadyForDealing())
+            {
+                Debug.Log("[DeckManager] DealingComplete skipped — match ended before finish.");
+                isDealCoroutineRunning = false;
+                yield break;
+            }
+
             photonView.RPC("RPC_DealingComplete", RpcTarget.AllBuffered, starterActor);
         }
         else
         {
-            Debug.LogError($"[DeckManager] RPC_DealingComplete skipped — seat count {seats.Count}/{MaxTableSeats}");
+            Debug.LogWarning($"[DeckManager] DealingComplete deferred — seat count {seats.Count}/{MaxTableSeats} (inRoom={PhotonNetwork.InRoom})");
+            QueuePendingDealingComplete();
         }
         isDealCoroutineRunning = false;
+    }
+
+    void QueuePendingDealingComplete(int starterActor = -1)
+    {
+        if (starterActor >= 0)
+            _pendingDealingCompleteStarter = starterActor;
+
+        if (_pendingDealingCompleteCoroutine == null && isActiveAndEnabled)
+            _pendingDealingCompleteCoroutine = StartCoroutine(WaitForPendingDealingCompleteRoutine());
+    }
+
+    IEnumerator WaitForPendingDealingCompleteRoutine()
+    {
+        float timeout = 8f;
+        while (timeout > 0f)
+        {
+            if (!IsMatchContextReadyForDealing())
+                yield break;
+
+            List<int> seats = GetActiveSeatActorsSorted();
+            if (seats.Count == MaxTableSeats)
+            {
+                int starter = _pendingDealingCompleteStarter >= 0 ? _pendingDealingCompleteStarter : seats[0];
+                _pendingDealingCompleteStarter = -1;
+                _pendingDealingCompleteCoroutine = null;
+                ApplyDealingComplete(starter);
+                yield break;
+            }
+
+            yield return null;
+            timeout -= Time.unscaledDeltaTime;
+        }
+
+        Debug.LogError("[DeckManager] Pending DealingComplete timed out — returning Home.");
+        _pendingDealingCompleteStarter = -1;
+        _pendingDealingCompleteCoroutine = null;
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ReturnToHomeScreen();
     }
 
     void BuildAndShuffleDeck()
@@ -1432,22 +1665,40 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     void RPC_DealingComplete(int starterActor)
     {
+        if (!IsMatchContextReadyForDealing())
+        {
+            Debug.Log("[DeckManager] RPC_DealingComplete ignored — not in match.");
+            return;
+        }
+
+        if (GetActiveSeatActorsSorted().Count != MaxTableSeats)
+        {
+            Debug.LogWarning($"[DeckManager] RPC_DealingComplete deferred — seats {GetActiveSeatActorsSorted().Count}/{MaxTableSeats}");
+            _pendingDealingCompleteStarter = starterActor;
+            if (_pendingDealingCompleteCoroutine == null && isActiveAndEnabled)
+                _pendingDealingCompleteCoroutine = StartCoroutine(WaitForPendingDealingCompleteRoutine());
+            return;
+        }
+
+        ApplyDealingComplete(starterActor);
+    }
+
+    void ApplyDealingComplete(int starterActor)
+    {
         IsDealingComplete = true;
         gameStarted = true;
-        // Guarantee the loading panel is dismissed on EVERY client. The master hides it locally
-        // inside FullDealingSequenceRoutine, but non-master clients never received any hide signal
-        // and stayed stuck on "Loading game..." forever. This RPC runs on all clients, so it is the
-        // authoritative "game is ready" point to clear loading everywhere.
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
         if (TrumpManager.Instance != null)
             TrumpManager.Instance.RefreshFromRoomProperties(false);
-        if (PlayerHand.LocalInstance != null) PlayerHand.LocalInstance.OnDealingComplete(starterActor);
+        if (PlayerHand.LocalInstance != null)
+            PlayerHand.LocalInstance.OnDealingComplete(starterActor);
     }
 
     [PunRPC]
     public void RPC_PlayDealAnimation(int cardsInBatch, int revealUpTo)
     {
+        if (!IsMatchContextReadyForDealing()) return;
         if (IsDealingComplete) return;
 
         if (NetworkManager.Instance != null)

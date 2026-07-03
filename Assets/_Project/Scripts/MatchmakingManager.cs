@@ -26,6 +26,35 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
     private bool isSearching = false;
     private bool isMatchFoundRoutineRunning = false;
 
+    public bool IsSearching => isSearching;
+
+    /// <summary>Clears user-cancel flag so a fresh Play Online search is not blocked.</summary>
+    public void PrepareForNewOnlineSearch()
+    {
+        WasCancelledByUser = false;
+        isMatchFoundRoutineRunning = false;
+    }
+
+    /// <summary>Clears online matchmaking timers/flags so PlayFriends is not blocked by stale online state.</summary>
+    public void ResetMatchmakingState(bool cancelledByUser)
+    {
+        Debug.Log($"[Matchmaking] ResetMatchmakingState cancelled={cancelledByUser}");
+        WasCancelledByUser = cancelledByUser;
+        isSearching = false;
+        isMatchFoundRoutineRunning = false;
+        StopAllCoroutines();
+
+        if (DeckManager.Instance != null)
+            DeckManager.Instance.StopOnlineMatchmaking();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ForceClearBlackOverlay();
+
+        // Only clear online UI flags when switching modes — not during user cancel (ReturnToHome handles that).
+        if (!cancelledByUser && PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.ClearOnlineModeOnly();
+    }
+
     // Static fallback pool consumed by ResultManager / PlayerProfileSync / etc.
     public static List<Sprite> GlobalProfileSprites = new List<Sprite>();
 
@@ -53,6 +82,43 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
 
     void HideSeatLobby()
     {
+        HideMatchmakingPanel();
+    }
+
+    /// <summary>Makes the online matchmaking seat panel fully visible above menu layers.</summary>
+    public void ShowMatchmakingPanel()
+    {
+        Debug.Log("[UI] ShowMatchmakingPanel called");
+
+        if (ModeManager.Instance != null)
+        {
+            ModeManager.Instance.HideJoinTablePanel();
+            if (ModeManager.Instance.panelModes != null)
+                ModeManager.SetPanelVisiblePublic(ModeManager.Instance.panelModes, false);
+            if (ModeManager.Instance.panelHomeScreen != null)
+                ModeManager.SetPanelVisiblePublic(ModeManager.Instance.panelHomeScreen, false);
+        }
+
+        PlayWithFriendsManager pwf = EnsureSeatPanel();
+        if (pwf == null)
+        {
+            Debug.LogWarning("[Matchmaking] Seat panel (PlayWithFriendsManager) not found.");
+            return;
+        }
+
+        pwf.ShowOnlineMatchmakingLobby();
+
+        GameObject panel = pwf.gameObject;
+        CanvasGroup cg = panel.GetComponent<CanvasGroup>();
+        Debug.Log($"[UI] Matchmaking panel activeSelf={panel.activeSelf} activeInHierarchy={panel.activeInHierarchy}"
+            + $" | parent activeInHierarchy={(panel.transform.parent != null && panel.transform.parent.gameObject.activeInHierarchy)}"
+            + $" | CanvasGroup alpha={(cg != null ? cg.alpha.ToString("F2") : "n/a")}"
+            + $" | siblingIndex={panel.transform.GetSiblingIndex()}");
+    }
+
+    /// <summary>Hides the online matchmaking seat panel without stopping Photon matchmaking.</summary>
+    public void HideMatchmakingPanel()
+    {
         if (PlayWithFriendsManager.Instance != null)
             PlayWithFriendsManager.Instance.HideLobby();
     }
@@ -61,13 +127,11 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
     {
         if (isSearching) return;
         isSearching = true;
-        WasCancelledByUser = false;
+        PrepareForNewOnlineSearch();
 
         Debug.Log("🔍 Matchmaking started (seat lobby).");
 
-        PlayWithFriendsManager pwf = EnsureSeatPanel();
-        if (pwf != null) pwf.ShowOnlineMatchmakingLobby();
-        else Debug.LogWarning("[Matchmaking] Seat panel (PlayWithFriendsManager) not found.");
+        ShowMatchmakingPanel();
     }
 
     // Driven by DeckManager's countdown RPC: live player count + seconds remaining.
@@ -120,20 +184,27 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         {
             Debug.Log("🤖 Instant Bot Match.");
             if (NetworkManager.Instance != null)
-                NetworkManager.Instance.ShowGameScene();
-            if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
+                NetworkManager.Instance.ShowGameScene(showLoadingOverlay: false);
+            if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null
+                && DeckManager.Instance.IsMatchContextReadyForDealingPublic())
                 DeckManager.Instance.StartFullDealingSequence();
+            else if (!PhotonNetwork.InRoom && !PhotonNetwork.OfflineMode)
+                NetworkManager.Instance?.ReturnToHomeScreen();
             isMatchFoundRoutineRunning = false;
             yield break;
         }
 
         if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowGameScene();
+            NetworkManager.Instance.ShowGameScene(showLoadingOverlay: false);
 
         yield return new WaitForSeconds(0.2f);
 
-        if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
+        if (DeckManager.Instance != null
+            && DeckManager.Instance.IsMatchContextReadyForDealingPublic()
+            && PhotonNetwork.IsMasterClient)
             DeckManager.Instance.StartFullDealingSequence();
+        else if (!PhotonNetwork.InRoom && !PhotonNetwork.OfflineMode)
+            NetworkManager.Instance?.ReturnToHomeScreen();
 
         isMatchFoundRoutineRunning = false;
     }
@@ -146,6 +217,10 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         WasCancelledByUser = true;
         isSearching = false;
         isMatchFoundRoutineRunning = false;
+        StopAllCoroutines();
+
+        if (DeckManager.Instance != null)
+            DeckManager.Instance.StopOnlineMatchmaking();
 
         if (ModeManager.Instance != null)
             ModeManager.Instance.CancelPendingMatchmaking();
@@ -160,30 +235,28 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         if (ModeManager.Instance != null)
             ModeManager.Instance.CancelPendingMatchmaking();
 
+        GameFlowState.SetPhase(GameFlowPhase.Home, forceRecovery: true);
+
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.ReturnToHomeClean();
+
         if (PhotonNetwork.InRoom)
-            PhotonNetwork.LeaveRoom();
-        else if (PhotonNetwork.InLobby)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.LeaveRoomAndCleanup();
+            else
+                PhotonNetwork.LeaveRoom();
+            return;
+        }
+
+        if (PhotonNetwork.InLobby)
             PhotonNetwork.LeaveLobby();
 
         if (PhotonNetwork.OfflineMode)
             PhotonNetwork.OfflineMode = false;
 
-        GameFlowState.SetPhase(GameFlowPhase.Home, true);
-
-        if (ModeManager.Instance != null)
-        {
-            if (ModeManager.Instance.panelModes != null)
-                ModeManager.Instance.panelModes.SetActive(false);
-            if (ModeManager.Instance.panelHomeScreen != null)
-                ModeManager.Instance.panelHomeScreen.SetActive(true);
-            ModeManager.Instance.ApplyHomeScreenButtonColors();
-        }
-
         if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.HideLoading();
-            NetworkManager.Instance.UpdateUIState(true);
-        }
+            NetworkManager.Instance.RefreshPlayOnlineButtonState();
     }
 
     void OnApplicationPause(bool paused)
@@ -199,7 +272,6 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
     public void RefreshUIAfterResume()
     {
         if (!isSearching) return;
-        PlayWithFriendsManager pwf = EnsureSeatPanel();
-        if (pwf != null) pwf.ShowOnlineMatchmakingLobby();
+        ShowMatchmakingPanel();
     }
 }

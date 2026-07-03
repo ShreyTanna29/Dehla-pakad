@@ -45,11 +45,6 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 12a9d11677d30734eb394d16604b4990
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/2HANDS_IMAGE.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 13e3163d841d0d043acdda3ff70b64e4
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
     m_ReadOnly: 0
@@ -67,16 +62,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1dfcb1c501badc04c8c098bd501bd9c7
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 1fdc2071e594b6440bf64eaf4284f78f
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/TRUMP_SPADES_IMAGE.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 2299f618818954c458d772bcf15e3e8c
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/1HANDS_IMAGE.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -196,11 +181,6 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 580d6b93f0d535e45a1d9062c92a6e50
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/2TAASH_IMAGE.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 615ec29dd7ea06d4c96e0e2408b688d6
     m_Address: Assets/_Project/Art/Sprites/Images/BG_WithoutCard.jpeg
     m_ReadOnly: 0
@@ -233,11 +213,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 7e9c2f38aaaed5d40a3103c17db2755e
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icons_BG_Image.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 809e2c20aa55ee545b5dc09006839281
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/13CARD_IMAGE.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -367,11 +342,6 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: d049f2ad7b2d3534f8359a178259356d
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/CUT2TRUMP_IMAGE.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d9c7c5161acfadc4a8ccf643dc302282
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icon_DeclineFriend.png
     m_ReadOnly: 0
@@ -384,11 +354,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: dcbb0face2fa70940b7176af5df75eba
     m_Address: Assets/_Project/Art/Sprites/Buttons/Home/ONLINE.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: e20561bd3a3294344b7619f2d1b7b0b2
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/1TAASH_IMAGE.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

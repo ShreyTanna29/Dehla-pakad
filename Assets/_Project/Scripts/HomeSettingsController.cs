@@ -204,17 +204,41 @@ public class HomeSettingsController : MonoBehaviour
 
     public void Open()
     {
+        Resolve();
+        if (_cg != null)
+        {
+            _cg.DOKill();
+            _cg.alpha = 1f;
+            _cg.interactable = true;
+            _cg.blocksRaycasts = true;
+        }
         gameObject.SetActive(true);
         OnEnable();
     }
 
     public void Close()
     {
+        if (_exitConfirm != null && _exitConfirm.activeSelf)
+            _exitConfirm.SetActive(false);
+
         if (_cg != null)
         {
             _cg.DOKill();
-            _cg.DOFade(0f, 0.2f).SetUpdate(true).OnComplete(() => gameObject.SetActive(false));
-            _cg.interactable = false; _cg.blocksRaycasts = false;
+            _cg.interactable = false;
+            _cg.blocksRaycasts = false;
+            if (preserveManualAppearance)
+            {
+                _cg.alpha = 0f;
+                gameObject.SetActive(false);
+            }
+            else
+            {
+                _cg.DOFade(0f, 0.2f).SetUpdate(true).OnComplete(() =>
+                {
+                    if (_cg != null) _cg.alpha = 0f;
+                    gameObject.SetActive(false);
+                });
+            }
         }
         else gameObject.SetActive(false);
     }
