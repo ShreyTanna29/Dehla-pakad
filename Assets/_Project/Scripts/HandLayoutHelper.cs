@@ -78,8 +78,8 @@ public static class HandLayoutHelper
 
     public static float GetRowY(int row, bool twoRowHand)
     {
-        if (!twoRowHand) return 0f;
-        return row == 0 ? 50f : -70f;
+        if (!twoRowHand) return 28f;
+        return row == 0 ? 55f : -55f;
     }
 
     static float ResolveSpacing(float fitSpacing, float prefabCardWidth, int cardCount, int fullHandCount, bool is2Taash)
@@ -114,9 +114,9 @@ public static class HandLayoutHelper
 
     static float ComputeHandSpacing(float fitSpacing, float prefabCardWidth)
     {
-        const float spacingBoost = 30f;
+        const float spacingBoost = 22f;
         float preferredMaxSpacing = 4f;
-        float maxOverlap = prefabCardWidth * 0.72f;
+        float maxOverlap = prefabCardWidth * 0.62f;
         float minSpacing = -maxOverlap;
         return Mathf.Clamp(fitSpacing, minSpacing, preferredMaxSpacing) + spacingBoost;
     }

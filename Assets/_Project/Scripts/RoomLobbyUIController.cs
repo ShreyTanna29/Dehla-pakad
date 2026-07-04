@@ -80,9 +80,13 @@ public class RoomLobbyUIController : MonoBehaviourPunCallbacks
     [SerializeField] GameObject startButton;
     [SerializeField] GameObject modeSelectionPanel;
 
-    /// <summary>Photon callback — refresh lobby visibility the moment we enter the room.</summary>
+    /// <summary>Photon callback — refresh lobby visibility only for private friends rooms.</summary>
     public override void OnJoinedRoom()
     {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
+        if (PhotonNetwork.CurrentRoom.IsVisible || PhotonNetwork.OfflineMode) return;
+        if (UiFlowManager.IsOnlineMatchmakingFlow()) return;
+        if (UiFlowManager.IsReturningHome) return;
         UpdateRoomLobbyUI();
     }
 

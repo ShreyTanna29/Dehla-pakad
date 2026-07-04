@@ -337,6 +337,17 @@ public class DeckManager : MonoBehaviourPunCallbacks
         botActorNumbers.AddRange(unique);
     }
 
+    public static void SyncBotSeatsFromRoomProperties()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("BS", out object bsObj)) return;
+        if (bsObj is int[] bs)
+        {
+            if (bs == null || bs.Length == 0) return;
+            ApplySyncedBotActorList(bs);
+        }
+    }
+
     static void ApplySyncedBotActorList(int[] bots)
     {
         botActorNumbers.Clear();
@@ -1509,6 +1520,26 @@ public class DeckManager : MonoBehaviourPunCallbacks
             for (int s = 0; s < 4; s++)
                 for (int r = 0; r < 13; r++)
                     masterDeck.Add(new Vector2Int(s, r));
+
+        int deckSeed = 0;
+        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("DS", out object dsObj)
+            && dsObj != null)
+            int.TryParse(dsObj.ToString(), out deckSeed);
+
+        if (PhotonNetwork.IsMasterClient && deckSeed == 0 && PhotonNetwork.InRoom)
+        {
+            deckSeed = Random.Range(1, int.MaxValue);
+            PhotonNetwork.CurrentRoom.SetCustomProperties(
+                new ExitGames.Client.Photon.Hashtable { { "DS", deckSeed } });
+        }
+
+        if (deckSeed != 0)
+        {
+            Random.InitState(deckSeed);
+            Debug.Log($"[DeckManager] Shuffling with shared deck seed {deckSeed}");
+        }
+
         for (int i = 0; i < masterDeck.Count; i++)
         {
             Vector2Int temp = masterDeck[i];

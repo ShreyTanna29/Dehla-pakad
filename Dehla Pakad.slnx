@@ -1,6 +1,6 @@
 ﻿<Solution>
-  <Project Path="PhotonUnityNetworking.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="PhotonUnityNetworking.csproj" />
   <Project Path="PhotonUnityNetworking.Demos.csproj" />
   <Project Path="PhotonRealtime.csproj" />
   <Project Path="PhotonUnityNetworking.Utilities.csproj" />

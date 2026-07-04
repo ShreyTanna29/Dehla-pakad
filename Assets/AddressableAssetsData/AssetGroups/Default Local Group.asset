@@ -141,6 +141,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 403057fcde83f544296d9ae7c688e4c8
+    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 434651a87c76bf441a6ad04fe4a69d6f
     m_Address: Assets/_Project/Art/Sprites/Buttons/Home/BOTS.png
     m_ReadOnly: 0
@@ -183,6 +188,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 615ec29dd7ea06d4c96e0e2408b688d6
     m_Address: Assets/_Project/Art/Sprites/Images/BG_WithoutCard.jpeg
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 67c6a54d038af0049a8b70adf7e4d363
+    m_Address: Assets/_Project/Art/Sprites/Images/NEW/WatchAds_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -337,6 +347,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cb7a64c90edc1ff498326386c5db893a
+    m_Address: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cc41adc2cfb68974d9f13a3261bc9eb8
     m_Address: Assets/_Project/Art/Sprites/Images/BG_Buttons.png
     m_ReadOnly: 0
@@ -394,6 +409,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: f7e730b6e39866a49870d267ed2d6466
     m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Play_Online.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f8b53889693b1e948b37d93be813a3b5
+    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Voice_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

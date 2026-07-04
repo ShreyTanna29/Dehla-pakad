@@ -53,13 +53,21 @@ public class ModeManager : MonoBehaviourPunCallbacks
     /// <summary>True while the user is in the Play With Friends / 2v2 flow.</summary>
     public bool IsFriendsMatchMode => isFriendsMatchMode;
 
+    public void SetFriendsMatchMode(bool enabled) => isFriendsMatchMode = enabled;
+
     // Guards to prevent duplicate start/deal calls from the Mode Panel Start button.
     private bool gameStartInProgress;
+    Coroutine _connectionBufferRoutine;
 
     /// <summary>Clears the start guard so a new match can be started after returning home / cancelling.</summary>
     public void ResetStartGuard()
     {
         gameStartInProgress = false;
+        if (_connectionBufferRoutine != null)
+        {
+            StopCoroutine(_connectionBufferRoutine);
+            _connectionBufferRoutine = null;
+        }
     }
 
     public void ScheduleMatchmakingAfterLobby()
@@ -299,7 +307,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        Debug.Log("[UI] Button Clicked: Play Online");
+        Debug.Log("[UI] PlayOnline clicked");
         PrepareForNewModeFromMenu();
 
         if (NetworkManager.Instance != null)
@@ -307,7 +315,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (GameSettings.Instance != null)
             GameSettings.Instance.currentMatchType = MatchType.OnlinePhoton;
 
-        OpenModePanelInternal();
+        isFriendsMatchMode = false;
+
+        ForceHideHomeUi();
+        OpenModePanelInternal(false);
     }
 
     void PrepareForNewModeFromMenu()
@@ -319,6 +330,9 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         if (MatchmakingManager.Instance != null)
             MatchmakingManager.Instance.ResetMatchmakingState(cancelledByUser: false);
+
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.CancelPinJoinUiState();
 
         if (DeckManager.Instance != null)
             DeckManager.Instance.PrepareForNewMatchFromMenu();
@@ -335,16 +349,32 @@ public class ModeManager : MonoBehaviourPunCallbacks
             NetworkManager.Instance.HideHomeMenuCanvas();
             NetworkManager.Instance.HideGamePanelsForMenu();
         }
+
+        LogHomeModesState("ForceHideHomeUi");
     }
 
     void ForceShowHomeUi()
     {
+        SetPanelVisible(panelModes, false);
+        SetPanelVisible(ResolveJoinTablePanel(), false);
+        HidePlayWithFriendsPanel();
+
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideGamePanelsForMenu();
 
         SetPanelVisible(panelHomeScreen, true);
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.ShowHomeMenuCanvas();
+
+        LogHomeModesState("ForceShowHomeUi");
+    }
+
+    void LogHomeModesState(string source)
+    {
+        bool homeOn = panelHomeScreen != null && panelHomeScreen.activeSelf;
+        bool modesOn = panelModes != null && panelModes.activeSelf;
+        CanvasGroup homeCg = panelHomeScreen != null ? panelHomeScreen.GetComponent<CanvasGroup>() : null;
+        Debug.Log($"[UI] {source} | Home active={homeOn} interactable={(homeCg != null && homeCg.interactable)} | Modes active={modesOn}");
     }
 
     public void OpenModePanelFromHome() => OnClick_PlayOnline_Home();
@@ -407,6 +437,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         if (!isFriendsMatchMode) return;
         Debug.Log("[UI] ShowJoinTable called");
+        UiFlowManager.SetUIState(UIState.JoinTable);
         SetPanelVisible(ResolveJoinTablePanel(), true);
     }
 
@@ -422,12 +453,17 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public void RestoreJoinTableScreenAfterFailedPin()
     {
         Debug.Log("[UI] RestoreJoinTableScreenAfterFailedPin");
-        GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+        GameFlowState.SetPhase(GameFlowPhase.ModeSelection, forceRecovery: true);
+        UiFlowManager.SetUIState(UIState.JoinTable);
+
+        ForceHideHomeUi();
 
         if (NetworkManager.Instance != null)
         {
             NetworkManager.Instance.HideHomeMenuCanvas();
             NetworkManager.Instance.HideGamePanelsForMenu();
+            NetworkManager.Instance.ForceClearBlackOverlay();
+            NetworkManager.Instance.HideLoadingInstant();
         }
 
         SetPanelVisible(panelHomeScreen, false);
@@ -448,6 +484,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         }
 
         ShowJoinTablePanel();
+        UiFlowManager.SetUIState(UIState.JoinTable);
         GameObject joinTable = ResolveJoinTablePanel();
         if (joinTable != null)
         {
@@ -461,6 +498,9 @@ public class ModeManager : MonoBehaviourPunCallbacks
                 joinCg.blocksRaycasts = true;
             }
         }
+
+        LogHomeModesState("Restored JoinTable after failed PIN");
+        UiFlowManager.ValidatePanelState();
     }
 
     /// <summary>Closes overlays and resets menu async flags before any main panel switch.</summary>
@@ -482,6 +522,9 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
     [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    public void ValidateMenuPanels() => ValidateNoPanelOverlap();
+
+    /// <summary>Runtime guard — prevents Home + Modes both visible/interactable.</summary>
     public void ValidateNoPanelOverlap()
     {
         bool homeOn = panelHomeScreen != null && panelHomeScreen.activeSelf;
@@ -492,17 +535,45 @@ public class ModeManager : MonoBehaviourPunCallbacks
         bool friendsOn = friends != null && friends.activeSelf;
 
         if (homeOn && modesOn)
-            Debug.LogWarning("[UI] Overlap: Home and Modes are both active.");
+        {
+            Debug.LogWarning("[UI] Overlap: Home and Modes are both active — hiding Home.");
+            ForceHideHomeUi();
+            homeOn = false;
+        }
+
+        if (isFriendsMatchMode && joinTable == null)
+            Debug.LogWarning("[UI] JoinTablePanel missing during PlayFriends flow.");
+
+        if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.IsSearching
+            && friendsOn == false && modesOn && homeOn)
+        {
+            Debug.LogWarning("[UI] Matchmaking active but Home/Modes may be blocking seat panel — hiding Home.");
+            ForceHideHomeUi();
+        }
+
         if (modesOn && joinOn && !isFriendsMatchMode)
             Debug.LogWarning("[UI] Overlap: JoinTable active outside Friends mode.");
+
         if (homeOn && friendsOn)
-            Debug.LogWarning("[UI] Overlap: Home and Friends lobby are both active.");
+        {
+            Debug.LogWarning("[UI] Overlap: Home and Friends lobby are both active — hiding Home.");
+            ForceHideHomeUi();
+        }
+
+        if (homeOn && joinOn)
+        {
+            Debug.LogWarning("[UI] Overlap: Home and JoinTable are both active — hiding Home.");
+            ForceHideHomeUi();
+        }
 
         if (joinTable != null)
         {
             CanvasGroup jcg = joinTable.GetComponent<CanvasGroup>();
             if (!joinTable.activeSelf && jcg != null && jcg.blocksRaycasts)
-                Debug.LogWarning("[UI] JoinTable hidden but blocksRaycasts=true.");
+            {
+                jcg.blocksRaycasts = false;
+                jcg.interactable = false;
+            }
         }
 
         if (NetworkManager.Instance != null)
@@ -579,12 +650,15 @@ public class ModeManager : MonoBehaviourPunCallbacks
     }
 
     /// <summary>Central Home reset — closes every menu overlay and shows Home only.</summary>
-    public void ReturnToHomeClean()
+    public void ReturnToHomeClean() => UiFlowManager.ReturnToHomeClean();
+
+    /// <summary>Called only by <see cref="UiFlowManager"/>.</summary>
+    public void ReturnToHomeCleanInternal()
     {
         Debug.Log("[UI] ReturnToHomeClean called");
 
         isFriendsMatchMode = false;
-        gameStartInProgress = false;
+        ResetStartGuard();
         findMatchAfterLobby = false;
         _pendingMatchmakingAfterLeave = false;
 
@@ -596,31 +670,15 @@ public class ModeManager : MonoBehaviourPunCallbacks
             PlayWithFriendsManager.Instance.AbortPendingFriendsRoomCreation();
             PlayWithFriendsManager.Instance.ResetMenuFlowFlags();
             PlayWithFriendsManager.Instance.ResetLobbyStateForLeave();
+            PlayWithFriendsManager.Instance.CancelPinJoinUiState();
         }
 
-        HideJoinTablePanel();
-        HidePlayWithFriendsPanel();
-        SetPanelVisible(panelModes, false);
-        if (panelModes != null)
-            panelModes.SetActive(false);
-        if (PlayWithFriendsManager.Instance != null && PlayWithFriendsManager.Instance.modesPanel != null)
-        {
-            SetPanelVisible(PlayWithFriendsManager.Instance.modesPanel, false);
-            PlayWithFriendsManager.Instance.modesPanel.SetActive(false);
-        }
-
-        if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.HideLoadingInstant();
-            NetworkManager.Instance.HideGamePanelsForMenu();
-            NetworkManager.Instance.HideAllMenuOverlays();
-            NetworkManager.Instance.ClearUiInputBlockers();
-        }
+        HideAllMainPanelsAndOverlays();
 
         if (InGameSettingsController.Instance != null)
             InGameSettingsController.Instance.DismissAllPanels();
 
-        GameFlowState.SetPhase(GameFlowPhase.Home);
+        GameFlowState.SetPhase(GameFlowPhase.Home, forceRecovery: true);
         ForceShowHomeUi();
         ResetButtonScales();
         ApplyHomeScreenButtonColors();
@@ -629,12 +687,60 @@ public class ModeManager : MonoBehaviourPunCallbacks
         bool homeActive = panelHomeScreen != null && panelHomeScreen.activeSelf;
         Debug.Log($"[UI] ReturnToHomeClean complete | Modes active={modesActive} | Home active={homeActive}");
         ValidateNoPanelOverlap();
+        UiFlowManager.CompleteReturnToHome();
+    }
+
+    /// <summary>PlayFriends entry — restore original flow: Modes + Join Table, Home hidden.</summary>
+    public void ShowModesForPlayFriendsInternal()
+    {
+        Debug.Log("[UI] ShowModes called (PlayFriends)");
+        isFriendsMatchMode = true;
+        GameFlowState.SetPhase(GameFlowPhase.ModeSelection, forceRecovery: true);
+
+        ForceHideHomeUi();
+
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.HideLoadingInstant();
+            NetworkManager.Instance.ForceClearBlackOverlay();
+            NetworkManager.Instance.HideAllMenuOverlays();
+        }
+
+        ShowModesScreenOnly();
+        LogHomeModesState("ShowModesForPlayFriends");
+    }
+
+    void HideAllMainPanelsAndOverlays()
+    {
+        HideJoinTablePanel();
+        HidePlayWithFriendsPanel();
+        SetPanelVisible(panelModes, false);
+        ForceHideHomeUi();
+
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.HideLoadingInstant();
+            NetworkManager.Instance.HideGamePanelsForMenu();
+            NetworkManager.Instance.HideAllMenuOverlays();
+            NetworkManager.Instance.ClearUiInputBlockers();
+            NetworkManager.Instance.ForceClearBlackOverlay();
+        }
     }
 
     void OpenModePanelInternal(bool friendsMode = false)
     {
         GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
         isFriendsMatchMode = friendsMode;
+
+        if (friendsMode)
+            UiFlowManager.MarkPlayFriendsCreate();
+        else
+        {
+            UiFlowManager.SetUIState(UIState.Modes);
+            if (PlayWithFriendsManager.Instance != null)
+                PlayWithFriendsManager.Instance.ClearOnlineModeOnly();
+        }
+
         ShowModesScreenOnly();
     }
 
@@ -824,7 +930,14 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public void OnClick_BackFromJoinTable()
     {
         Debug.Log("[UI] BackFromJoinTable called");
-        OnClick_BackToHome();
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.CancelPinJoinUiState();
+        UiFlowManager.HideAllOverlays();
+        HideJoinTablePanel();
+        isFriendsMatchMode = true;
+        GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+        ShowOnlyMainMenuScreen(MainMenuScreen.Modes);
+        LogHomeModesState("BackFromJoinTable");
     }
 
     public void OnClick_BackToHome()
@@ -885,6 +998,9 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (MatchmakingManager.Instance != null)
             MatchmakingManager.Instance.ResetMatchmakingState(cancelledByUser: false);
 
+        if (PlayWithFriendsManager.Instance != null)
+            PlayWithFriendsManager.Instance.ClearOnlineModeOnly();
+
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.ForceClearBlackOverlay();
 
@@ -892,6 +1008,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
             NetworkManager.Instance.ConnectToPhoton();
 
         OpenModePanelInternal(true);
+        UiFlowManager.MarkPlayFriendsCreate();
+        UiFlowManager.SetUIState(UIState.Modes);
         Debug.Log("[Friends] Friends mode selected — modes panel open");
 
         if (PlayWithFriendsManager.Instance == null) return;
@@ -908,7 +1026,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
             Debug.Log("[Friends] Leaving online room before PlayFriends eager create.");
             PlayWithFriendsManager.Instance.RequestPrivateRoomCreateAfterLeave();
             if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.MarkReturnToFriendsModesAfterLeave();
                 NetworkManager.Instance.LeaveRoomAndCleanup();
+            }
             return;
         }
 
@@ -1182,10 +1303,21 @@ public class ModeManager : MonoBehaviourPunCallbacks
             && PlayWithFriendsManager.Instance.SuppressSeatLobbyOnJoin;
         if (isFriendsMatchMode && (!isPrivateFriends || seatLobbyNotOpenedYet))
         {
-            Debug.Log("[Friends] Start clicked — opening seat lobby");
+            Debug.Log("[Friends] Start clicked — connecting buffer then opening seat lobby");
             SaveSelectedModes();
-            if (PlayWithFriendsManager.Instance != null)
-                PlayWithFriendsManager.Instance.OpenSeatLobbyWhenReady();
+            if (gameStartInProgress)
+            {
+                Debug.Log("[GameStart] Duplicate start blocked");
+                return;
+            }
+            gameStartInProgress = true;
+            StartOnlineConnectionBuffer(() =>
+            {
+                if (PlayWithFriendsManager.Instance != null)
+                    PlayWithFriendsManager.Instance.OpenSeatLobbyWhenReady();
+                else
+                    gameStartInProgress = false;
+            });
             return;
         }
 
@@ -1240,9 +1372,43 @@ public class ModeManager : MonoBehaviourPunCallbacks
         }
 
         // 3) PLAY ONLINE ROUTE ---------------------------------------------
-        Debug.Log("[StartRoute] Play Online route");
+        Debug.Log("[StartRoute] Play Online route — connecting buffer then matchmaking");
         gameStartInProgress = true;
-        StartNormalMatchFromModesPanel();
+        StartOnlineConnectionBuffer(StartNormalMatchFromModesPanel);
+    }
+
+    void StartOnlineConnectionBuffer(System.Action onBufferComplete)
+    {
+        if (_connectionBufferRoutine != null)
+            StopCoroutine(_connectionBufferRoutine);
+        _connectionBufferRoutine = StartCoroutine(OnlineConnectionBufferRoutine(onBufferComplete));
+    }
+
+    IEnumerator OnlineConnectionBufferRoutine(System.Action onBufferComplete)
+    {
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ShowLoading("Connecting Online...");
+        else if (UiFlowManager.Current != UIState.LoadingGame)
+            UiFlowManager.ShowLoadingOnly("Connecting Online...");
+
+        if (!PhotonNetwork.IsConnectedAndReady)
+        {
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.ConnectToPhoton();
+            else
+                PhotonNetwork.ConnectUsingSettings();
+        }
+
+        yield return new WaitForSecondsRealtime(5f);
+
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.HideLoadingInstant();
+            NetworkManager.Instance.ClearUiInputBlockers();
+        }
+
+        _connectionBufferRoutine = null;
+        onBufferComplete?.Invoke();
     }
 
     public void StartNormalMatchFromModesPanel()
@@ -1286,7 +1452,19 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         GameFlowState.SetPhase(GameFlowPhase.Matchmaking);
 
-        Debug.Log("[UI] PlayOnline clicked — starting matchmaking UI");
+        Debug.Log("[UI] Online Start clicked — starting matchmaking UI");
+
+        isFriendsMatchMode = false;
+        if (GameSettings.Instance != null)
+            GameSettings.Instance.currentMatchType = MatchType.OnlinePhoton;
+
+        UiFlowManager.BeginOnlineMatchmaking();
+
+        if (PlayWithFriendsManager.Instance != null)
+        {
+            PlayWithFriendsManager.Instance.EnsureNicknamePublic();
+            PlayWithFriendsManager.Instance.ClearOnlineModeOnly();
+        }
 
         if (MatchmakingManager.Instance != null)
             MatchmakingManager.Instance.PrepareForNewOnlineSearch();
@@ -1386,7 +1564,15 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         findMatchAfterLobby = false;
 
-        if (isFriendsMatchMode)
+        bool onlineMatchmaking = GameSettings.Instance != null
+            && GameSettings.Instance.currentMatchType == MatchType.OnlinePhoton;
+        if (onlineMatchmaking || UiFlowManager.IsOnlineMatchmakingFlow())
+        {
+            isFriendsMatchMode = false;
+            UiFlowManager.BeginOnlineMatchmaking();
+        }
+
+        if (isFriendsMatchMode && !onlineMatchmaking)
         {
             string roomName = "Friends_" + currentTrickMode + "_" + currentTrumpMode + "_" + currentSarMode + "_" + Random.Range(1000, 9999);
             Debug.Log($"[Photon] Friends room — create {roomName}");
@@ -1394,7 +1580,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        Debug.Log("[Photon] Attempt Join Room (JoinRandomRoom)");
+        Debug.Log("[Photon] Attempt Join Room (JoinRandomRoom) for online matchmaking");
         Hashtable expected = new Hashtable { { "TM", currentTrickMode }, { "RM", currentTrumpMode }, { "SM", currentSarMode }, { "LM", currentLogicMode } };
         PhotonNetwork.JoinRandomRoom(expected, 4);
     }
@@ -1454,7 +1640,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinRandomFailed(short returnCode, string message)
     {
-        Debug.Log($"[Photon] JoinRandomFailed | {returnCode} | {message}");
+        Debug.LogWarning($"[Photon] OnJoinRandomFailed | code={returnCode} | {message}");
         if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
         {
             Debug.Log("[Photon] JoinRandomFailed ignored because user cancelled matchmaking");
@@ -1462,12 +1648,13 @@ public class ModeManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        Debug.Log("[Photon] Attempt Create Room");
+        Debug.Log("[Photon] Attempt Create Room for online matchmaking");
         if (NetworkManager.Instance != null && !NetworkManager.Instance.EnsureConnectedForOnlineRoomOps())
         {
             findMatchAfterLobby = true;
             return;
         }
+        isFriendsMatchMode = false;
         PhotonNetwork.CreateRoom("Room_" + Random.Range(1000, 9999), BuildRoomOptions());
     }
 
@@ -1478,12 +1665,23 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public override void OnCreateRoomFailed(short returnCode, string message)
     {
-        Debug.LogError($"[Photon] CreateRoomFailed | {returnCode} | {message}");
+        Debug.LogWarning($"[Photon] CreateRoomFailed | {returnCode} | {message}");
         gameStartInProgress = false;
         if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
         {
             GameFlowState.SetPhase(GameFlowPhase.Home, true);
             MatchmakingManager.Instance.StopSearching(false);
+            return;
+        }
+
+        if (UiFlowManager.IsOnlineMatchmakingFlow())
+        {
+            Debug.LogWarning("[Photon] Online create failed — retrying matchmaking.");
+            GameFlowState.SetPhase(GameFlowPhase.Matchmaking, forceRecovery: true);
+            if (MatchmakingManager.Instance != null)
+                MatchmakingManager.Instance.ShowMatchmakingPanel();
+            findMatchAfterLobby = true;
+            StartSmartMatchmaking();
             return;
         }
 
@@ -1616,14 +1814,33 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         gameStartInProgress = false;
 
-        if (isFriendsMatchMode && PlayWithFriendsManager.Instance != null)
+        if (UiFlowManager.IsPlayFriendsJoinFlow())
         {
             Debug.LogWarning($"[Photon] JoinRoomFailed (Friends PIN) | {returnCode} | {message}");
-            GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+            UiFlowManager.HandlePinJoinFailed(returnCode, message);
             return;
         }
 
-        Debug.LogError($"[Photon] JoinRoomFailed | {returnCode} | {message}");
+        if (isFriendsMatchMode && PlayWithFriendsManager.Instance != null
+            && UiFlowManager.Flow == UiFlowKind.PlayFriendsCreate)
+        {
+            Debug.LogWarning($"[Photon] JoinRoomFailed (Friends create) | {returnCode} | {message}");
+            GameFlowState.SetPhase(GameFlowPhase.ModeSelection, forceRecovery: true);
+            return;
+        }
+
+        if (UiFlowManager.IsOnlineMatchmakingFlow())
+        {
+            Debug.LogWarning($"[Photon] JoinRoomFailed during online matchmaking | {returnCode} | {message}");
+            GameFlowState.SetPhase(GameFlowPhase.Matchmaking, forceRecovery: true);
+            if (MatchmakingManager.Instance != null)
+                MatchmakingManager.Instance.ShowMatchmakingPanel();
+            findMatchAfterLobby = true;
+            StartSmartMatchmaking();
+            return;
+        }
+
+        Debug.LogWarning($"[Photon] JoinRoomFailed | {returnCode} | {message}");
         GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
         if (MatchmakingManager.Instance != null) MatchmakingManager.Instance.StopSearching(false);
         if (NetworkManager.Instance != null)

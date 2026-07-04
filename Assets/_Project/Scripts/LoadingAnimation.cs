@@ -57,8 +57,15 @@ public class LoadingAnimation : MonoBehaviour
     {
         if (!useSimulatedProgress || loadingSlider == null) return;
 
-        progress += Time.deltaTime * 0.2f;
+        progress += Time.unscaledDeltaTime * 0.2f;
         if (progress > 1f) progress = 0f;
         loadingSlider.value = progress;
+    }
+
+    void OnDisable()
+    {
+        if (loadingSlider != null)
+            loadingSlider.value = 0f;
+        progress = 0f;
     }
 }

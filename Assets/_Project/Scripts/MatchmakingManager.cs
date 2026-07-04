@@ -89,9 +89,11 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
     public void ShowMatchmakingPanel()
     {
         Debug.Log("[UI] ShowMatchmakingPanel called");
+        UiFlowManager.BeginOnlineMatchmaking();
 
         if (ModeManager.Instance != null)
         {
+            ModeManager.Instance.SetFriendsMatchMode(false);
             ModeManager.Instance.HideJoinTablePanel();
             if (ModeManager.Instance.panelModes != null)
                 ModeManager.SetPanelVisiblePublic(ModeManager.Instance.panelModes, false);
@@ -164,8 +166,19 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
         }
         else
         {
-            Debug.Log("[Matchmaking] Stopped/Cancelled -> Home Screen");
-            ReturnToHome();
+            if (WasCancelledByUser)
+            {
+                Debug.Log("[Matchmaking] Stopped/Cancelled by user -> Home Screen");
+                ReturnToHome();
+            }
+            else
+            {
+                Debug.Log("[Matchmaking] Search stopped — staying on current panel");
+                if (UiFlowManager.IsOnlineMatchmakingFlow() || GameFlowState.Current == GameFlowPhase.Matchmaking)
+                    ShowMatchmakingPanel();
+                else if (ModeManager.Instance != null)
+                    ModeManager.Instance.ShowModesScreenOnly();
+            }
         }
     }
 
@@ -230,6 +243,7 @@ public class MatchmakingManager : MonoBehaviourPunCallbacks
 
     void ReturnToHome()
     {
+        UiFlowManager.MarkReturningHome();
         HideSeatLobby();
 
         if (ModeManager.Instance != null)
