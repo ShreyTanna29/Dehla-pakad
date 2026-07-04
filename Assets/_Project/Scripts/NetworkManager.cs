@@ -3249,8 +3249,6 @@ yield return new WaitForSeconds(1f);
 
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
-        Debug.LogError($"[NetworkManager] OnJoinRoomFailed | Code: {returnCode} | Reason: {message}");
-        LogError($"JoinRoomFailed | {returnCode} | {message}");
         if (isAttemptingRejoin)
         {
             Debug.LogWarning("[Photon] RejoinRoom failed — AutoReconnect will retry.");
@@ -3263,9 +3261,14 @@ yield return new WaitForSeconds(1f);
         if (ModeManager.Instance != null && ModeManager.Instance.IsFriendsMatchMode
             && PlayWithFriendsManager.Instance != null)
         {
+            Debug.LogWarning($"[NetworkManager] JoinRoomFailed (Friends PIN) | {returnCode} | {message}");
             CancelPinJoinUiOverlays();
+            ClearUiInputBlockers();
             return;
         }
+
+        Debug.LogError($"[NetworkManager] OnJoinRoomFailed | Code: {returnCode} | Reason: {message}");
+        LogError($"JoinRoomFailed | {returnCode} | {message}");
 
         CancelPinJoinUiOverlays();
         OnJoinRoomFailedRestoreUi();

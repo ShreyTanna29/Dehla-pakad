@@ -157,22 +157,54 @@ public class EmojiManager : MonoBehaviourPun
         if (img == null)
             return;
 
-        img.sprite = emojiSprites[emojiIndex];
         img.preserveAspect = true;
-        img.gameObject.SetActive(true);
 
         if (_hideRoutines[seat] != null)
             StopCoroutine(_hideRoutines[seat]);
-        _hideRoutines[seat] = StartCoroutine(HideSeatEmojiAfterDelay(seat));
+        _hideRoutines[seat] = StartCoroutine(AnimateEmojiAlpha(seat, img, emojiSprites[emojiIndex]));
     }
 
-    IEnumerator HideSeatEmojiAfterDelay(int seat)
+    private IEnumerator AnimateEmojiAlpha(int seat, Image emojiDisplay, Sprite selectedSprite)
     {
-        yield return new WaitForSeconds(displayDuration);
-        _hideRoutines[seat] = null;
+        // 1. Setup and ensure it starts fully transparent
+        emojiDisplay.sprite = selectedSprite;
+        emojiDisplay.gameObject.SetActive(true);
 
-        if (seat >= 0 && seat < seatEmojiDisplays.Length && seatEmojiDisplays[seat] != null)
-            seatEmojiDisplays[seat].gameObject.SetActive(false);
+        Color c = emojiDisplay.color;
+        c.a = 0f;
+        emojiDisplay.color = c;
+
+        float fadeSpeed = 3.5f; // Speed of the fade
+
+        // 2. Smooth Fade In
+        while (emojiDisplay.color.a < 1f)
+        {
+            c.a += Time.deltaTime * fadeSpeed;
+            if (c.a > 1f) c.a = 1f;
+            emojiDisplay.color = c;
+            yield return null;
+        }
+
+        // 3. Wait for exactly 2 seconds while fully visible
+        yield return new WaitForSeconds(2f);
+
+        // 4. Smooth Fade Out
+        while (emojiDisplay.color.a > 0f)
+        {
+            c.a -= Time.deltaTime * fadeSpeed;
+            if (c.a < 0f) c.a = 0f;
+            emojiDisplay.color = c;
+            yield return null;
+        }
+
+        // 5. Cleanup
+        emojiDisplay.gameObject.SetActive(false);
+
+        // Reset alpha to 1 for next time (safety measure)
+        c.a = 1f;
+        emojiDisplay.color = c;
+
+        _hideRoutines[seat] = null;
     }
 
     void HideAllSeatEmojis()
@@ -182,8 +214,19 @@ public class EmojiManager : MonoBehaviourPun
 
         for (int i = 0; i < seatEmojiDisplays.Length; i++)
         {
+            if (_hideRoutines[i] != null)
+            {
+                StopCoroutine(_hideRoutines[i]);
+                _hideRoutines[i] = null;
+            }
+
             if (seatEmojiDisplays[i] != null)
+            {
+                Color c = seatEmojiDisplays[i].color;
+                c.a = 1f;
+                seatEmojiDisplays[i].color = c;
                 seatEmojiDisplays[i].gameObject.SetActive(false);
+            }
         }
     }
 

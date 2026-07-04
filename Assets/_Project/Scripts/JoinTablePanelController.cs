@@ -30,7 +30,19 @@ public class JoinTablePanelController : MonoBehaviour
             return;
         }
 
+        if (PlayWithFriendsManager.Instance.IsJoinInProgress)
+        {
+            Debug.Log("[JoinTable] Join ignored — already joining.");
+            return;
+        }
+
         string pin = pinInput != null ? pinInput.text : null;
         PlayWithFriendsManager.Instance.JoinRoomWithPINText(pin);
+    }
+
+    public void SetJoinInteractable(bool interactable)
+    {
+        if (joinButton != null)
+            joinButton.interactable = interactable;
     }
 }

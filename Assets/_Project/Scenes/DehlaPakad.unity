@@ -125317,7 +125317,7 @@ MonoBehaviour:
   googleSignInButton: {fileID: 1869926206}
   btnGuestLogin: {fileID: 167069899}
   statusText: {fileID: 1609731196}
-  profileNameText: {fileID: 0}
+  profileNameText: {fileID: 1779208794}
 --- !u!4 &1744031165
 Transform:
   m_ObjectHideFlags: 0

@@ -353,7 +353,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     GameObject _cachedJoinTablePanel;
 
-    GameObject ResolveJoinTablePanel()
+    public GameObject ResolveJoinTablePanel()
     {
         if (_cachedJoinTablePanel != null) return _cachedJoinTablePanel;
         if (UiSafeLookup.TryGet("JoinTablePanel", out GameObject joinTable))
@@ -408,6 +408,59 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (!isFriendsMatchMode) return;
         Debug.Log("[UI] ShowJoinTable called");
         SetPanelVisible(ResolveJoinTablePanel(), true);
+    }
+
+    /// <summary>PIN join from the Modes Join Table panel — ensure friends failure handlers run.</summary>
+    public void MarkFriendsPinJoinFlow()
+    {
+        isFriendsMatchMode = true;
+        if (GameSettings.Instance != null)
+            GameSettings.Instance.currentMatchType = MatchType.PlayWithFriends;
+    }
+
+    /// <summary>After a failed PIN join — restore Modes + Join Table without ResetMenuUiState side effects.</summary>
+    public void RestoreJoinTableScreenAfterFailedPin()
+    {
+        Debug.Log("[UI] RestoreJoinTableScreenAfterFailedPin");
+        GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.HideHomeMenuCanvas();
+            NetworkManager.Instance.HideGamePanelsForMenu();
+        }
+
+        SetPanelVisible(panelHomeScreen, false);
+        HidePlayWithFriendsPanel();
+        SetPanelVisible(panelModes, true);
+
+        if (panelModes != null)
+        {
+            panelModes.transform.SetAsLastSibling();
+            CanvasGroup modesCg = panelModes.GetComponent<CanvasGroup>();
+            if (modesCg != null)
+            {
+                modesCg.DOKill();
+                modesCg.alpha = 1f;
+                modesCg.interactable = true;
+                modesCg.blocksRaycasts = true;
+            }
+        }
+
+        ShowJoinTablePanel();
+        GameObject joinTable = ResolveJoinTablePanel();
+        if (joinTable != null)
+        {
+            joinTable.transform.SetAsLastSibling();
+            CanvasGroup joinCg = joinTable.GetComponent<CanvasGroup>();
+            if (joinCg != null)
+            {
+                joinCg.DOKill();
+                joinCg.alpha = 1f;
+                joinCg.interactable = true;
+                joinCg.blocksRaycasts = true;
+            }
+        }
     }
 
     /// <summary>Closes overlays and resets menu async flags before any main panel switch.</summary>
@@ -1561,8 +1614,16 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
-        Debug.LogError($"[Photon] JoinRoomFailed | {returnCode} | {message}");
         gameStartInProgress = false;
+
+        if (isFriendsMatchMode && PlayWithFriendsManager.Instance != null)
+        {
+            Debug.LogWarning($"[Photon] JoinRoomFailed (Friends PIN) | {returnCode} | {message}");
+            GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+            return;
+        }
+
+        Debug.LogError($"[Photon] JoinRoomFailed | {returnCode} | {message}");
         GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
         if (MatchmakingManager.Instance != null) MatchmakingManager.Instance.StopSearching(false);
         if (NetworkManager.Instance != null)

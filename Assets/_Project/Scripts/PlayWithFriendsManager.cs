@@ -181,6 +181,10 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             matchmakingTimerText.text = string.Empty;
     }
     bool _joinInProgress;
+    bool _handlingJoinFailure;
+    Coroutine _joinTimeoutCoroutine;
+    MonoBehaviour _joinTimeoutRunner;
+    JoinTablePanelController _joinTableController;
     Coroutine _lobbyPlayerRefreshCoroutine;
     MonoBehaviour _lobbyPlayerRefreshRunner;
 
@@ -211,6 +215,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     const int MaxCreateRoomRetries = 5;
 
     public IReadOnlyList<string> MyFriends => myFriends;
+    public bool IsJoinInProgress => _joinInProgress;
     public IReadOnlyDictionary<string, string> IncomingRequests => incomingRequests;
 
     /// <summary>Fires whenever the incoming friend-request list changes (added/removed/accepted/declined).
@@ -859,10 +864,52 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
             Debug.Log($"[Friends] Photon ready — joining queued room '{pin}'");
 
-            _joinInProgress = true;
+            if (!_joinInProgress)
+            {
+                _joinInProgress = true;
+                SetJoinButtonInteractable(false);
+                StartJoinTimeout();
+                if (NetworkManager.Instance != null)
+                    NetworkManager.Instance.CancelPinJoinUiOverlays();
+            }
+
             if (!PhotonNetwork.JoinRoom(pin))
-                RestoreModesPanelAfterFailedJoin("Invalid PIN or Room Full!");
+                RestoreJoinPanelAfterFailedJoin(0, "JoinRoom rejected");
         }
+    }
+
+    void CacheJoinTableController()
+    {
+        if (_joinTableController == null)
+            _joinTableController = FindAnyObjectByType<JoinTablePanelController>();
+    }
+
+    public void SetJoinButtonInteractable(bool interactable)
+    {
+        CacheJoinTableController();
+        if (_joinTableController != null)
+            _joinTableController.SetJoinInteractable(interactable);
+        if (pinInputField != null)
+            pinInputField.interactable = interactable;
+    }
+
+    void StartJoinTimeout()
+    {
+        StartFriendsCoroutine(JoinTimeoutRoutine(), ref _joinTimeoutCoroutine, ref _joinTimeoutRunner);
+    }
+
+    void StopJoinTimeout()
+    {
+        StopFriendsCoroutineSlot(ref _joinTimeoutCoroutine, ref _joinTimeoutRunner);
+    }
+
+    IEnumerator JoinTimeoutRoutine()
+    {
+        yield return new WaitForSecondsRealtime(10f);
+        _joinTimeoutCoroutine = null;
+        if (!_joinInProgress) yield break;
+        Debug.LogWarning("[Friends] PIN join timed out — restoring Join Table.");
+        RestoreJoinPanelAfterFailedJoin(0, "Join timed out. Try again.");
     }
 
     // ==========================================
@@ -871,14 +918,18 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     public void JoinRoomWithPIN()
     {
+        if (_joinInProgress) return;
+
         Debug.Log("[Friends] Joining room by PIN");
+        if (errorText != null) errorText.gameObject.SetActive(false);
+
         if (pinInputField == null || string.IsNullOrEmpty(pinInputField.text))
         {
             ShowUIError("Enter valid PIN!");
             return;
         }
 
-        JoinRoomWithPINText(pinInputField.text);
+        BeginPinJoin(pinInputField.text.Trim());
     }
 
     /// <summary>
@@ -887,33 +938,63 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     /// </summary>
     public void JoinRoomWithPINText(string pin)
     {
-        if (errorText != null) errorText.gameObject.SetActive(false);
-        if (string.IsNullOrEmpty(pin) || string.IsNullOrWhiteSpace(pin)) return;
-
         if (_joinInProgress)
         {
-            ShowUIError("Joining... please wait.");
+            Debug.Log("[Friends] Join PIN ignored — isJoiningRoom=true");
             return;
         }
 
-        string targetPin = pin.Trim();
+        if (errorText != null) errorText.gameObject.SetActive(false);
+
+        if (string.IsNullOrEmpty(pin) || string.IsNullOrWhiteSpace(pin))
+        {
+            ShowUIError("Enter valid PIN!");
+            return;
+        }
+
+        string trimmed = pin.Trim();
+        Debug.Log($"[Friends] Join PIN clicked | pin='{trimmed}' | isJoiningRoom={_joinInProgress}");
+        BeginPinJoin(trimmed);
+    }
+
+    void BeginPinJoin(string targetPin)
+    {
+        Debug.Log($"[Friends] JoinRoom requested | room='{targetPin}' | isJoiningRoom={_joinInProgress}");
+
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.MarkFriendsPinJoinFlow();
+
+        _joinInProgress = true;
+        SetJoinButtonInteractable(false);
+        StartJoinTimeout();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.CancelPinJoinUiOverlays();
 
         if (!PhotonNetwork.IsConnectedAndReady)
         {
+            if (!NetworkManager.HasInternet())
+            {
+                RestoreJoinPanelAfterFailedJoin(0, "No internet connection.");
+                return;
+            }
             PendingJoinPin = targetPin;
             if (NetworkManager.Instance != null) NetworkManager.Instance.ConnectToPhoton();
-            ShowUIError("Connecting... please wait.");
             return;
         }
 
         if (PhotonNetwork.InRoom)
         {
-            if (PhotonNetwork.CurrentRoom.Name == targetPin)
+            if (PhotonNetwork.CurrentRoom != null && PhotonNetwork.CurrentRoom.Name == targetPin)
             {
+                _joinInProgress = false;
+                StopJoinTimeout();
+                SetJoinButtonInteractable(true);
+                if (NetworkManager.Instance != null)
+                    NetworkManager.Instance.CancelPinJoinUiOverlays();
                 ShowPrivateRoomLobbyUI();
                 return;
             }
-            _joinInProgress = true;
             SuppressSeatLobbyOnJoin = false;
             PendingJoinPin = targetPin;
             PhotonNetwork.LeaveRoom();
@@ -923,47 +1004,206 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (!NetworkManager.IsPhotonMasterReadyForRooms())
         {
             PendingJoinPin = targetPin;
-            ShowUIError("Connecting... please wait.");
             return;
         }
 
-        _joinInProgress = true;
         PendingJoinPin = null;
-        ShowUIError("Joining Table...");
-
+        Debug.Log($"[Friends] Photon JoinRoom requested for '{targetPin}'");
         if (!PhotonNetwork.JoinRoom(targetPin))
-            RestoreModesPanelAfterFailedJoin("Invalid PIN or Room Full!");
+            RestoreJoinPanelAfterFailedJoin(0, "JoinRoom rejected");
     }
 
-    void RestoreModesPanelAfterFailedJoin(string errorMsg)
+    void RestoreJoinPanelAfterFailedJoin(short returnCode, string message)
+    {
+        if (_handlingJoinFailure) return;
+        _handlingJoinFailure = true;
+
+        StopJoinTimeout();
+
+        Debug.Log($"[Friends] RestoreJoinPanelAfterFailedJoin | code={returnCode} | {message}");
+
+        EmergencyUnlockUI();
+
+        GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.RestoreJoinTableScreenAfterFailedPin();
+
+        SetJoinButtonInteractable(true);
+
+        string userMsg = returnCode == 32758 || (message != null && message.Contains("does not exist"))
+            ? "Room not found. Check PIN."
+            : "Invalid PIN or Room Full!";
+        ShowUIError(userMsg);
+
+        GameObject joinTable = ModeManager.Instance != null ? ModeManager.Instance.ResolveJoinTablePanel() : null;
+        if (joinTable != null)
+        {
+            CanvasGroup jcg = joinTable.GetComponent<CanvasGroup>();
+            Debug.Log($"[Friends] Join panel after failure | active={joinTable.activeSelf} | alpha={(jcg != null ? jcg.alpha.ToString() : "n/a")} | blocksRaycasts={(jcg != null && jcg.blocksRaycasts)}");
+        }
+
+        _handlingJoinFailure = false;
+    }
+
+    void EmergencyUnlockUI()
     {
         _joinInProgress = false;
         PendingJoinPin = null;
 
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.CancelPinJoinUiOverlays();
+        if (modesPanel == null && ModeManager.Instance != null)
+            modesPanel = ModeManager.Instance.panelModes;
 
-        GameFlowState.SetPhase(GameFlowPhase.ModeSelection);
+        // 1. Force unlock THIS panel
+        CanvasGroup localCg = GetComponent<CanvasGroup>();
+        if (localCg != null) { localCg.interactable = true; localCg.blocksRaycasts = true; }
 
-        if (ModeManager.Instance != null && ModeManager.Instance.IsFriendsMatchMode)
+        // 2. Force unlock the Modes Panel
+        if (modesPanel != null)
         {
-            ModeManager.Instance.ShowModesScreenOnly();
-            ModeManager.Instance.ShowJoinTablePanel();
+            modesPanel.SetActive(true);
+            CanvasGroup modeCg = modesPanel.GetComponent<CanvasGroup>();
+            if (modeCg != null)
+            {
+                modeCg.DOKill();
+                modeCg.alpha = 1f;
+                modeCg.interactable = true;
+                modeCg.blocksRaycasts = true;
+            }
         }
 
-        ShowUIError(errorMsg);
+        // 3. Force unlock ModeManager panels if they exist
+        if (ModeManager.Instance != null && ModeManager.Instance.panelModes != null)
+        {
+            GameObject mmPanel = ModeManager.Instance.panelModes;
+            mmPanel.SetActive(true);
+            CanvasGroup mmCg = mmPanel.GetComponent<CanvasGroup>();
+            if (mmCg != null)
+            {
+                mmCg.DOKill();
+                mmCg.alpha = 1f;
+                mmCg.interactable = true;
+                mmCg.blocksRaycasts = true;
+            }
+        }
+
+        // 4. Force unlock Join Table panel (PIN entry lives here)
+        if (ModeManager.Instance != null)
+        {
+            GameObject joinTable = ModeManager.Instance.ResolveJoinTablePanel();
+            if (joinTable != null)
+            {
+                joinTable.SetActive(true);
+                CanvasGroup joinCg = joinTable.GetComponent<CanvasGroup>();
+                if (joinCg != null)
+                {
+                    joinCg.DOKill();
+                    joinCg.alpha = 1f;
+                    joinCg.interactable = true;
+                    joinCg.blocksRaycasts = true;
+                }
+            }
+        }
+
+        // 5. Brute-force nuke loading / cover overlays in NetworkManager
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.ForceClearBlackOverlay();
+            NetworkManager.Instance.HideLoadingInstant();
+            NetworkManager.Instance.ClearUiInputBlockers();
+
+            foreach (Transform child in NetworkManager.Instance.transform)
+            {
+                string childName = child.name.ToLower();
+                if (childName.Contains("loading") || childName.Contains("cover") || childName.Contains("block"))
+                {
+                    child.gameObject.SetActive(false);
+                    CanvasGroup childCg = child.GetComponent<CanvasGroup>();
+                    if (childCg != null)
+                    {
+                        childCg.DOKill();
+                        childCg.blocksRaycasts = false;
+                        childCg.interactable = false;
+                    }
+                }
+            }
+        }
+
+        NukeInvisibleRaycastBlockers();
+
+        Debug.Log("[Emergency] UI Unlocked aggressively after failure!");
+    }
+
+    static void NukeInvisibleRaycastBlockers()
+    {
+        Canvas rootCanvas = null;
+        if (NetworkManager.Instance != null && NetworkManager.Instance.gameCanvasGroup != null)
+            rootCanvas = NetworkManager.Instance.gameCanvasGroup.GetComponentInParent<Canvas>();
+        if (rootCanvas == null)
+            rootCanvas = FindAnyObjectByType<Canvas>();
+        if (rootCanvas == null) return;
+
+        foreach (CanvasGroup cg in rootCanvas.GetComponentsInChildren<CanvasGroup>(true))
+        {
+            if (cg == null) continue;
+
+            string n = cg.gameObject.name.ToLower();
+            bool isKnownOverlay = n.Contains("loading") || n.Contains("cover") || n.Contains("block")
+                || n.Contains("black") || n.Contains("transition") || n.Contains("reconnect");
+
+            if (isKnownOverlay)
+            {
+                cg.DOKill();
+                cg.blocksRaycasts = false;
+                cg.interactable = false;
+                if (cg.alpha < 0.15f)
+                    cg.gameObject.SetActive(false);
+                continue;
+            }
+
+            if (cg.gameObject.activeSelf && cg.alpha < 0.05f && cg.blocksRaycasts)
+            {
+                cg.DOKill();
+                cg.blocksRaycasts = false;
+                cg.interactable = false;
+            }
+        }
     }
 
     public void ShowJoinError(string errorMsg)
     {
-        _joinInProgress = false;
+        EmergencyUnlockUI();
+        SetJoinButtonInteractable(true);
         ShowUIError(errorMsg);
     }
 
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
-        Debug.LogError("Room Join Failed: " + message);
-        RestoreModesPanelAfterFailedJoin("Invalid PIN or Room Full!");
+        _joinInProgress = false;
+        PendingJoinPin = null;
+        _handlingJoinFailure = false;
+
+        Debug.LogWarning($"[Friends] Room Join Failed: {message}. Code: {returnCode}");
+
+        StopJoinTimeout();
+        SetJoinButtonInteractable(true);
+
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.ForceClearBlackOverlay();
+            NetworkManager.Instance.HideLoadingInstant();
+            NetworkManager.Instance.ClearUiInputBlockers();
+        }
+
+        if (ModeManager.Instance != null)
+        {
+            ModeManager.Instance.HidePlayWithFriendsPanel();
+            ModeManager.Instance.RestoreJoinTableScreenAfterFailedPin();
+        }
+
+        ShowUIError(returnCode == 32758 || (message != null && message.Contains("does not exist"))
+            ? "Room not found. Check PIN."
+            : "Invalid PIN! Try again.");
     }
 
     /// <summary>
@@ -1020,6 +1260,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         _friendsGameStartTriggered = false;
         _joinInProgress = false;
+        StopJoinTimeout();
+        SetJoinButtonInteractable(true);
         if (PhotonNetwork.CurrentRoom == null) return;
 
         if (_isLeavingFriendsFlow)
@@ -1047,13 +1289,19 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                 return;
             }
 
-            Debug.Log("[Friends] Joined room successfully");
+            Debug.Log($"[Friends] OnJoinedRoom success | room={PhotonNetwork.CurrentRoom.Name} | players={PhotonNetwork.CurrentRoom.PlayerCount} | master={PhotonNetwork.IsMasterClient}");
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.CancelPinJoinUiOverlays();
             TrySendPendingInvite();
 
             if (_pendingSeatLobbyOpen)
                 PresentSeatLobbyUI();
             else
+            {
+                if (ModeManager.Instance != null)
+                    ModeManager.Instance.HideJoinTablePanel();
                 ShowPrivateRoomLobbyUI();
+            }
             return;
         }
     }
@@ -1281,10 +1529,13 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (_isLeavingFriendsFlow) return;
         if (PhotonNetwork.CurrentRoom == null) return;
 
+        Debug.Log($"[Friends] Showing RoomLobby after join success | room={PhotonNetwork.CurrentRoom.Name} | players={PhotonNetwork.CurrentRoom.PlayerCount}");
+
         GameFlowState.SetPhase(GameFlowPhase.InRoom, forceRecovery: true);
 
         if (ModeManager.Instance != null)
         {
+            ModeManager.Instance.HideJoinTablePanel();
             if (ModeManager.Instance.panelModes != null && !PhotonNetwork.IsMasterClient)
                 ModeManager.Instance.panelModes.SetActive(false);
             ModeManager.Instance.ShowPlayWithFriendsPanel();
@@ -2121,6 +2372,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         if (!gameObject.activeSelf) gameObject.SetActive(true);
+        Debug.Log($"[Friends] OnPlayerEnteredRoom update lobby | {newPlayer.NickName} | count={PhotonNetwork.CurrentRoom.PlayerCount}");
         UpdatePlayerListUI();
         CheckPlayerCountAndToggleStart();
         BeginLobbyPlayerListRefresh();
