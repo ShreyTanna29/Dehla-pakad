@@ -86,7 +86,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     [Header("Friends List Storage")]
     private const string FriendsPrefsKey = "SavedFriendsList";
     private const string FriendNamesPrefsKey = "SavedFriendsNames";
-    private const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
+    private const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
     public List<string> myFriends = new List<string>();
     readonly Dictionary<string, string> friendDisplayNames = new Dictionary<string, string>();
     readonly Dictionary<string, FriendInfo> friendPhotonStatus = new Dictionary<string, FriendInfo>();
@@ -603,6 +603,14 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         StartInviteListener();
         StartPresenceHeartbeat();
         SyncFriendStatus();
+
+        // Phase 5 — pull the persisted friends list from Firebase right after login. Guarded so
+        // it runs once per signed-in user, but re-runs if the account changes.
+        if (Firebase.Auth.FirebaseAuth.DefaultInstance?.CurrentUser != null && _friendsLoadedForUser != myId)
+        {
+            _friendsLoadedForUser = myId;
+            LoadFriendsFromFirebase();
+        }
     }
 
     bool _headlessFriendsLoaded;
@@ -918,6 +926,15 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         yield return new WaitForSecondsRealtime(10f);
         _joinTimeoutCoroutine = null;
         if (!_joinInProgress) yield break;
+
+        // GLITCH FIX: if a match started while this timeout was pending, don't force the Join Table
+        // / Modes panels open over active play.
+        if (GameFlowState.IsActivelyPlaying)
+        {
+            Debug.Log("[Friends] Join timeout ignored — match actively in progress.");
+            yield break;
+        }
+
         Debug.LogWarning("[Friends] PIN join timed out — restoring Join Table.");
         RestoreJoinPanelAfterFailedJoin(0, "Join timed out. Try again.");
     }
@@ -980,6 +997,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         _joinAttemptToken = UiFlowManager.BeginPinJoinAttempt();
+
+        // A fresh, user-initiated PIN join is NOT a disconnect rejoin. Clear any stale rejoin
+        // state so a wrong-PIN failure routes to the JoinTable restore path, not the rejoin path.
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.ClearRejoinState();
 
         if (ModeManager.Instance != null)
             ModeManager.Instance.MarkFriendsPinJoinFlow();
@@ -1472,6 +1494,12 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         return PhotonNetwork.MasterClient != null ? PhotonNetwork.MasterClient.ActorNumber : -1;
     }
 
+    public static bool IsLocalRoomHost()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.LocalPlayer == null) return false;
+        return PhotonNetwork.LocalPlayer.ActorNumber == GetRoomHostActorNumber();
+    }
+
     static void EnsureHostActorRoomProperty()
     {
         if (!PhotonNetwork.InRoom || !PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null) return;
@@ -1535,7 +1563,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (!PhotonNetwork.InRoom) return;
 
-        bool isHost = PhotonNetwork.IsMasterClient;
+        bool isHost = IsLocalRoomHost();
 
         if (modesPanel != null)
         {
@@ -1681,8 +1709,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         StartRoomIdPlaqueWatch();
         if (errorText != null) errorText.gameObject.SetActive(false);
 
-        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("BotsIncluded", out object botsObj))
-            ApplyBotsIncludedState((bool)botsObj);
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("BotsIncluded", out object botsObj) && botsObj is bool botsObjVal)
+            ApplyBotsIncludedState(botsObjVal);
         else
             ApplyBotsIncludedState(false);
 
@@ -1781,7 +1809,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         matchmakingTimerText.gameObject.SetActive(true);
-        matchmakingTimerText.text = $"Players: {displayFilled}/{DeckManager.MaxTableSeats}";
+        matchmakingTimerText.text = areBotsIncluded
+            ? $"Players: {displayFilled}/{DeckManager.MaxTableSeats}"
+            : $"Players: {realPlayers}/{DeckManager.MaxTableSeats}";
     }
 
     // ==========================================
@@ -2389,14 +2419,100 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     }
 
     /// <summary>
-    /// Back-button entry point. Actually leaves the Photon room (so no "ghost room" / background
-    /// match keeps running) and resets the seat-panel UI. While leaving, a loading text is shown;
-    /// navigation Home is performed by NetworkManager.OnLeftRoom once the server confirms.
+    /// Back-button entry point. Host disband in private lobby; otherwise leave and reset UI.
     /// </summary>
     public void LeaveCurrentRoom()
     {
         if (_isLeavingRoom) return;
 
+        if (ShouldDisbandPrivateLobbyAsHost())
+        {
+            DisbandPrivateRoomAsHost();
+            return;
+        }
+
+        PerformLeaveCurrentRoom();
+    }
+
+    bool IsPrivateFriendsLobby()
+    {
+        return PhotonNetwork.InRoom
+            && PhotonNetwork.CurrentRoom != null
+            && !PhotonNetwork.CurrentRoom.IsVisible
+            && !PhotonNetwork.OfflineMode
+            && !_onlineMode;
+    }
+
+    bool IsFriendsMatchStarted()
+    {
+        if (_friendsGameStartTriggered) return true;
+
+        if (PhotonNetwork.CurrentRoom != null)
+        {
+            if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("ModesLocked", out object ml)
+                && ml is bool locked && locked)
+                return true;
+
+            if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
+                && gs is bool inGame && inGame)
+                return true;
+        }
+
+        return GameFlowState.Current == GameFlowPhase.InGame
+            || GameFlowState.Current == GameFlowPhase.Dealing;
+    }
+
+    bool ShouldDisbandPrivateLobbyAsHost()
+    {
+        return PhotonNetwork.IsMasterClient
+            && IsPrivateFriendsLobby()
+            && !IsFriendsMatchStarted();
+    }
+
+    void DisbandPrivateRoomAsHost()
+    {
+        Debug.Log("[Friends] Host leaving lobby — disbanding room for all players.");
+
+        SendFriendsRpc("RPC_Friends_RoomDisbandedByHost", RpcTarget.Others);
+
+        if (PhotonNetwork.CurrentRoom != null)
+        {
+            PhotonNetwork.CurrentRoom.IsOpen = false;
+            PhotonNetwork.CurrentRoom.SetCustomProperties(
+                new ExitGames.Client.Photon.Hashtable { { "Disbanded", true } });
+        }
+
+        PerformLeaveCurrentRoom();
+    }
+
+    [PunRPC]
+    void RPC_Friends_RoomDisbandedByHost() => HandleRoomDisbandedByHost();
+
+    void HandleRoomDisbandedByHost()
+    {
+        if (_isLeavingRoom) return;
+
+        Debug.Log("[Friends] Host disbanded the room — returning Home.");
+        UiFlowManager.MarkReturningHome();
+        StopFriendsGameStartCoroutine();
+        AbortPendingFriendsRoomCreation();
+        PendingJoinPin = null;
+        _pendingSeatLobbyOpen = false;
+        _isLeavingRoom = true;
+
+        if (FriendsDrawerController.Instance != null)
+            FriendsDrawerController.Instance.CloseDrawer();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.LeaveRoomAndCleanup();
+        else if (PhotonNetwork.InRoom)
+            PhotonNetwork.LeaveRoom();
+        else if (ModeManager.Instance != null)
+            ModeManager.Instance.ReturnToHomeClean();
+    }
+
+    void PerformLeaveCurrentRoom()
+    {
         Debug.Log("[UI] BackFromRoom called");
 
         AbortPendingFriendsRoomCreation();
@@ -2560,6 +2676,13 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
         if (PhotonNetwork.CurrentRoom.IsVisible || PhotonNetwork.OfflineMode) return;
 
+        if (IsPrivateFriendsLobby() && !IsFriendsMatchStarted())
+        {
+            Debug.Log("[Friends] Host left before start — disbanding lobby for remaining players.");
+            HandleRoomDisbandedByHost();
+            return;
+        }
+
         Debug.Log($"[Friends] MasterClient switched → {newMasterClient?.NickName}");
         UpdatePlayerListUI();
         SyncRoomLobbyUIForRole();
@@ -2621,7 +2744,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         // RPC pehle — panel band karne se pehle clients ko notify karo.
         // BUG 3 fix: send the DeckManager relay method (the PhotonView we route through
         // lives on DeckManager, so the target [PunRPC] must exist on that GameObject).
-        SendFriendsRpc("RPC_Friends_ShowModesPanel", RpcTarget.Others);
+        SendFriendsRpc("RPC_ShowModesPanelToClients", RpcTarget.Others);
 
         if (PhotonNetwork.CurrentRoom != null)
             PhotonNetwork.CurrentRoom.IsOpen = false;
@@ -2719,8 +2842,6 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
             return;
 
-        if (_friendsGameStartTriggered) return;
-
         bool full = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats || areBotsIncluded;
         if (!full)
         {
@@ -2730,10 +2851,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         ConfirmHostSeatStart();
 
-        if (ModeManager.Instance != null)
-            ModeManager.Instance.StartGameFromModePanel();
-        else
-            FinalStartWithSelectedModes();
+        // CRITICAL FIX: Directly start the game. Modes were already selected before this screen.
+        FinalStartWithSelectedModes();
     }
 
     void ResolveModesPanel()
@@ -2813,6 +2932,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         customRoomProperties["ModesLocked"] = true;
+        customRoomProperties["GS"] = true;
         customRoomProperties["BotsIncluded"] = areBotsIncluded;
         customRoomProperties["HAN"] = PhotonNetwork.MasterClient.ActorNumber;
 
@@ -2824,6 +2944,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         int deckSeed = UnityEngine.Random.Range(1, int.MaxValue);
         customRoomProperties["DS"] = deckSeed;
+        DeckManager.SetSharedDeckSeed(deckSeed);
         customRoomProperties["BS"] = DeckManager.botActorNumbers.ToArray();
 
         int[] realActorNumbers = new int[realPlayers];
@@ -2872,6 +2993,10 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             for (int i = 0; i < bs.Length; i++)
                 DeckManager.botActorNumbers.Add(bs[i]);
         }
+
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("DS", out object dsObj)
+            && dsObj != null && int.TryParse(dsObj.ToString(), out int ds) && ds != 0)
+            DeckManager.SetSharedDeckSeed(ds);
     }
 
     public void ExecuteFriendsGameStart()
@@ -3007,35 +3132,50 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             return;
         }
 
+        if (propertiesThatChanged.ContainsKey("Disbanded")
+            && propertiesThatChanged["Disbanded"] is bool disbanded
+            && disbanded)
+        {
+            HandleRoomDisbandedByHost();
+            return;
+        }
+
+        if (propertiesThatChanged.ContainsKey("HAN")
+            || propertiesThatChanged.ContainsKey("BS")
+            || propertiesThatChanged.ContainsKey("BotsIncluded")
+            || propertiesThatChanged.ContainsKey("DS"))
+        {
+            ApplyFriendsStartFromRoomProperties();
+            UpdatePlayerListUI();
+            SyncRoomLobbyUIForRole();
+            CheckPlayerCountAndToggleStart();
+        }
+
         if (ModeManager.Instance == null) return;
 
-        if (propertiesThatChanged.ContainsKey("GameMode"))
+        if (propertiesThatChanged.TryGetValue("GameMode", out object gameModeObj) && gameModeObj is int selectedMode)
         {
-            int selectedMode = (int)propertiesThatChanged["GameMode"];
             ModeManager.Instance.OnClick_SarMode(selectedMode, broadcastToRoom: false);
         }
 
-        if (propertiesThatChanged.ContainsKey("TrumpMode"))
+        if (propertiesThatChanged.TryGetValue("TrumpMode", out object trumpModeObj) && trumpModeObj is int selectedTrump)
         {
-            int selectedTrump = (int)propertiesThatChanged["TrumpMode"];
             ModeManager.Instance.OnClick_TrumpMode(selectedTrump, broadcastToRoom: false);
         }
 
-        if (propertiesThatChanged.ContainsKey("TaashMode"))
+        if (propertiesThatChanged.TryGetValue("TaashMode", out object taashModeObj) && taashModeObj is int selectedTaash)
         {
-            int selectedTaash = (int)propertiesThatChanged["TaashMode"];
             ModeManager.Instance.OnClick_TrickMode(selectedTaash, broadcastToRoom: false);
         }
 
-        if (propertiesThatChanged.ContainsKey("LogicMode"))
+        if (propertiesThatChanged.TryGetValue("LogicMode", out object logicModeObj) && logicModeObj is int selectedLogic)
         {
-            int selectedLogic = (int)propertiesThatChanged["LogicMode"];
             ModeManager.Instance.OnClick_LogicMode(selectedLogic, broadcastToRoom: false);
         }
 
-        if (propertiesThatChanged.ContainsKey("BotsIncluded"))
+        if (propertiesThatChanged.TryGetValue("BotsIncluded", out object botsChangedObj) && botsChangedObj is bool botsChangedVal)
         {
-            ApplyBotsIncludedState((bool)propertiesThatChanged["BotsIncluded"]);
+            ApplyBotsIncludedState(botsChangedVal);
             UpdatePlayerListUI();
             CheckPlayerCountAndToggleStart();
         }
@@ -3439,6 +3579,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         // Add them to MY friends list locally.
         AddFriend(fromUserId, fromName);
 
+        // Phase 5 — persist this friendship to Firebase so it survives re-login.
+        WriteFriendToFirebase(fromUserId, fromName);
+
         // Tell the requester that I accepted so they add me back.
         string myId = MyUserId;
         if (!string.IsNullOrEmpty(myId))
@@ -3502,7 +3645,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                 string accepterId = child.Key;
                 string accepterName = child.Child("name").Value?.ToString() ?? accepterId;
                 if (!string.IsNullOrEmpty(accepterId) && !myFriends.Contains(accepterId))
+                {
                     AddFriend(accepterId, accepterName);
+                    // Phase 5 — persist this friendship to Firebase (requester side).
+                    WriteFriendToFirebase(accepterId, accepterName);
+                }
                 child.Reference.RemoveValueAsync();
             }
 
@@ -3519,6 +3666,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         string accepterName = args.Snapshot.Child("name").Value?.ToString() ?? accepterId;
         AddFriend(accepterId, accepterName);
+        // Phase 5 — persist this friendship to Firebase (requester side).
+        WriteFriendToFirebase(accepterId, accepterName);
         ShowUIError($"{accepterName} accepted your request!");
 
         // Consume the acceptance notice.
@@ -3950,5 +4099,99 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
                     friendDisplayNames[id] = name;
             }
         }
+    }
+
+    // ==========================================
+    // Phase 5 — Firebase friends persistence
+    // ==========================================
+
+    /// <summary>Tracks which signed-in user id we've already fetched Firebase friends for,
+    /// so the fetch runs once per login but re-runs if the user changes accounts.</summary>
+    string _friendsLoadedForUser;
+
+    /// <summary>
+    /// Phase 5 — Persist a single established friendship to Firebase so it survives re-login:
+    /// users/{myUid}/friends/{friendUid} = displayName. Guarded by a real signed-in Firebase user
+    /// so the generated GUID fallback is never used as a key.
+    /// </summary>
+    void WriteFriendToFirebase(string friendUid, string displayName)
+    {
+        if (string.IsNullOrEmpty(friendUid)) return;
+
+        Firebase.Auth.FirebaseUser user = Firebase.Auth.FirebaseAuth.DefaultInstance?.CurrentUser;
+        if (user == null)
+        {
+            Debug.LogWarning("[Friends] Skipped Firebase friend write — no signed-in user.");
+            return;
+        }
+
+        string myUid = user.UserId;
+        if (string.IsNullOrEmpty(myUid)) return;
+
+        string nameToStore = string.IsNullOrEmpty(displayName) ? friendUid : displayName;
+        Firebase.Database.FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("users").Child(myUid).Child("friends").Child(friendUid)
+            .SetValueAsync(nameToStore);
+        Debug.Log($"[Friends] Persisted friend to Firebase: users/{myUid}/friends/{friendUid} = {nameToStore}");
+    }
+
+    /// <summary>
+    /// Phase 5 — Loads the friends list from Firebase (users/{myUid}/friends) once after login and
+    /// merges each child (key=friendUid, value=displayName) into the local list/cache (dedupe),
+    /// then persists the local PlayerPrefs cache and refreshes the UI. The PlayerPrefs offline
+    /// fallback keeps working; this only augments it.
+    /// </summary>
+    public void LoadFriendsFromFirebase()
+    {
+        Firebase.Auth.FirebaseUser user = Firebase.Auth.FirebaseAuth.DefaultInstance?.CurrentUser;
+        if (user == null)
+        {
+            Debug.LogWarning("[Friends] LoadFriendsFromFirebase skipped — no signed-in user (offline). Using local cache.");
+            return;
+        }
+
+        string myUid = user.UserId;
+        if (string.IsNullOrEmpty(myUid)) return;
+
+        if (myFriends == null) myFriends = new List<string>();
+
+        Debug.Log($"[Friends] Loading friends from Firebase: users/{myUid}/friends");
+        Firebase.Database.FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
+            .Child("users").Child(myUid).Child("friends")
+            .GetValueAsync().ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted || task.IsCanceled)
+                {
+                    Debug.LogWarning("[Friends] Failed to load friends from Firebase — keeping local cache.");
+                    return;
+                }
+
+                Firebase.Database.DataSnapshot snap = task.Result;
+                if (snap == null || !snap.Exists)
+                {
+                    Debug.Log("[Friends] No Firebase friends node yet — nothing to merge.");
+                    return;
+                }
+
+                int mergedCount = 0;
+                foreach (Firebase.Database.DataSnapshot child in snap.Children)
+                {
+                    string friendUid = child.Key;
+                    if (string.IsNullOrEmpty(friendUid)) continue;
+
+                    string displayName = child.Value?.ToString() ?? friendUid;
+                    if (!myFriends.Contains(friendUid))
+                    {
+                        myFriends.Add(friendUid);
+                        mergedCount++;
+                    }
+                    friendDisplayNames[friendUid] = displayName;
+                }
+
+                SaveFriends();
+                FriendsPanelUIController.Instance?.RefreshAll();
+                RefreshFriendsListUI();
+                Debug.Log($"[Friends] Loaded friends from Firebase — merged {mergedCount} new, total {myFriends.Count}.");
+            });
     }
 }

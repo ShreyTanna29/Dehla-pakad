@@ -33,6 +33,8 @@ public class LeaderboardScreenController : MonoBehaviour
     TMP_Text _tWorldL, _tCountryL, _tFriendsL;
     // toggles
     Button _btnBots, _btnOnline, _btnSkill, _btnHigh;
+    // Phase 12: optional close (X) button — auto-wired if present in the scene as "LB_Btn_Close".
+    Button _btnClose;
     Image _botsBg, _onlineBg, _skillBg, _highBg;
     TMP_Text _botsL, _onlineL, _skillL, _highL;
     // dropdown
@@ -90,6 +92,8 @@ public class LeaderboardScreenController : MonoBehaviour
         _skillBg = I("LB_Btn_Skill"); _highBg = I("LB_Btn_HighScore");
         _skillL = L("LB_Btn_Skill"); _highL = L("LB_Btn_HighScore");
 
+        _btnClose = B("LB_Btn_Close"); // Phase 12
+
         Transform dd = Find("LB_Dropdown_Period");
         if (dd != null) _period = dd.GetComponent<SimpleDropdown>();
 
@@ -119,7 +123,20 @@ public class LeaderboardScreenController : MonoBehaviour
         if (_btnHigh) { _btnHigh.onClick.RemoveAllListeners(); _btnHigh.onClick.AddListener(() => { _bySkill = false; if (!preserveManualAppearance) Refresh(); }); }
 
         if (_period != null) _period.OnSelected = (i, v) => { if (!preserveManualAppearance) Refresh(); };
+
+        // Phase 12: wire the leaderboard close (X) button if it exists.
+        if (_btnClose) { _btnClose.onClick.RemoveAllListeners(); _btnClose.onClick.AddListener(CloseLeaderboard); }
         _wired = true;
+    }
+
+    /// <summary>Phase 12: closes the Leaderboard and returns to the Profile screen so the player is
+    /// never trapped. Only affects the leaderboard tab — the profile board stays open. Falls back to
+    /// simply hiding this screen if no tab controller is present.</summary>
+    public void CloseLeaderboard()
+    {
+        var tabs = GetComponentInParent<ProfilePanelTabController>(true);
+        if (tabs != null) { tabs.ShowTab(tabs.defaultTab); return; }
+        gameObject.SetActive(false);
     }
 
     void SetTab(string tab)

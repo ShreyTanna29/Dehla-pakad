@@ -534,6 +534,12 @@ public class ModeManager : MonoBehaviourPunCallbacks
         GameObject friends = ResolvePlayWithFriendsPanel();
         bool friendsOn = friends != null && friends.activeSelf;
 
+        if (homeOn && (modesOn || joinOn || friendsOn || UiFlowManager.IsOnlineMatchmakingFlow()))
+        {
+            ForceHideHomeUi();
+            homeOn = false;
+        }
+
         if (homeOn && modesOn)
         {
             Debug.LogWarning("[UI] Overlap: Home and Modes are both active — hiding Home.");
@@ -642,6 +648,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
         WireCut2TrumpButton();
         ApplyModePanelRules();
         UpdateModeSelectionUIColors();
+
+        BGAudioManager.Instance?.OnMenuScreenShown();
     }
 
     public void ShowHomeScreenOnly()
@@ -1276,6 +1284,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("[StartRoute] Mode panel Start clicked");
 
+        // NOTE: bg_sound fade-out is now driven by NetworkManager.OnJoinedRoom() so the music
+        // only goes silent once the player is actually inside a room/gameplay (REQ-A/B).
+        // Calling OnGameplayStarting() here silenced the music too early at the lobby step.
+
         EnforceModeLogicRules();
 
         bool isPrivateFriends = PhotonNetwork.InRoom
@@ -1317,7 +1329,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
                     PlayWithFriendsManager.Instance.OpenSeatLobbyWhenReady();
                 else
                     gameStartInProgress = false;
-            });
+            }, "Creating room...");
             return;
         }
 
@@ -1377,19 +1389,20 @@ public class ModeManager : MonoBehaviourPunCallbacks
         StartOnlineConnectionBuffer(StartNormalMatchFromModesPanel);
     }
 
-    void StartOnlineConnectionBuffer(System.Action onBufferComplete)
+    void StartOnlineConnectionBuffer(System.Action onBufferComplete, string loadingMessage = "Connecting Online...")
     {
         if (_connectionBufferRoutine != null)
             StopCoroutine(_connectionBufferRoutine);
-        _connectionBufferRoutine = StartCoroutine(OnlineConnectionBufferRoutine(onBufferComplete));
+        _connectionBufferRoutine = StartCoroutine(OnlineConnectionBufferRoutine(onBufferComplete, loadingMessage));
     }
 
-    IEnumerator OnlineConnectionBufferRoutine(System.Action onBufferComplete)
+    IEnumerator OnlineConnectionBufferRoutine(System.Action onBufferComplete, string loadingMessage = "Connecting Online...")
     {
+        if (string.IsNullOrEmpty(loadingMessage)) loadingMessage = "Connecting Online...";
         if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowLoading("Connecting Online...");
+            NetworkManager.Instance.ShowLoading(loadingMessage);
         else if (UiFlowManager.Current != UIState.LoadingGame)
-            UiFlowManager.ShowLoadingOnly("Connecting Online...");
+            UiFlowManager.ShowLoadingOnly(loadingMessage);
 
         if (!PhotonNetwork.IsConnectedAndReady)
         {
@@ -1701,7 +1714,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         if (PhotonNetwork.CurrentRoom != null && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode)
         {
-            bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs1) && (bool)gs1;
+            bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs1) && gs1 is bool gsb1 && gsb1;
             if (!rejoining)
             {
                 // Eager invite-room: host must stay on the Modes panel until they tap Play.
@@ -1740,7 +1753,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         bool matchInProgress = PhotonNetwork.CurrentRoom != null
             && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs2)
-            && (bool)gs2;
+            && gs2 is bool gsb2 && gsb2;
 
         GameFlowState.SetPhase(
             matchInProgress ? GameFlowPhase.InGame : GameFlowPhase.InRoom,

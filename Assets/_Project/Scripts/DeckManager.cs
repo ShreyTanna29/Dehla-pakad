@@ -21,6 +21,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     [Header("Bot Tracking")]
     public static List<int> botActorNumbers = new List<int>();
+    static int _sharedDeckSeed;
     public Dictionary<int, List<CardData>> botHands = new Dictionary<int, List<CardData>>();
     private Dictionary<int, List<CardData>> humanHandsOnMaster = new Dictionary<int, List<CardData>>(); // Cache for reconnect
     private Dictionary<int, int> masterTrackingCounts = new Dictionary<int, int>();
@@ -347,6 +348,10 @@ public class DeckManager : MonoBehaviourPunCallbacks
             ApplySyncedBotActorList(bs);
         }
     }
+
+    public static void SetSharedDeckSeed(int seed) => _sharedDeckSeed = seed;
+
+    public static void ClearSharedDeckSeed() => _sharedDeckSeed = 0;
 
     static void ApplySyncedBotActorList(int[] bots)
     {
@@ -1241,6 +1246,15 @@ public class DeckManager : MonoBehaviourPunCallbacks
     public void RPC_Friends_ShowModesPanel()
     {
         Debug.Log("[DeckManager] Relay RPC_Friends_ShowModesPanel");
+
+        // GLITCH FIX: ignore a buffered/late Modes-panel relay if a match is already actively in
+        // progress — otherwise the Modes panel pops open over live play.
+        if (GameFlowState.IsActivelyPlaying)
+        {
+            Debug.Log("[DeckManager] RPC_Friends_ShowModesPanel ignored — match actively in progress.");
+            return;
+        }
+
         if (PlayWithFriendsManager.Instance != null)
             PlayWithFriendsManager.Instance.ExecuteShowModesPanelToClients();
         else
@@ -1287,7 +1301,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (PlayerHand.LocalInstance != null) PlayerHand.LocalInstance.RPC_ResetHand();
     }
 
-    public void StartFullDealingSequence()
+    public void StartFullDealingSequence(bool isNextRound = false)
     {
         if (!PhotonNetwork.IsMasterClient) return;
         if (isDealCoroutineRunning) return;
@@ -1305,7 +1319,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
         PrepareLocalDealingStateForNextRound();
         if (_dealSequenceCoroutine != null)
             StopCoroutine(_dealSequenceCoroutine);
-        _dealSequenceCoroutine = StartCoroutine(WaitAndDealCards());
+        _dealSequenceCoroutine = StartCoroutine(WaitAndDealCards(isNextRound));
     }
 
     /// <summary>Clears local dealing flags so the next round can deal (fixes stuck IsDealingComplete).</summary>
@@ -1320,9 +1334,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
     /// <summary>
     /// Master waits for all clients to load game UI before sending buffered deal RPCs.
     /// </summary>
-    IEnumerator WaitAndDealCards()
+    IEnumerator WaitAndDealCards(bool isNextRound = false)
     {
-        Debug.Log("[DeckManager] WaitAndDealCards — 2s sync buffer for all clients...");
+        bool isOnlinePublic = PhotonNetwork.InRoom && !PhotonNetwork.OfflineMode && !IsPrivateFriendsRoom();
+        Debug.Log(isOnlinePublic
+            ? "[DeckManager] WaitAndDealCards — online match, waiting for local hand only..."
+            : "[DeckManager] WaitAndDealCards — sync buffer for all clients...");
 
         if (!IsMatchContextReadyForDealing())
         {
@@ -1330,10 +1347,14 @@ public class DeckManager : MonoBehaviourPunCallbacks
             yield break;
         }
 
+        // Phase 2: between rounds we're already in the game scene, so re-showing it with the
+        // "Loading game..." overlay caused an unnecessary loading flash every round. Suppress the
+        // overlay for inter-round deals — the round transitions seamlessly (clear table + deal).
         if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowGameScene();
+            NetworkManager.Instance.ShowGameScene(showLoadingOverlay: !isNextRound);
 
-        yield return new WaitForSeconds(2.0f);
+        if (!isOnlinePublic)
+            yield return new WaitForSeconds(2.0f);
 
         if (!IsMatchContextReadyForDealing())
         {
@@ -1341,7 +1362,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
             yield break;
         }
 
-        float timeout = 4f;
+        float timeout = isOnlinePublic ? 2f : 4f;
         while (PlayerHand.LocalInstance == null && timeout > 0f)
         {
             if (NetworkManager.Instance != null)
@@ -1393,6 +1414,32 @@ public class DeckManager : MonoBehaviourPunCallbacks
         Debug.LogError($"[DeckManager] Seat wait timed out — seats {GetActiveSeatActorsSorted().Count}/{MaxTableSeats}");
     }
 
+    IEnumerator WaitForSharedStartProperties(float timeoutSeconds = 12f)
+    {
+        if (PhotonNetwork.OfflineMode || !PhotonNetwork.InRoom) yield break;
+        // Public online rooms set deck seed during BuildAndShuffleDeck; only friends need DS/ModesLocked sync.
+        if (!IsPrivateFriendsRoom()) yield break;
+
+        while (timeoutSeconds > 0f && IsMatchContextReadyForDealing())
+        {
+            var props = PhotonNetwork.CurrentRoom.CustomProperties;
+            bool hasSeed = props.TryGetValue("DS", out object dsObj) && dsObj != null
+                && int.TryParse(dsObj.ToString(), out int parsed) && parsed != 0;
+            if (!hasSeed && _sharedDeckSeed != 0)
+                hasSeed = true;
+            bool started = props.TryGetValue("ModesLocked", out object ml) && ml is bool locked && locked;
+
+            if (hasSeed && (started || PhotonNetwork.IsMasterClient))
+                yield break;
+
+            yield return null;
+            timeoutSeconds -= Time.unscaledDeltaTime;
+        }
+
+        if (!PhotonNetwork.IsMasterClient)
+            Debug.LogWarning("[DeckManager] Shared start properties wait timed out — deck may desync.");
+    }
+
     IEnumerator WaitAndStartDealing()
     {
         yield return StartCoroutine(WaitAndDealCards());
@@ -1423,13 +1470,17 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HideLoading();
 
-        yield return new WaitForSeconds(0.2f);
+        if (PhotonNetwork.InRoom && !PhotonNetwork.OfflineMode && !IsPrivateFriendsRoom())
+            yield return null;
+        else
+            yield return new WaitForSeconds(0.2f);
 
         // Distribute the full hands up-front so every client already knows its cards. The cards
         // stay hidden and are revealed progressively as each deal batch animation lands (Task 26).
         // Doing this here (instead of after the batches) also removes the redundant extra hand
         // refresh that caused the deal animation to appear to run twice (Task 23).
         Debug.Log("[DeckManager] Distributing cards up-front for progressive reveal...");
+        yield return WaitForSharedStartProperties();
         BuildAndShuffleDeck();
         DistributeAllHandsInternal();
 
@@ -1521,23 +1572,38 @@ public class DeckManager : MonoBehaviourPunCallbacks
                 for (int r = 0; r < 13; r++)
                     masterDeck.Add(new Vector2Int(s, r));
 
+        // Phase 3: the seed is authoritative on the master and MUST be regenerated for every deal.
+        // Previously a cached _sharedDeckSeed / stored "DS" room property was reused, so
+        // Random.InitState() re-ran with the same seed and dealt identical hands every round and
+        // every match. The master now rolls a fresh, non-deterministic seed each deal and
+        // broadcasts it; non-master clients consume that freshly-shared seed for the SAME deal
+        // (they never reshuffle locally, preserving multiplayer determinism).
         int deckSeed = 0;
-        if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null
-            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("DS", out object dsObj)
-            && dsObj != null)
-            int.TryParse(dsObj.ToString(), out deckSeed);
-
-        if (PhotonNetwork.IsMasterClient && deckSeed == 0 && PhotonNetwork.InRoom)
+        if (PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom)
         {
-            deckSeed = Random.Range(1, int.MaxValue);
-            PhotonNetwork.CurrentRoom.SetCustomProperties(
-                new ExitGames.Client.Photon.Hashtable { { "DS", deckSeed } });
+            deckSeed = new System.Random(
+                unchecked(System.Environment.TickCount * 397 ^ System.Guid.NewGuid().GetHashCode())
+            ).Next(1, int.MaxValue);
+
+            if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null)
+                PhotonNetwork.CurrentRoom.SetCustomProperties(
+                    new ExitGames.Client.Photon.Hashtable { { "DS", deckSeed } });
+            SetSharedDeckSeed(deckSeed);
+        }
+        else
+        {
+            if (PhotonNetwork.CurrentRoom != null
+                && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("DS", out object dsObj)
+                && dsObj != null)
+                int.TryParse(dsObj.ToString(), out deckSeed);
+            if (deckSeed == 0)
+                deckSeed = _sharedDeckSeed;
         }
 
         if (deckSeed != 0)
         {
             Random.InitState(deckSeed);
-            Debug.Log($"[DeckManager] Shuffling with shared deck seed {deckSeed}");
+            Debug.Log($"[DeckManager] Shuffling with deck seed {deckSeed}");
         }
 
         for (int i = 0; i < masterDeck.Count; i++)
@@ -1823,7 +1889,7 @@ public class DeckManager : MonoBehaviourPunCallbacks
             PlayerHand.LocalInstance.RPC_ResetHand();
 
         if (PhotonNetwork.IsMasterClient)
-            StartFullDealingSequence();
+            StartFullDealingSequence(isNextRound: true); // Phase 2: no loading overlay between rounds
     }
 
     [PunRPC]

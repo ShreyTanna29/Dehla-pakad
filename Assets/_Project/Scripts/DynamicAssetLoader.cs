@@ -50,6 +50,30 @@ public class DynamicAssetLoader : MonoBehaviour
 
         Debug.Log($"[DynamicAssetLoader] Loading sprite '{addressableKey}'...");
 
+        // Guard: verify the key resolves to a location before loading. Calling LoadAssetAsync with an
+        // unregistered/unbuilt key throws InvalidKeyException, so check locations first to fail gracefully.
+        AsyncOperationHandle<System.Collections.Generic.IList<UnityEngine.ResourceManagement.ResourceLocations.IResourceLocation>> locHandle =
+            Addressables.LoadResourceLocationsAsync(addressableKey, typeof(Object));
+        locHandle.Completed += locOp =>
+        {
+            bool hasLocation = locOp.Status == AsyncOperationStatus.Succeeded &&
+                               locOp.Result != null && locOp.Result.Count > 0;
+            Addressables.Release(locOp);
+
+            if (!hasLocation)
+            {
+                Debug.LogWarning(
+                    $"[DynamicAssetLoader] No Addressables location for sprite '{addressableKey}' — " +
+                    "skipping load (asset missing or Addressables not built).");
+                return;
+            }
+
+            LoadSpriteInternal(addressableKey, targetImage);
+        };
+    }
+
+    void LoadSpriteInternal(string addressableKey, Image targetImage)
+    {
         AsyncOperationHandle<Sprite> handle = Addressables.LoadAssetAsync<Sprite>(addressableKey);
         handle.Completed += operation =>
         {
@@ -87,6 +111,28 @@ public class DynamicAssetLoader : MonoBehaviour
 
         Debug.Log($"[DynamicAssetLoader] Loading prefab '{addressableKey}'...");
 
+        // Guard: verify the key resolves before instantiating to avoid InvalidKeyException.
+        AsyncOperationHandle<System.Collections.Generic.IList<UnityEngine.ResourceManagement.ResourceLocations.IResourceLocation>> locHandle =
+            Addressables.LoadResourceLocationsAsync(addressableKey, typeof(Object));
+        locHandle.Completed += locOp =>
+        {
+            bool hasLocation = locOp.Status == AsyncOperationStatus.Succeeded &&
+                               locOp.Result != null && locOp.Result.Count > 0;
+            Addressables.Release(locOp);
+
+            if (!hasLocation)
+            {
+                Debug.LogWarning(
+                    $"[DynamicAssetLoader] No Addressables location for prefab '{addressableKey}' — skipping instantiate.");
+                return;
+            }
+
+            InstantiatePrefabInternal(addressableKey, parent);
+        };
+    }
+
+    void InstantiatePrefabInternal(string addressableKey, Transform parent)
+    {
         AsyncOperationHandle<GameObject> handle = Addressables.InstantiateAsync(addressableKey, parent);
         handle.Completed += operation =>
         {

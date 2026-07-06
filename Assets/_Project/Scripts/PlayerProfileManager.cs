@@ -62,7 +62,7 @@ public class PlayerProfileManager : MonoBehaviour
 
     private const string PREFS_USERNAME = "PlayerUsername";
     private const string PREFS_AVATAR_INDEX = "PlayerAvatarIndex";
-    private const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
+    private const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
 
     // Photon custom-property key used to sync each player's chosen avatar to all clients.
     public const string PROP_AVATAR = "av";
@@ -265,9 +265,6 @@ public class PlayerProfileManager : MonoBehaviour
         FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).GetReference("users").Child(userId)
             .GetValueAsync().ContinueWithOnMainThread(task =>
             {
-                if (NetworkManager.Instance != null)
-                    NetworkManager.Instance.HideLoading();
-
                 // Give this account a short public UID (PUBG / Free Fire style) if it doesn't have one yet.
                 GameUidService.EnsureGameUid(userId, _ =>
                 {
@@ -413,6 +410,9 @@ public class PlayerProfileManager : MonoBehaviour
         Debug.Log($"[ProfileManager] Opening Profile Setup (isEditing={isEditing})");
         _isEditingExistingProfile = isEditing;
         ResolveUiReferences();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.EndLoginTransitionLoading();
 
         if (panelProfileSetup != null)
         {
@@ -604,7 +604,7 @@ public class PlayerProfileManager : MonoBehaviour
 
     void ReauthenticateGoogleUser(FirebaseUser user, System.Action<bool> onDone)
     {
-        const string webClientId = "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com";
+        const string webClientId = "391594214961-sl1o3653ias0johhdv653ndgg0gjfhtn.apps.googleusercontent.com";
         var config = new GoogleSignInConfiguration
         {
             WebClientId = webClientId,
@@ -816,6 +816,14 @@ public class PlayerProfileManager : MonoBehaviour
 
     private void TransitionToHome()
     {
+        if (GoogleLogin.Instance != null)
+            GoogleLogin.Instance.OpenHomeAfterLoginReady(ApplyTransitionToHome);
+        else
+            ApplyTransitionToHome();
+    }
+
+    private void ApplyTransitionToHome()
+    {
         GoogleLogin.NotifyLoginFlowComplete();
 
         if (panelProfileSetup != null)
@@ -880,6 +888,9 @@ public class PlayerProfileManager : MonoBehaviour
     {
         GoogleLogin.NotifyLoginFlowComplete();
         UpdateProfileUI();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.EndLoginTransitionLoading();
 
         GameObject home = ResolveHomePanel();
         if (home != null)

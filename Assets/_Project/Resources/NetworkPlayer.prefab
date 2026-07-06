@@ -52,6 +52,8 @@ MonoBehaviour:
   tableCenterTransform: {fileID: 0}
   centerCardSpacing: 130
   centerCardYOffset: 30
+  centerCardMoveDuration: 0.15
+  centerCardScale: 0.85
   dummyCardPrefab: {fileID: 808558303427848131, guid: 0432f8bcc26792d42a69d22f7662cbd5, type: 3}
 --- !u!114 &7568525629491968148
 MonoBehaviour:

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "unity-mcp-gateway": {
+      "command": "C:\\Users\\Sahil Bhati\\Desktop\\Unity\\Dehla Pakad\\Library\\PackageCache\\com.unity.ai.assistant@6fee27370e6a\\RelayApp~\\relay_win.exe",
+      "args": [
+        "--mcp",
+        "--log-dir",
+        "C:\\Users\\Sahil Bhati\\Desktop\\Unity\\Dehla Pakad\\Logs"
+      ],
+      "env": {
+        "UNITY_ACP_SESSION_TOKEN": "e954db40ff3a9e9ef0713bb2d1934cf4ad105b11d9385e0136208a5cf4c11cf2",
+        "UNITY_INSTANCE_ID": "6368"
+      }
+    }
+  }
+}

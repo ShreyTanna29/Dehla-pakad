@@ -1,112 +1,65 @@
 {
   "project_info": {
-    "project_number": "297172491992",
-    "firebase_url": "https://dehla-pakad-a7859-default-rtdb.firebaseio.com",
-    "project_id": "dehla-pakad-a7859",
-    "storage_bucket": "dehla-pakad-a7859.firebasestorage.app"
+    "project_number": "391594214961",
+    "project_id": "dehlapakad-c207c",
+    "storage_bucket": "dehlapakad-c207c.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:297172491992:android:22f711dcbfc17da8e041ad",
+        "mobilesdk_app_id": "1:391594214961:android:2193caee5e0ce771ce7710",
         "android_client_info": {
-          "package_name": "chaupalstudios.dehlapakad.com"
+          "package_name": "com.dehlapakad.game"
         }
       },
       "oauth_client": [
         {
-          "client_id": "297172491992-5ud89au5irrb0aufkdb3bm17mgst51bu.apps.googleusercontent.com",
+          "client_id": "391594214961-47te3sjgqtm3tfk05pm36vefo0sf65rv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "chaupalstudios.dehlapakad.com",
+            "package_name": "com.dehlapakad.game",
             "certificate_hash": "0b688cf85242a31962dd5653c94720a56a7adbdb"
           }
         },
         {
-          "client_id": "297172491992-d930oc1gn1nub7k97uue9kbr89heeh4i.apps.googleusercontent.com",
+          "client_id": "391594214961-pcpmo70bmmet3ng1euq27d32j58rhoto.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "chaupalstudios.dehlapakad.com",
-            "certificate_hash": "c1d4cb1b8f57a8c48f6be6ba7413094a3fb528c6"
-          }
-        },
-        {
-          "client_id": "297172491992-u6j5u5inu46vvbtker986e8t8tjrrgs9.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "chaupalstudios.dehlapakad.com",
+            "package_name": "com.dehlapakad.game",
             "certificate_hash": "49056d217c4a33c40bcbf302efa48155caf46d68"
           }
         },
         {
-          "client_id": "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com",
+          "client_id": "391594214961-s3kk5md7adgh8go659tuvnbvp72h71ub.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dehlapakad.game",
+            "certificate_hash": "c1d4cb1b8f57a8c48f6be6ba7413094a3fb528c6"
+          }
+        },
+        {
+          "client_id": "391594214961-sl1o3653ias0johhdv653ndgg0gjfhtn.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBeHZwiEPk-22t2m0gQdpE10O501APrXBI"
+          "current_key": "AIzaSyAkE2_lfTdL2RFv8K8XlZT9zN5MrlEefuI"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com",
+              "client_id": "391594214961-5roen5kdmdptlvvivent688k9nrosbrs.apps.googleusercontent.com",
               "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:297172491992:android:74505b3e736673a4e041ad",
-        "android_client_info": {
-          "package_name": "com.roman.dehlapakad"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "297172491992-32171q2i0qmt4g7tffdgs3pu6su0h2ft.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.roman.dehlapakad",
-            "certificate_hash": "49056d217c4a33c40bcbf302efa48155caf46d68"
-          }
-        },
-        {
-          "client_id": "297172491992-aq812d15momptm398i3o98ap4pf5pcgb.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.roman.dehlapakad",
-            "certificate_hash": "c1d4cb1b8f57a8c48f6be6ba7413094a3fb528c6"
-          }
-        },
-        {
-          "client_id": "297172491992-oprprq9nrsjne6js7m17bqehpl6qgv3h.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.roman.dehlapakad",
-            "certificate_hash": "0b688cf85242a31962dd5653c94720a56a7adbdb"
-          }
-        },
-        {
-          "client_id": "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBeHZwiEPk-22t2m0gQdpE10O501APrXBI"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
+            },
             {
-              "client_id": "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com",
-              "client_type": 3
+              "client_id": "391594214961-duhn48n5e84drhra6c19cj9phl45ekc9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.dehlapakaddehlakot.game"
+              }
             }
           ]
         }

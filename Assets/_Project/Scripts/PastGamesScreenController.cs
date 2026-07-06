@@ -26,6 +26,20 @@ public class PastGamesScreenController : MonoBehaviour
     {
         if (content == null || rowTemplate == null) return;
 
+        // Phase 10: render the LOCAL PlayerPrefs history first so there is no empty flash while the
+        // Firebase read (below) is in flight. When signed in, TryLoadFromFirebase re-renders with the
+        // authoritative cloud list; offline or on read failure we simply keep this local view.
+        Render(ProfileStatsStore.FetchAllPastGames());
+        TryLoadFromFirebase();
+    }
+
+    /// <summary>Renders the given past-games list into the ScrollView (newest first), reusing the
+    /// existing row template, empty-state and Vs Bots / Online split. Clears prior clones first so a
+    /// re-render (e.g. after the Firebase read returns) never duplicates rows.</summary>
+    void Render(System.Collections.Generic.List<ProfileStatsStore.GameRecord> history)
+    {
+        if (content == null || rowTemplate == null) return;
+
         // clear previous clones (keep the template, which is the first child and inactive)
         for (int i = content.childCount - 1; i >= 0; i--)
         {
@@ -34,7 +48,6 @@ public class PastGamesScreenController : MonoBehaviour
             Destroy(c.gameObject);
         }
 
-        var history = ProfileStatsStore.FetchAllPastGames();
         if (emptyLabel != null) emptyLabel.SetActive(history == null || history.Count == 0);
         if (history == null || history.Count == 0) return;
 
@@ -117,5 +130,91 @@ public class PastGamesScreenController : MonoBehaviour
             if (r != null) return r;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Phase 10 — When a user is signed in, reads <c>users/{uid}/pastGames</c> from Firebase and, on
+    /// success, re-renders the list from the cloud (newest first). On offline / read failure the
+    /// already-rendered local PlayerPrefs history is kept exactly as today. Non-blocking: the local
+    /// view is shown first, then replaced when this async read returns (no empty flash).
+    /// </summary>
+    void TryLoadFromFirebase()
+    {
+        Firebase.Auth.FirebaseUser user = Firebase.Auth.FirebaseAuth.DefaultInstance != null
+            ? Firebase.Auth.FirebaseAuth.DefaultInstance.CurrentUser
+            : null;
+        if (user == null || string.IsNullOrEmpty(user.UserId))
+        {
+            Debug.Log("[PastGames] Not signed in — showing local history only.");
+            return;
+        }
+
+        string uid = user.UserId;
+
+        Firebase.Database.DatabaseReference pastGamesRef =
+            Firebase.Database.FirebaseDatabase
+                .GetInstance("https://dehla-pakad-a7859-default-rtdb.firebaseio.com/")
+                .RootReference
+                .Child("users").Child(uid).Child("pastGames");
+
+        Firebase.Extensions.TaskExtension.ContinueWithOnMainThread(
+            pastGamesRef.GetValueAsync(),
+            task =>
+            {
+                if (task.IsFaulted || task.IsCanceled)
+                {
+                    Debug.LogWarning($"[PastGames] Firebase read failed — keeping local history: {task.Exception}");
+                    return;
+                }
+
+                // The screen may have been destroyed before this async callback fired.
+                if (this == null || content == null || rowTemplate == null) return;
+
+                System.Collections.Generic.List<ProfileStatsStore.GameRecord> cloud = ParseFirebaseHistory(task.Result);
+                Debug.Log($"[PastGames] Loaded {cloud.Count} past game(s) from Firebase (users/{uid}/pastGames).");
+                Render(cloud);
+            });
+    }
+
+    /// <summary>Parses the <c>pastGames</c> snapshot into GameRecords, sorted newest-first. Each child
+    /// key is a matchId; duplicates are impossible because the writer keys by matchId.</summary>
+    static System.Collections.Generic.List<ProfileStatsStore.GameRecord> ParseFirebaseHistory(Firebase.Database.DataSnapshot snapshot)
+    {
+        var list = new System.Collections.Generic.List<ProfileStatsStore.GameRecord>();
+        if (snapshot == null || !snapshot.Exists) return list;
+
+        foreach (Firebase.Database.DataSnapshot child in snapshot.Children)
+        {
+            var rec = new ProfileStatsStore.GameRecord
+            {
+                timeTicks = ReadLong(child.Child("timeTicks")),
+                vsBots = ReadBool(child.Child("vsBots")),
+                rank = (int)ReadLong(child.Child("rank")),
+                score = ReadFloat(child.Child("score")),
+                canceled = ReadBool(child.Child("canceled"))
+            };
+            list.Add(rec);
+        }
+
+        list.Sort((a, b) => b.timeTicks.CompareTo(a.timeTicks));
+        return list;
+    }
+
+    static long ReadLong(Firebase.Database.DataSnapshot s)
+    {
+        if (s == null || s.Value == null) return 0L;
+        try { return System.Convert.ToInt64(s.Value); } catch { return 0L; }
+    }
+
+    static float ReadFloat(Firebase.Database.DataSnapshot s)
+    {
+        if (s == null || s.Value == null) return 0f;
+        try { return System.Convert.ToSingle(s.Value); } catch { return 0f; }
+    }
+
+    static bool ReadBool(Firebase.Database.DataSnapshot s)
+    {
+        if (s == null || s.Value == null) return false;
+        try { return System.Convert.ToBoolean(s.Value); } catch { return false; }
     }
 }

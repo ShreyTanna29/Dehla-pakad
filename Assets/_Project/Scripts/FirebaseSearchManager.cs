@@ -7,7 +7,7 @@ using Photon.Pun;
 
 public class FirebaseSearchManager : MonoBehaviour
 {
-    private const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
+    private const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
 
     [Header("Search UI References")]
     public TMP_InputField searchInputField;

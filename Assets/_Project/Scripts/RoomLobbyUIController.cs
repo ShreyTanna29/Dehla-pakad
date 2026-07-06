@@ -62,8 +62,16 @@ public class RoomLobbyUIController : MonoBehaviourPunCallbacks
             return;
         }
 
-        // Defensive: ensure no stray scene auto-sync is active for this single-scene project.
         PhotonNetwork.AutomaticallySyncScene = false;
+
+        bool privateFriendsRoom = PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null
+            && !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode;
+
+        if (privateFriendsRoom && PlayWithFriendsManager.Instance != null)
+        {
+            PlayWithFriendsManager.Instance.OnHostStartFriendsGame();
+            return;
+        }
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.HostStartMatch();
@@ -87,6 +95,11 @@ public class RoomLobbyUIController : MonoBehaviourPunCallbacks
         if (PhotonNetwork.CurrentRoom.IsVisible || PhotonNetwork.OfflineMode) return;
         if (UiFlowManager.IsOnlineMatchmakingFlow()) return;
         if (UiFlowManager.IsReturningHome) return;
+        // Eager host PRIVATE-room create: the host must stay on the Modes screen until they tap Play.
+        // Do NOT force-open the seat lobby while the create-flow suppression is active.
+        if (UiFlowManager.Flow == UiFlowKind.PlayFriendsCreate
+            || (PlayWithFriendsManager.Instance != null && PlayWithFriendsManager.Instance.SuppressSeatLobbyOnJoin))
+            return;
         UpdateRoomLobbyUI();
     }
 
@@ -102,8 +115,8 @@ public class RoomLobbyUIController : MonoBehaviourPunCallbacks
         if (roomLobbyPanel != null) roomLobbyPanel.SetActive(true);
         if (backButton != null) backButton.SetActive(true);
 
-        // 2/3) Host-only controls.
-        bool isHost = PhotonNetwork.IsMasterClient;
+        // 2/3) Host-only controls — use pinned HAN host, not transient MasterClient.
+        bool isHost = PlayWithFriendsManager.IsLocalRoomHost();
         if (startButton != null)
         {
             startButton.SetActive(isHost);

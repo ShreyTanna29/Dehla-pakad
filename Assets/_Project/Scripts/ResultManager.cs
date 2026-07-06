@@ -80,6 +80,9 @@ public class ResultManager : MonoBehaviourPunCallbacks
     private readonly List<GameObject> _overflowRows = new List<GameObject>();
     private bool _isShowingResult;
     private bool _statsRecorded;
+    // Phase 10: stable id for the finished match, reused as the Firebase pastGames key so a
+    // re-entry into RecordMatchStats can never create a duplicate cloud record.
+    private string _matchId;
     private bool _resultActionTaken;
     private bool _autoTransitionMode;
     private bool _roundTransitionRunning;
@@ -105,6 +108,68 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
         ProfileStatsStore.RecordCompletedGame(vsBots, rank, me.score, me.bid, kot);
         Debug.Log($"[Stats] Recorded {(vsBots ? "VsBots" : "Online")} game: rank={rank} score={me.score} bid={me.bid} kot={kot}");
+
+        // Phase 10: in addition to the local PlayerPrefs write above (offline fallback), mirror this
+        // finished match to Firebase under the signed-in user so the Past Games screen can load from
+        // the cloud across devices. Uses matchId as the KEY so a re-entry cannot create a duplicate.
+        SaveMatchToFirebase(vsBots, rank, me.score);
+    }
+
+    /// <summary>
+    /// Phase 10 — Writes the just-finished match to <c>users/{uid}/pastGames/{matchId}</c> in Firebase
+    /// Realtime Database. matchId is the Photon room name (online/friends) or an <c>offline_{ticks}</c>
+    /// id (bots/offline), cached in <see cref="_matchId"/> so the same key is reused. No-op (with a log)
+    /// when no user is signed in — the local PlayerPrefs history remains the offline fallback.
+    /// </summary>
+    void SaveMatchToFirebase(bool vsBots, int rank, float score)
+    {
+        if (string.IsNullOrEmpty(_matchId))
+        {
+            string roomName = Photon.Pun.PhotonNetwork.CurrentRoom != null
+                ? Photon.Pun.PhotonNetwork.CurrentRoom.Name
+                : null;
+            _matchId = string.IsNullOrEmpty(roomName)
+                ? $"offline_{System.DateTime.UtcNow.Ticks}"
+                : roomName;
+        }
+
+        Firebase.Auth.FirebaseUser user = Firebase.Auth.FirebaseAuth.DefaultInstance != null
+            ? Firebase.Auth.FirebaseAuth.DefaultInstance.CurrentUser
+            : null;
+        if (user == null || string.IsNullOrEmpty(user.UserId))
+        {
+            Debug.Log("[Stats] Skipping Firebase past-game save — no signed-in user (offline). Local history kept.");
+            return;
+        }
+
+        string uid = user.UserId;
+
+        var record = new System.Collections.Generic.Dictionary<string, object>
+        {
+            { "timeTicks", System.DateTime.UtcNow.Ticks },
+            { "vsBots", vsBots },
+            { "rank", rank },
+            { "score", score },
+            { "canceled", false }
+        };
+        if (GameSettings.Instance != null)
+            record["mode"] = GameSettings.Instance.currentMode.ToString();
+
+        Firebase.Database.DatabaseReference pastGameRef =
+            Firebase.Database.FirebaseDatabase
+                .GetInstance("https://dehla-pakad-a7859-default-rtdb.firebaseio.com/")
+                .RootReference
+                .Child("users").Child(uid).Child("pastGames").Child(_matchId);
+
+        Firebase.Extensions.TaskExtension.ContinueWithOnMainThread(
+            pastGameRef.SetValueAsync(record),
+            task =>
+            {
+                if (task.IsFaulted || task.IsCanceled)
+                    Debug.LogWarning($"[Stats] Firebase past-game save FAILED (users/{uid}/pastGames/{_matchId}): {task.Exception}");
+                else
+                    Debug.Log($"[Stats] Saved past game to Firebase: users/{uid}/pastGames/{_matchId}");
+            });
     }
 
     const int KotDehlasOneTaash = 4;
@@ -335,6 +400,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
         roundHistory.Clear();
         _roundTransitionRunning = false;
         _statsRecorded = false;
+        _matchId = null;
         ResetRoundPlayerStats();
 
         if (PhotonNetwork.IsMasterClient && PhotonNetwork.InRoom)
@@ -609,6 +675,24 @@ public class ResultManager : MonoBehaviourPunCallbacks
         Canvas.ForceUpdateCanvases();
         if (_roundScrollRect != null)
             _roundScrollRect.verticalNormalizedPosition = 0f;
+    }
+
+    /// <summary>
+    /// Recursive by-name lookup. PlayerRowsContainer now lives under a ScrollRect viewport
+    /// (RoundScrollView/Viewport/PlayerRowsContainer), so the old direct <c>Transform.Find</c>
+    /// (children-only) no longer resolves it. This walks the whole subtree.
+    /// </summary>
+    static Transform FindDeepChild(Transform root, string childName)
+    {
+        if (root == null) return null;
+        Transform direct = root.Find(childName);
+        if (direct != null) return direct;
+        foreach (Transform child in root)
+        {
+            Transform found = FindDeepChild(child, childName);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     void SetActionButtonsVisible(bool visible)
@@ -949,7 +1033,13 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
         Transform rowsContainer = scoreboardContainer != null
             ? scoreboardContainer
-            : mainFrame.Find("PlayerRowsContainer");
+            : FindDeepChild(mainFrame, "PlayerRowsContainer");
+
+        // PlayFriends runs unlimited rounds. The round rows live in a ScrollRect (RoundScrollView)
+        // added to the scene so the list can scroll instead of growing off-screen. Resolve it once
+        // so ScrollLeaderboardToBottom() can pin the newest ~5 rounds into view by default.
+        if (_roundScrollRect == null)
+            _roundScrollRect = mainFrame.GetComponentInChildren<ScrollRect>(true);
 
         if (rowsContainer != null)
         {
@@ -1043,7 +1133,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
         Transform mainFrame = resultPanel.transform.Find("MainFrame");
         if (mainFrame == null) { Debug.LogError("[Result] EnsureEditableTotalRow — MainFrame missing."); return false; }
 
-        Transform container = scoreboardContainer != null ? scoreboardContainer : mainFrame.Find("PlayerRowsContainer");
+        Transform container = scoreboardContainer != null ? scoreboardContainer : FindDeepChild(mainFrame, "PlayerRowsContainer");
         if (container == null) { Debug.LogError("[Result] EnsureEditableTotalRow — PlayerRowsContainer missing."); return false; }
 
         BuildEditableTotalsRow(container, ComputeInnerWidth(container), 64f);
@@ -1524,7 +1614,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
         }
         Transform mainFrame = resultPanel.transform.Find("MainFrame");
         if (mainFrame == null) { Debug.LogError("[Result] MainFrame missing under Panel_Winning."); return; }
-        Transform container = scoreboardContainer != null ? scoreboardContainer : mainFrame.Find("PlayerRowsContainer");
+        Transform container = scoreboardContainer != null ? scoreboardContainer : FindDeepChild(mainFrame, "PlayerRowsContainer");
         if (container == null) { Debug.LogError("[Result] PlayerRowsContainer missing under MainFrame."); return; }
 
         for (int i = container.childCount - 1; i >= 0; i--)
@@ -2271,6 +2361,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
     void ResetMatchStats()
     {
         _statsRecorded = false;
+        _matchId = null;
         _roundTransitionRunning = false;
         currentRound = 1;
         maxRounds = MaxRoundsBotsOnline;

@@ -35,11 +35,12 @@ public class GoogleLogin : MonoBehaviour
     private FirebaseAuth auth;
     private GoogleSignInConfiguration configuration;
 
-    private const string WEB_CLIENT_ID = "297172491992-ndjbhrt0d7h5o8ndf01nvvl0fpl15sii.apps.googleusercontent.com";
-    private const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
-    private const float SimulatedLoginMinWait = 3.5f;
+    private const string WEB_CLIENT_ID = "391594214961-sl1o3653ias0johhdv653ndgg0gjfhtn.apps.googleusercontent.com";
+    private const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
+    private const float SimulatedLoginMinWait = 3f;
     private const float RealLoginMinWait = 2.5f;
     private const float PhotonReadyMaxWait = 12f;
+    private const string LoginTransitionLoadingMessage = "Simulating login...";
     private bool isFirebaseReady = false;
     private bool _loginFlowStarted;
     private bool _pendingGuestLogin;
@@ -73,10 +74,11 @@ public class GoogleLogin : MonoBehaviour
 
         if (NetworkManager.Instance != null)
         {
+            NetworkManager.Instance.FadeOutStartupCover(1.0f);
             NetworkManager.Instance.HideHomeUntilLogin();
             // TASK 3 — clear any lingering loading overlay so a failed/cancelled login (or a logout)
             // never leaves the user stuck on a loading screen when we return to the login panel.
-            NetworkManager.Instance.HideLoading();
+            NetworkManager.Instance.EndLoginTransitionLoading();
         }
 
         if (homePanel != null)
@@ -210,6 +212,18 @@ public class GoogleLogin : MonoBehaviour
         }
     }
 
+    void ShowLoginLoading(string message = null)
+    {
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.BeginLoginTransitionLoading(message ?? LoginTransitionLoadingMessage);
+    }
+
+    void EndLoginLoading()
+    {
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.EndLoginTransitionLoading();
+    }
+
     public void OnGoogleLoginButtonClick()
     {
         Debug.Log("Google Login Button Clicked! Starting explicit sign-in.");
@@ -224,8 +238,10 @@ public class GoogleLogin : MonoBehaviour
             return;
         }
 
+        // YAHAN SE HATA DIYA: ShowLoginLoading(); taaki background mein loading na aaye
+
 #if UNITY_EDITOR
-        Debug.LogWarning("Editor Mode: Simulating Login...");
+        ShowLoginLoading(); // Editor mein turant dikha do
         SimulateLogin();
 #else
         if (!isFirebaseReady)
@@ -237,7 +253,7 @@ public class GoogleLogin : MonoBehaviour
             return;
         }
 
-        UpdateStatus("Signing in with Google...");
+        UpdateStatus("Choose Google Account...");
         StartGoogleSignInInteractive(forceAccountPicker: true, OnAuthenticationFinished);
 #endif
     }
@@ -275,6 +291,9 @@ public class GoogleLogin : MonoBehaviour
 
     private void OnAuthenticationFinished(Task<GoogleSignInUser> task)
     {
+        // YAHAN ADD KIYA: Jab user account select kar le, TAB loading screen aaye
+        ShowLoginLoading();
+
         if (task.IsFaulted)
         {
             Debug.LogError("Google Login Faulted.");
@@ -296,6 +315,7 @@ public class GoogleLogin : MonoBehaviour
             UpdateStatus(errorMessage);
             _loginFlowStarted = false;
             SetLoginButtonsInteractable(true);
+            EndLoginLoading();
             return;
         }
 
@@ -305,6 +325,7 @@ public class GoogleLogin : MonoBehaviour
             UpdateStatus("Login Canceled");
             _loginFlowStarted = false;
             SetLoginButtonsInteractable(true);
+            EndLoginLoading();
             return;
         }
 
@@ -315,6 +336,7 @@ public class GoogleLogin : MonoBehaviour
             Debug.LogError("Google Result is null or IdToken is empty.");
             _loginFlowStarted = false;
             SetLoginButtonsInteractable(true);
+            EndLoginLoading();
             return;
         }
 
@@ -380,6 +402,7 @@ public class GoogleLogin : MonoBehaviour
             Debug.LogError("❌ Firebase Auth Failed: " + task.Exception);
             _loginFlowStarted = false;
             SetLoginButtonsInteractable(true);
+            EndLoginLoading();
             ShowLoginPanel();
             return;
         }
@@ -389,6 +412,7 @@ public class GoogleLogin : MonoBehaviour
             UpdateStatus("Firebase Canceled");
             _loginFlowStarted = false;
             SetLoginButtonsInteractable(true);
+            EndLoginLoading();
             ShowLoginPanel();
             return;
         }
@@ -398,6 +422,7 @@ public class GoogleLogin : MonoBehaviour
         {
             _loginFlowStarted = false;
             SetLoginButtonsInteractable(true);
+            EndLoginLoading();
             ShowLoginPanel();
             return;
         }
@@ -410,6 +435,8 @@ public class GoogleLogin : MonoBehaviour
         // Anonymous (guest) accounts have no DisplayName, so seed a random guest name.
         // Google accounts keep their existing DisplayName-based flow unchanged.
         bool isGuest = user.IsAnonymous;
+
+        ShowLoginLoading();
 
         if (!string.IsNullOrEmpty(user.Email))
         {
@@ -437,8 +464,9 @@ public class GoogleLogin : MonoBehaviour
 
         if (PlayerProfileManager.Instance != null)
         {
-            if (NetworkManager.Instance != null)
-                NetworkManager.Instance.ShowLoading("Fetching Profile...");
+            // ShowLoading suppressed during login flow per user request.
+            // if (NetworkManager.Instance != null)
+            //     NetworkManager.Instance.ShowLoading("Fetching Profile...");
 
             PlayerProfileManager.Instance.CheckAndLoadUserProfile(photonUserId, defaultName);
         }
@@ -509,8 +537,9 @@ public class GoogleLogin : MonoBehaviour
             return;
         }
 
+        ShowLoginLoading();
+
 #if UNITY_EDITOR
-        Debug.LogWarning("Editor Mode: Simulating Guest Login...");
         SimulateGuestLogin();
 #else
         if (!isFirebaseReady || auth == null)
@@ -522,8 +551,9 @@ public class GoogleLogin : MonoBehaviour
         }
 
         UpdateStatus("Signing in as Guest...");
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowLoading("Signing in as Guest...");
+        // ShowLoading suppressed during login flow per user request.
+        // if (NetworkManager.Instance != null)
+        //     NetworkManager.Instance.ShowLoading("Signing in as Guest...");
 
         auth.SignInAnonymouslyAsync().ContinueWithOnMainThread(OnGuestSignInFinished);
 #endif
@@ -541,7 +571,7 @@ public class GoogleLogin : MonoBehaviour
         if (task.IsFaulted || task.IsCanceled)
         {
             if (NetworkManager.Instance != null)
-                NetworkManager.Instance.HideLoading();
+                NetworkManager.Instance.EndLoginTransitionLoading();
 
             Debug.LogError("❌ Guest Login Failed: " + task.Exception);
             UpdateStatus("Guest Login Failed");
@@ -554,7 +584,7 @@ public class GoogleLogin : MonoBehaviour
         if (user == null)
         {
             if (NetworkManager.Instance != null)
-                NetworkManager.Instance.HideLoading();
+                NetworkManager.Instance.EndLoginTransitionLoading();
 
             UpdateStatus("Guest Login Failed");
             ResetGuestLoginFailure();
@@ -617,8 +647,9 @@ public class GoogleLogin : MonoBehaviour
         }
 
         UpdateStatus("Binding Google account...");
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowLoading("Choose Google account...");
+        // ShowLoading suppressed during login flow per user request.
+        // if (NetworkManager.Instance != null)
+        //     NetworkManager.Instance.ShowLoading("Choose Google account...");
 
         StartGoogleSignInInteractive(forceAccountPicker: true, OnGoogleLinkAuthFinished);
 #endif
@@ -629,7 +660,7 @@ public class GoogleLogin : MonoBehaviour
     {
         if (task.IsCanceled)
         {
-            if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+            if (NetworkManager.Instance != null) NetworkManager.Instance.EndLoginTransitionLoading();
             Debug.LogWarning("[Link] Google account picker cancelled.");
             UpdateStatus("Bind Cancelled");
             return;
@@ -637,7 +668,7 @@ public class GoogleLogin : MonoBehaviour
 
         if (task.IsFaulted)
         {
-            if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+            if (NetworkManager.Instance != null) NetworkManager.Instance.EndLoginTransitionLoading();
             Debug.LogError("[Link] Google sign-in for binding failed: " + task.Exception);
             UpdateStatus("Bind Cancelled");
             return;
@@ -646,14 +677,14 @@ public class GoogleLogin : MonoBehaviour
         GoogleSignInUser googleUser = task.Result;
         if (googleUser == null || string.IsNullOrEmpty(googleUser.IdToken))
         {
-            if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+            if (NetworkManager.Instance != null) NetworkManager.Instance.EndLoginTransitionLoading();
             UpdateStatus("Auth Token Missing!");
             return;
         }
 
         if (auth == null || auth.CurrentUser == null)
         {
-            if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+            if (NetworkManager.Instance != null) NetworkManager.Instance.EndLoginTransitionLoading();
             return;
         }
 
@@ -663,7 +694,7 @@ public class GoogleLogin : MonoBehaviour
 
     private void OnGoogleLinkFinished(Task<AuthResult> task)
     {
-        if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoading();
+        if (NetworkManager.Instance != null) NetworkManager.Instance.EndLoginTransitionLoading();
 
         if (task.IsFaulted || task.IsCanceled)
         {
@@ -715,15 +746,17 @@ public class GoogleLogin : MonoBehaviour
         PlayerPrefs.DeleteKey("PlayerEmail");
         PlayerPrefs.Save();
 
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowLoading("Signing in as Guest...");
+        // ShowLoading suppressed during login flow per user request.
+        // if (NetworkManager.Instance != null)
+        //     NetworkManager.Instance.ShowLoading("Signing in as Guest...");
 
         ConnectPhotonAfterLogin(SimulatedGuestUserId);
 
         if (PlayerProfileManager.Instance != null)
         {
-            if (NetworkManager.Instance != null)
-                NetworkManager.Instance.ShowLoading("Loading profile setup...");
+            // ShowLoading suppressed during login flow per user request.
+            // if (NetworkManager.Instance != null)
+            //     NetworkManager.Instance.ShowLoading("Loading profile setup...");
 
             PlayerProfileManager.Instance.CheckAndLoadUserProfile(
                 SimulatedGuestUserId, "Guest" + UnityEngine.Random.Range(1000, 9999));
@@ -731,6 +764,7 @@ public class GoogleLogin : MonoBehaviour
         else
         {
             UpdateStatus("Profile manager missing");
+            EndLoginLoading();
             ResetGuestLoginFailure();
         }
     }
@@ -778,7 +812,8 @@ public class GoogleLogin : MonoBehaviour
     {
         if (NetworkManager.Instance != null)
         {
-            NetworkManager.Instance.ShowLoading(loadingMessage);
+            // ShowLoading suppressed during login flow per user request.
+            // NetworkManager.Instance.ShowLoading(loadingMessage);
             StartCoroutine(BeginHomeWhenReadyRoutine(minWaitSeconds));
         }
         else
@@ -787,16 +822,50 @@ public class GoogleLogin : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Waits for the login/simulating panel minimum display time (and Photon when available),
+    /// then runs <paramref name="openHomePanels"/> — typically PlayerProfileManager home transition.
+    /// </summary>
+    public void OpenHomeAfterLoginReady(System.Action openHomePanels)
+    {
+        float minWait =
+#if UNITY_EDITOR
+            SimulatedLoginMinWait;
+#else
+            RealLoginMinWait;
+#endif
+
+        if (NetworkManager.Instance != null)
+            StartCoroutine(OpenHomeAfterLoginReadyRoutine(minWait, openHomePanels));
+        else
+            StartCoroutine(OpenHomeAfterLoginReadySimpleRoutine(minWait, openHomePanels));
+    }
+
+    IEnumerator OpenHomeAfterLoginReadyRoutine(float minWaitSeconds, System.Action openHomePanels)
+    {
+        ShowLoginLoading();
+
+        yield return NetworkManager.Instance.WaitForPhotonReadyRoutine(
+            minWaitSeconds,
+            PhotonReadyMaxWait,
+            null);
+
+        EndLoginLoading();
+        openHomePanels?.Invoke();
+    }
+
+    IEnumerator OpenHomeAfterLoginReadySimpleRoutine(float minWaitSeconds, System.Action openHomePanels)
+    {
+        yield return new WaitForSecondsRealtime(minWaitSeconds);
+        openHomePanels?.Invoke();
+    }
+
     IEnumerator BeginHomeWhenReadyRoutine(float minWaitSeconds)
     {
         yield return NetworkManager.Instance.WaitForPhotonReadyRoutine(
             minWaitSeconds,
             PhotonReadyMaxWait,
-            msg =>
-            {
-                if (NetworkManager.Instance != null && NetworkManager.Instance.loadingText != null)
-                    NetworkManager.Instance.loadingText.text = msg;
-            });
+            null);
 
         TransitionToHome();
     }
@@ -806,7 +875,7 @@ public class GoogleLogin : MonoBehaviour
         NotifyLoginFlowComplete();
 
         if (NetworkManager.Instance != null)
-            NetworkManager.Instance.HideLoading();
+            NetworkManager.Instance.EndLoginTransitionLoading();
 
         ShowHomePanel();
 
@@ -832,8 +901,9 @@ public class GoogleLogin : MonoBehaviour
         if (string.IsNullOrEmpty(PlayerPrefs.GetString("PlayerEmail", "")))
             PlayerPrefs.SetString("PlayerEmail", "editor.test@gmail.com");
 
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowLoading("Signing in...");
+        // ShowLoading suppressed during login flow per user request.
+        // if (NetworkManager.Instance != null)
+        //     NetworkManager.Instance.ShowLoading("Signing in...");
 
         // Ensure we don't have stale local data if we want a fresh start
         // PlayerPrefs.DeleteKey("PlayerUsername"); 
@@ -842,8 +912,9 @@ public class GoogleLogin : MonoBehaviour
 
         if (PlayerProfileManager.Instance != null)
         {
-            if (NetworkManager.Instance != null)
-                NetworkManager.Instance.ShowLoading("Loading profile setup...");
+            // ShowLoading suppressed during login flow per user request.
+            // if (NetworkManager.Instance != null)
+            //     NetworkManager.Instance.ShowLoading("Loading profile setup...");
             string defaultName = PlayerProfileManager.GenerateDefaultUsername(
                 PlayerPrefs.GetString("PlayerEmail", "editor.test@gmail.com"));
             PlayerProfileManager.Instance.CheckAndLoadUserProfile(SimulatedPhotonUserId, defaultName);
@@ -853,6 +924,7 @@ public class GoogleLogin : MonoBehaviour
             UpdateStatus("Profile manager missing");
             _loginFlowStarted = false;
             SetLoginButtonsInteractable(true);
+            EndLoginLoading();
         }
     }
 

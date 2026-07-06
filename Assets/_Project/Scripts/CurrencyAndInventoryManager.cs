@@ -21,7 +21,7 @@ public class CurrencyAndInventoryManager : MonoBehaviour
     public static CurrencyAndInventoryManager Instance { get; private set; }
 
     // Must match the URL used elsewhere in the project (GoogleLogin, PlayerProfileManager, etc.).
-    private const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
+    private const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
 
     // Coins granted automatically the first time a brand-new account loads (no coins node in Firebase yet).
     private const int DefaultNewAccountCoins = 100;

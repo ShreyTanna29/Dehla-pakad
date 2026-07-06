@@ -61,6 +61,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     bool _isLeavingRoom;
     bool _pendingOnlineMatchmakingAfterLeave;
 
+    // REQ-C: guarantee the loading overlay stays visible >= 2s on every back/exit so the async
+    // reconnect/re-init is fully masked. Set when the "Leaving room..." overlay is shown.
+    const float LeaveLoadingMinSeconds = 2f;
+    float _leaveLoadingShownTime = -1f;
+    Coroutine _minLeaveLoadingRoutine;
+    bool _loginTransitionLoadingActive;
+
     public bool isPlayBotsMode = false;
 
     bool IsBotsFlowActive() =>
@@ -113,6 +120,30 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         Application.runInBackground = true;
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
+        // Task 3: Ensure major UI groups start hidden to prevent flashes
+        if (loadingCanvasGroup != null)
+        {
+            loadingCanvasGroup.DOKill();
+            loadingCanvasGroup.alpha = 0f;
+            loadingCanvasGroup.gameObject.SetActive(false);
+        }
+        if (homeCanvasGroup != null)
+        {
+            homeCanvasGroup.DOKill();
+            homeCanvasGroup.alpha = 0f;
+            homeCanvasGroup.gameObject.SetActive(false);
+        }
+
+        // Snap a dark cover over everything until the first screen is ready
+        EnsurePersistentBackdrop();
+        if (_persistentBackdrop != null)
+        {
+            _persistentBackdrop.DOKill();
+            _persistentBackdrop.alpha = 1f;
+            _persistentBackdrop.transform.SetAsLastSibling();
+            _persistentBackdrop.blocksRaycasts = true;
+        }
+
         if (string.IsNullOrEmpty(PhotonNetwork.AuthValues?.UserId))
         {
             string uid = PlayerPrefs.GetString("PhotonUserId", System.Guid.NewGuid().ToString());
@@ -124,6 +155,18 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         HideHomeUntilLogin();
         EnsurePersistentBackdrop();
         EnsureCameraSolidBackground();
+    }
+
+    /// <summary>Fades out the initial startup screen cover once UI is ready.</summary>
+    public void FadeOutStartupCover(float duration = 0.5f)
+    {
+        if (_persistentBackdrop == null) return;
+        
+        _persistentBackdrop.DOKill();
+        _persistentBackdrop.DOFade(0f, duration).OnComplete(() => {
+            _persistentBackdrop.transform.SetAsFirstSibling();
+            _persistentBackdrop.blocksRaycasts = false;
+        });
     }
 
     void Start()
@@ -1037,6 +1080,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             homeMenuPanel.SetActive(true);
         else if (ModeManager.Instance != null && ModeManager.Instance.panelHomeScreen != null)
             ModeManager.Instance.panelHomeScreen.SetActive(true);
+
+        BGAudioManager.Instance?.OnMenuScreenShown();
     }
 
     public void UpdateUIState(bool isHome, bool showLoadingOverlay = true)
@@ -1048,7 +1093,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
 
         if (isHome)
+        {
+            FadeOutStartupCover(1.0f);
             ShowHomeUI();
+        }
         else
             ShowGameScene(showLoadingOverlay);
     }
@@ -1056,6 +1104,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public void ShowGameScene(bool showLoadingOverlay = true)
     {
         Debug.Log("[GameStart] ShowGameScene");
+        BGAudioManager.Instance?.OnGameplayStarting();
         ForceClearBlackOverlay();
         EnsurePersistentBackdrop();
         HideReconnectPanels();
@@ -1291,10 +1340,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         CleanupRuntimeMatchStateForMenu();
 
+        // REQ-C: always mask the async reconnect/re-init with a loading overlay on every back/exit
+        // (arms the >=2s minimum-visible gate), not only when currently inside a Photon room.
+        // Keep the exact "Leaving room..." text so ResolveLoadingSliderDuration timing is unchanged.
+        ShowLoading("Leaving room...");
+
         if (PhotonNetwork.InRoom)
         {
             _isLeavingRoom = true;
-            ShowLoading("Leaving room...");
             PhotonNetwork.LeaveRoom();
             return;
         }
@@ -1309,6 +1362,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
         else
             RestoreMenuPanelAfterLeave();
+
+        // REQ-C: no Photon room to leave, so no OnLeftRoom callback will fire. Hide the leave
+        // overlay ourselves — the gate defers this until the >=2s minimum has elapsed.
+        BGAudioManager.Instance?.OnMenuScreenShown();
+        HideLoading();
 
         if (!PhotonNetwork.IsConnectedAndReady && HasInternet())
             ConnectToPhotonForOnlinePlay();
@@ -1432,11 +1490,17 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             if (!homeCanvasGroup.gameObject.activeSelf)
                 homeCanvasGroup.gameObject.SetActive(true);
+            
             homeCanvasGroup.DOKill();
+            // Ensure we start from 0 if we were just enabled or were transparent
+            if (homeCanvasGroup.alpha > 0.9f) homeCanvasGroup.alpha = 0f; 
+
             homeCanvasGroup.DOFade(1, GamePerformanceBootstrap.UiDuration(transitionTime)).SetUpdate(true);
             homeCanvasGroup.interactable = true;
             homeCanvasGroup.blocksRaycasts = true;
         }
+
+        BGAudioManager.Instance?.OnMenuScreenShown();
     }
 
     public static void InitializeGameplayScene()
@@ -1541,6 +1605,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             && (UiFlowManager.IsPlayFriendsJoinFlow() || UiFlowManager.Flow == UiFlowKind.PlayFriendsCreate))
             return;
 
+        if (UiFlowManager.IsPlayFriendsJoinFlow())
+        {
+            ModeManager.Instance?.RestoreJoinTableScreenAfterFailedPin();
+            return;
+        }
+
         RestoreMenuPanelAfterLeave();
     }
 
@@ -1550,6 +1620,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         HideLoadingInstant();
         ForceClearBlackOverlay();
         ClearUiInputBlockers();
+
+        // REQ-A/B: returning to a menu panel — resume bg_sound with a fade (idempotent).
+        BGAudioManager.Instance?.OnMenuScreenShown();
 
         if (UiFlowManager.IsReturningHome
             || (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser))
@@ -1709,6 +1782,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             ConnectToPhotonForOnlinePlay();
 
         RefreshPlayOnlineButtonState();
+
+        // FIX: guarantee the "Going home..." overlay is dismissed once Home is shown, regardless of
+        // whether ModeManager.ReturnToHomeClean ran. Deferred by the minimum-visible leave gate so
+        // the overlay still masks the async re-init, and hides well before the 10s safety timeout.
+        HideLoading();
     }
 
     public void StartOfflineMatchRequest()
@@ -1818,6 +1896,23 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public void ShowLoading(string message)
     {
         ShowLoadingFadeIn(message, 0f);
+    }
+
+    /// <summary>
+    /// Shows the loading overlay during login (bypasses login-flow blocker) and keeps it visible
+    /// until <see cref="EndLoginTransitionLoading"/> is called.
+    /// </summary>
+    public void BeginLoginTransitionLoading(string message)
+    {
+        _loginTransitionLoadingActive = true;
+        ShowLoadingFadeIn(message, 0f);
+    }
+
+    /// <summary>Ends the login-transition loading hold and hides the overlay.</summary>
+    public void EndLoginTransitionLoading()
+    {
+        _loginTransitionLoadingActive = false;
+        HideLoading();
     }
 
     public void ShowLoading(string message, float sliderDurationSeconds)
@@ -1970,6 +2065,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         isPlayBotsMode = false;
         PhotonNetwork.OfflineMode = false;
 
+        // GLITCH FIX: if a live match is actually in progress the loading overlay is stale — it was
+        // hidden above; do NOT force menu/lobby panels up over active play.
+        if (GameFlowState.IsActivelyPlaying)
+        {
+            Debug.Log("[Safety] Loading timeout — match actively in progress, not restoring menu.");
+            yield break;
+        }
+
         if (PhotonNetwork.InRoom)
             PhotonNetwork.LeaveRoom();
         else
@@ -1979,11 +2082,56 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     /// <summary>Fades the loading overlay in, then invokes <paramref name="onFadeComplete"/>.</summary>
     public void ShowLoadingFadeIn(string message, float duration = 0.2f, System.Action onFadeComplete = null)
     {
+        string lowerMsg = message != null ? message.ToLowerInvariant() : "";
+
+        // --- BLOCKER 1: Round ke baad wali loading rokne ke liye (Task 2) ---
+        if (GameFlowState.IsActivelyPlaying && lowerMsg.Contains("loading game"))
+        {
+            onFadeComplete?.Invoke();
+            return;
+        }
+
+        // --- BLOCKER 2: Game Start + Google/Guest Login ke dauraan koi loading panel NAHI.
+        // Text match ke bharose rehne ke bajaye login-flow flag dekhte hain: jab tak user
+        // Home tak nahi pahunchta (HasCompletedLoginFlow == false) tab tak har loading call
+        // suppress hoti hai — chahe message kuch bhi ho. Home aane ke baad (Play Online,
+        // Join Room, Reconnect, Game Loading) loading normal dikhti hai.
+        // Panel ko active-hide bhi karte hain taaki game start pe woh kabhi flash na kare.
+        // Exception: BeginLoginTransitionLoading() explicitly shows this panel for the 3s post-login wait.
+        if (!GoogleLogin.HasCompletedLoginFlow && !_loginTransitionLoadingActive)
+        {
+            if (loadingCanvasGroup != null)
+            {
+                loadingCanvasGroup.DOKill();
+                loadingCanvasGroup.alpha = 0f;
+                loadingCanvasGroup.interactable = false;
+                loadingCanvasGroup.blocksRaycasts = false;
+                loadingCanvasGroup.gameObject.SetActive(false);
+            }
+            onFadeComplete?.Invoke();
+            return;
+        }
+
         HideReconnectPanels();
-        EnsureLoadingImagesLoaded();
 
         if (loadingText != null) loadingText.text = message;
         lastStatusMessage = message;
+
+        bool isLeaveLoading = !string.IsNullOrEmpty(message)
+            && message.ToLowerInvariant().Contains("leaving room");
+        if (isLeaveLoading)
+        {
+            _leaveLoadingShownTime = Time.unscaledTime;
+        }
+        else if (_leaveLoadingShownTime >= 0f)
+        {
+            _leaveLoadingShownTime = -1f;
+            if (_minLeaveLoadingRoutine != null)
+            {
+                StopCoroutine(_minLeaveLoadingRoutine);
+                _minLeaveLoadingRoutine = null;
+            }
+        }
 
         if (loadingCanvasGroup == null)
         {
@@ -1991,12 +2139,16 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        loadingCanvasGroup.gameObject.SetActive(true);
         loadingCanvasGroup.DOKill();
+        if (duration > 0f) loadingCanvasGroup.alpha = 0f;
+        loadingCanvasGroup.gameObject.SetActive(true);
         loadingCanvasGroup.interactable = true;
         loadingCanvasGroup.blocksRaycasts = true;
         BringLoadingToFront();
         StartLoadingSafetyTimeout();
+
+        // Safe to load images now that the canvas is active.
+        EnsureLoadingImagesLoaded();
 
         if (!string.IsNullOrEmpty(message))
             BeginLoadingSlider(message);
@@ -2509,9 +2661,41 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         loadingCanvasGroup.transform.SetAsLastSibling();
     }
 
+    // REQ-C: if a leave/back overlay is active and less than LeaveLoadingMinSeconds have elapsed,
+    // defer the actual hide so the overlay masks the async re-init for a guaranteed minimum time.
+    // Returns true if the hide was deferred (caller must abort its own hide).
+    bool DeferHideForMinimumLeaveDuration(bool instant)
+    {
+        if (_leaveLoadingShownTime < 0f) return false;
+
+        float elapsed = Time.unscaledTime - _leaveLoadingShownTime;
+        if (elapsed >= LeaveLoadingMinSeconds)
+        {
+            _leaveLoadingShownTime = -1f;
+            return false;
+        }
+
+        float remaining = LeaveLoadingMinSeconds - elapsed;
+        if (_minLeaveLoadingRoutine != null)
+            StopCoroutine(_minLeaveLoadingRoutine);
+        _minLeaveLoadingRoutine = StartCoroutine(HideAfterMinimumLeaveDuration(remaining, instant));
+        return true;
+    }
+
+    IEnumerator HideAfterMinimumLeaveDuration(float delay, bool instant)
+    {
+        yield return new WaitForSecondsRealtime(delay);
+        _minLeaveLoadingRoutine = null;
+        _leaveLoadingShownTime = -1f;
+        if (instant) HideLoadingInstant();
+        else HideLoading();
+    }
+
     public void HideLoading()
     {
+        if (_loginTransitionLoadingActive) return;
         if (_showingNoInternetOverlay && !HasInternet()) return;
+        if (DeferHideForMinimumLeaveDuration(false)) return;
 
         _showingNoInternetOverlay = false;
         if (loadingCanvasGroup == null) return;
@@ -2537,6 +2721,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void HideLoadingInstant()
     {
+        _loginTransitionLoadingActive = false; // Emergency clear
+        if (DeferHideForMinimumLeaveDuration(true)) return;
+
         StopLoadingSafetyTimeout();
         CompleteLoadingSlider();
 
@@ -2617,6 +2804,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     /// <summary>True while a disconnect-during-match reconnect/rejoin attempt is in progress.</summary>
     public bool IsAttemptingRejoin => isAttemptingRejoin;
+
+    /// <summary>
+    /// Clears the rejoin state so a fresh, user-initiated join (e.g. a PIN join) is not mistaken
+    /// for a disconnect-during-match rejoin. Called at the start of a new PIN-join attempt.
+    /// </summary>
+    public void ClearRejoinState() => isAttemptingRejoin = false;
 
     void OnApplicationPause(bool paused)
     {
@@ -2866,6 +3059,10 @@ yield return new WaitForSeconds(1f);
 
     public override void OnJoinedRoom()
     {
+        // REQ-A/B: the player is now inside a room (seat lobby or gameplay). Fade bg_sound out
+        // and pause it. PUN fires OnJoinedRoom in offline mode too, so this also covers bots.
+        BGAudioManager.Instance?.OnGameplayStarting();
+
         StartCoroutine(HandleJoinedRoomDeferred());
     }
 
@@ -2968,6 +3165,11 @@ yield return new WaitForSeconds(1f);
     {
         yield return null;
 
+        // GLITCH FIX: remember whether a match was already live when this (possibly buffered/late)
+        // join callback fired, so the seat lobby below is never slid over active play. Captured
+        // before any SetPhase() call demotes the phase to InRoom.
+        bool wasActivelyPlaying = GameFlowState.IsActivelyPlaying;
+
         if (_localMatchAbandoned)
         {
             PhotonNetwork.LeaveRoom();
@@ -3012,7 +3214,10 @@ yield return new WaitForSeconds(1f);
                     yield break;
                 }
 
-                yield return SmoothTransitionToRoomLobby();
+                // GLITCH FIX: a late/buffered join callback must not slide the seat lobby over an
+                // active match — only show the lobby when we weren't already dealing/playing.
+                if (!wasActivelyPlaying)
+                    yield return SmoothTransitionToRoomLobby();
                 HideReconnectPanels();
 
                 isAttemptingRejoin = false;
@@ -3143,13 +3348,19 @@ yield return new WaitForSeconds(1f);
         Debug.Log("[GameStart] Room ready");
         EnsurePersistentBackdrop();
 
+        // Real duplicate-start guard: read the flag BEFORE ResetGameStartGuards clears it, so a
+        // genuine second concurrent call is blocked instead of falling through to a double start.
+        if (gameStartInProgress)
+        {
+            Debug.Log("[GameStart] Duplicate start blocked");
+            return;
+        }
+
         ResetGameStartGuards();
 
         if (DeckManager.Instance != null)
             DeckManager.Instance.EnableMatchRpcs();
 
-        if (gameStartInProgress)
-            Debug.Log("[GameStart] Duplicate start blocked");
         gameStartInProgress = true;
 
         if (gameCanvasGroup == null)
@@ -3338,6 +3549,9 @@ yield return new WaitForSeconds(1f);
             RestoreMenuPanelAfterLeave();
         }
 
+        // REQ-A/B: we have left the room and resolved to a menu screen — resume bg_sound with a fade.
+        BGAudioManager.Instance?.OnMenuScreenShown();
+
         StartCoroutine(EnsureLobbyAfterLeaveRoom());
     }
 
@@ -3482,7 +3696,7 @@ yield return new WaitForSeconds(1f);
 
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
-        if (isAttemptingRejoin)
+        if (isAttemptingRejoin && !UiFlowManager.IsPlayFriendsJoinFlow())
         {
             Debug.LogWarning("[Photon] RejoinRoom failed — AutoReconnect will retry.");
             ShowReconnectingPanel("Rejoin failed. Retrying...");
@@ -3490,6 +3704,15 @@ yield return new WaitForSeconds(1f);
         }
 
         PlayWithFriendsManager.PendingJoinPin = null;
+
+        if (UiFlowManager.IsPlayFriendsJoinFlow())
+        {
+            Debug.LogWarning($"[NetworkManager] JoinRoomFailed (PlayFriends PIN) | {returnCode} | {message}");
+            CancelPinJoinUiOverlays();
+            ClearUiInputBlockers();
+            UiFlowManager.HandlePinJoinFailed(returnCode, message);
+            return;
+        }
 
         if (ModeManager.Instance != null && ModeManager.Instance.IsFriendsMatchMode
             && PlayWithFriendsManager.Instance != null

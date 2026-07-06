@@ -40,11 +40,6 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 12591795d8a368844953edfb5a555005
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Button_Shop.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 13e3163d841d0d043acdda3ff70b64e4
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
     m_ReadOnly: 0
@@ -52,11 +47,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 198fd6d0cb67aea498317b7e5ae661ff
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/ToggleKnob.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 1a3bdde65fbf4a9459ef5b316a75cb24
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Button_InviteFriends.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -101,18 +91,23 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 329e3b04a1349c440844a9446b69a056
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Button_Share.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 32a898592625fa2458d47b6e88d367d6
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/ToggleTrack_Hands.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3345e6a0614fc164e995d40557b90fd5
+    m_Address: Assets/Sounds/kismat_achhi_thi.mp3
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 34cf116b7ab281148aa112844db7475e
     m_Address: Assets/_Project/Prefabs/Friend_Request_Row.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 352079863a68c2148b432b288550d037
+    m_Address: Assets/Sounds/jaldi_khelo.mp3
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -146,8 +141,8 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 434651a87c76bf441a6ad04fe4a69d6f
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/BOTS.png
+  - m_GUID: 44965076da8b2d94d9ac4442b38ff883
+    m_Address: Assets/Sounds/kharaab_patte_aaye.mp3
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -181,8 +176,8 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 54d8f332cf8905c45ba578777e0dfa8a
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Play_Friends.png
+  - m_GUID: 5434d4ea30d4a014bbd0155c14ba94cd
+    m_Address: Assets/Sounds/thoda_dheeme_khelo.mp3
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -196,6 +191,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 682ab15639c57654c8e62dd609be144a
+    m_Address: Assets/Sounds/ab_chalte_h.mp3
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 6c0b7d1f91915184da1ee39cbbba96d3
     m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Friendlist_BG1.png
     m_ReadOnly: 0
@@ -203,11 +203,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 6ddb742024342604882dbe6055e4af73
     m_Address: Assets/_Project/Art/Sprites/Buttons/Home/BG.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 749b809dbfa48a045a1610e25748ce23
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/290aa1e9d89d8a93c598371763af9170-Photoroom.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -231,6 +226,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 83b8aa9771c78a2499008b6c4cad7af2
+    m_Address: Assets/Sounds/badiya_khel.mp3
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8648e13fadded994dab8e0c656ceade4
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/PLAYFRIENDS_Icon.png
     m_ReadOnly: 0
@@ -238,11 +238,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 86939abc649a28a44b0d77b0b1becd6e
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/Leaderboard_BG_Image.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 86e1f7df213c7744e8c608d270840ce0
-    m_Address: Assets/_Project/Art/Sprites/Images/Logo.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -259,6 +254,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 898fbf5e757c2bd4cb089d7c88376d29
     m_Address: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8a719119aa38b0b429d3cbe726cdabc4
+    m_Address: Assets/Sounds/meri_galti.mp3
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -279,11 +279,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9b2c55f6c1479fe4183b1f917b11a846
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/SHOP_BUTTON.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 9d0726786e779f841bf4beced7aad7ff
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/FRIENDS.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -322,8 +317,8 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: bd6ce6ab3d4687c4f9405eb39c0cb9a7
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Button_NoAds.png
+  - m_GUID: c0f8489e4265d7b4dbaedb590e64bd97
+    m_Address: Assets/Sounds/hahaha.mp3
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -352,8 +347,18 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cc30eac345da8b4428ffcae3df47b646
+    m_Address: Assets/Sounds/BG_Sound.mp3
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cc41adc2cfb68974d9f13a3261bc9eb8
     m_Address: Assets/_Project/Art/Sprites/Images/BG_Buttons.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d3f80fb8bb7532f45807bf5ce9e9cb0f
+    m_Address: Assets/Sounds/good_luck.mp3
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -367,11 +372,6 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: dcbb0face2fa70940b7176af5df75eba
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/ONLINE.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e3f16efd01414dd4880e5a44aedaa336
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/ToggleTrack_Deck.png
     m_ReadOnly: 0
@@ -379,11 +379,6 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e407d3b376fa93845b37cca029ade3d4
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icon_Search.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: e42d8fe261e6e4a4a8d0c151a4582c83
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Play_Bots.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -402,18 +397,13 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: f3ff5f75faaafed488be519cd232373d
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Button_Settings.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: f7e730b6e39866a49870d267ed2d6466
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Play_Online.png
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: f8b53889693b1e948b37d93be813a3b5
     m_Address: Assets/_Project/Art/Sprites/Images/NEW/Voice_Icon.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fb16725d9f0faba4b9e99d3f43153117
+    m_Address: Assets/Sounds/dhanywaad.mp3
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

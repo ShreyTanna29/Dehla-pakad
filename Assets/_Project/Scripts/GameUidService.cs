@@ -17,7 +17,7 @@ using Firebase.Extensions;
 /// </summary>
 public static class GameUidService
 {
-    const string FirebaseDatabaseUrl = "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/";
+    const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
     const string PrefsGameUid = "PlayerGameUid";
     const int UidLength = 10;
     const int MaxAttempts = 8;

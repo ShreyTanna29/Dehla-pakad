@@ -126,6 +126,8 @@ public class InGameAddFriendController : MonoBehaviour
 
     public void Open()
     {
+        // Phase 9: not available vs bots / offline — nothing to befriend.
+        if (Photon.Pun.PhotonNetwork.OfflineMode) return;
         if (!_built) BuildPanel();
         if (_panelGroup == null) return;
 

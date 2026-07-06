@@ -68,6 +68,8 @@ public class FriendsDrawerController : MonoBehaviour
         if (arrowIcon != null) arrowIcon.DOLocalRotate(new Vector3(0, 0, 180), duration);
 
         isOpen = true;
+        // Phase 4: hide the trigger button while the drawer is open so it can't overlap the panel.
+        SetInviteButtonVisible(false);
         Debug.Log("[Drawer] Friendlist opened. Refreshing status...");
 
         if (!_openedFromGame)
@@ -92,6 +94,7 @@ public class FriendsDrawerController : MonoBehaviour
 
         if (!isOpen)
         {
+            SetInviteButtonVisible(true);
             HideInGameCloseUi();
             if (_openedFromGame)
                 RestoreToHomeHierarchy();
@@ -106,6 +109,8 @@ public class FriendsDrawerController : MonoBehaviour
         if (arrowIcon != null) arrowIcon.DOLocalRotate(new Vector3(0, 0, 0), duration);
 
         isOpen = false;
+        // Phase 4: bring the trigger button back when the drawer closes.
+        SetInviteButtonVisible(true);
         Debug.Log("[Drawer] Friendlist closed.");
 
         HideHomeDimOverlay();
@@ -118,6 +123,13 @@ public class FriendsDrawerController : MonoBehaviour
     {
         if (isOpen) return;
         OpenDrawerInternal();
+    }
+
+    /// <summary>Phase 4: show/hide the drawer's open (invite) trigger button, null-safe.</summary>
+    void SetInviteButtonVisible(bool visible)
+    {
+        if (inviteFriendsButton != null)
+            inviteFriendsButton.gameObject.SetActive(visible);
     }
 
     /// <summary>

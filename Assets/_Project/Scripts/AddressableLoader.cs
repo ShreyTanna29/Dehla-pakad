@@ -58,8 +58,31 @@ public class AddressableLoader : MonoBehaviour
             Addressables.Release(_loadHandle);
 
         _pendingAddress = addressName;
-        _loadHandle = Addressables.LoadAssetAsync<Sprite>(addressName);
-        _loadHandle.Completed += OnAssetLoaded;
+
+        // Guard: verify the key resolves to a location before loading. LoadAssetAsync with an
+        // unregistered/unbuilt key throws InvalidKeyException, so check locations first.
+        AsyncOperationHandle<System.Collections.Generic.IList<UnityEngine.ResourceManagement.ResourceLocations.IResourceLocation>> locHandle =
+            Addressables.LoadResourceLocationsAsync(addressName, typeof(Sprite));
+        locHandle.Completed += locOp =>
+        {
+            bool hasLocation = locOp.Status == AsyncOperationStatus.Succeeded &&
+                               locOp.Result != null && locOp.Result.Count > 0;
+            Addressables.Release(locOp);
+
+            if (!hasLocation)
+            {
+                Debug.LogWarning(
+                    $"[AddressableLoader] No Addressables location for '{addressName}' — skipping load " +
+                    "(asset missing or Addressables not built).", this);
+                return;
+            }
+
+            if (this == null || targetImage == null)
+                return;
+
+            _loadHandle = Addressables.LoadAssetAsync<Sprite>(addressName);
+            _loadHandle.Completed += OnAssetLoaded;
+        };
     }
 
     void OnAssetLoaded(AsyncOperationHandle<Sprite> handle)

@@ -67,6 +67,13 @@ public static class GameFlowState
     public static bool IsInActiveGame =>
         Current == GameFlowPhase.InGame || Current == GameFlowPhase.ResolvingTrick;
 
+    /// <summary>True while a match is actively in progress (cards being dealt or played).
+    /// Excludes InRoom so the seat lobby can still legitimately show before/between games.</summary>
+    public static bool IsActivelyPlaying =>
+        Current == GameFlowPhase.Dealing
+        || Current == GameFlowPhase.InGame
+        || Current == GameFlowPhase.ResolvingTrick;
+
     public static bool AllowsCardPlay =>
         Current == GameFlowPhase.InGame && !PlayerHand.IsTrickLocked && !PlayerHand.IsDealAnimationRunning;
 }

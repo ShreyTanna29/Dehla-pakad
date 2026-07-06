@@ -109,6 +109,8 @@ public class PlayerHand : MonoBehaviourPunCallbacks
     [Header("Table Center Trick Layout")]
     [SerializeField] float centerCardSpacing = 130f;
     [SerializeField] float centerCardYOffset = 30f;
+    [SerializeField] float centerCardMoveDuration = 0.15f;
+    [SerializeField] private float centerCardScale = 0.85f;
 
     [Header("AAA Dealing Animation")]
     [UnityEngine.Serialization.FormerlySerializedAs("flyingCardPrefab")]
@@ -491,11 +493,12 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         GameObject cardObj = Object.Instantiate(cardUIPrefab, center);
         cardObj.GetComponent<CardDisplay>()?.SetCardData(new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex });
         cardObj.transform.position = GetPlayerPositionForSeat(seat);
-        cardObj.transform.localScale = Vector3.one;
+        cardObj.transform.localScale = cardUIPrefab != null
+            ? cardUIPrefab.transform.localScale * centerCardScale
+            : Vector3.one * centerCardScale;
 
         Vector3 targetLocal = GetFinalPositionForSeat(seat);
-        cardObj.transform.DOScale(0.8f, 0.35f);
-        cardObj.transform.DOLocalMove(targetLocal, 0.35f).SetEase(Ease.InOutSine);
+        cardObj.transform.DOLocalMove(targetLocal, centerCardMoveDuration).SetEase(Ease.InOutSine);
         cardObj.transform.localRotation = Quaternion.identity;
 
         currentTrick.Add(new TrickCard { actorNumber = senderActorNum, suit = (CardSuit)suitIndex, rankValue = rankIndex, cardObject = cardObj });
@@ -1829,20 +1832,22 @@ private static bool _resultPanelShown = false;
             else
                 cardObj.transform.position = startPos;
 
-            cardRt.localScale = Vector3.one;
+            cardRt.localScale = cardUIPrefab != null
+                ? cardUIPrefab.transform.localScale * centerCardScale
+                : Vector3.one * centerCardScale;
             Vector3 targetLocal = GetFinalPositionForSeat(seat);
-            cardRt.DOScale(0.8f, 0.35f).SetUpdate(true);
-            cardRt.DOLocalMove(targetLocal, 0.35f).SetEase(Ease.OutBack).SetUpdate(true);
-            cardRt.DOLocalRotate(Vector3.zero, 0.35f).SetUpdate(true);
+            cardRt.DOLocalMove(targetLocal, centerCardMoveDuration).SetEase(Ease.InOutSine).SetUpdate(true);
+            cardRt.DOLocalRotate(Vector3.zero, centerCardMoveDuration).SetEase(Ease.InOutSine).SetUpdate(true);
         }
         else
         {
             cardObj.transform.position = startPos;
-            cardObj.transform.localScale = Vector3.one;
+            cardObj.transform.localScale = cardUIPrefab != null
+                ? cardUIPrefab.transform.localScale * centerCardScale
+                : Vector3.one * centerCardScale;
             Vector3 targetLocal = GetFinalPositionForSeat(seat);
-            cardObj.transform.DOScale(0.8f, 0.35f).SetUpdate(true);
-            cardObj.transform.DOLocalMove(targetLocal, 0.35f).SetEase(Ease.OutBack).SetUpdate(true);
-            cardObj.transform.DORotate(Vector3.zero, 0.35f).SetUpdate(true);
+            cardObj.transform.DOLocalMove(targetLocal, centerCardMoveDuration).SetEase(Ease.InOutSine).SetUpdate(true);
+            cardObj.transform.DORotate(Vector3.zero, centerCardMoveDuration).SetEase(Ease.InOutSine).SetUpdate(true);
         }
 
         currentTrick.Add(new TrickCard { actorNumber = senderActorNum, suit = playedCard.cardSuit, rankValue = rankIndex, cardObject = cardObj });
