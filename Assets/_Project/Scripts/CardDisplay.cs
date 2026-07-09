@@ -74,6 +74,18 @@ public class CardDisplay : MonoBehaviour
 
     Sprite _faceBackgroundSprite;
 
+    const float UnlockedVisualHeight = 260f;
+    const float LockedVisualHeight = 270f;
+
+    void ApplyVisualsHeight(bool isHidden)
+    {
+        if (cardBackgroundImage == null) return;
+
+        RectTransform visualsRt = cardBackgroundImage.rectTransform;
+        Vector2 size = visualsRt.sizeDelta;
+        visualsRt.sizeDelta = new Vector2(size.x, isHidden ? LockedVisualHeight : UnlockedVisualHeight);
+    }
+
     void CacheFaceBackgroundSprite()
     {
         if (_faceBackgroundSprite == null && cardBackgroundImage != null)
@@ -144,6 +156,7 @@ public class CardDisplay : MonoBehaviour
 
             if (cornerRankImage != null) cornerRankImage.gameObject.SetActive(false);
             if (centerSuitImage != null) centerSuitImage.gameObject.SetActive(false);
+            ApplyVisualsHeight(true);
         }
         else
         {
@@ -156,6 +169,7 @@ public class CardDisplay : MonoBehaviour
             if (cornerRankImage != null) cornerRankImage.gameObject.SetActive(true);
             if (centerSuitImage != null) centerSuitImage.gameObject.SetActive(true);
 
+            ApplyVisualsHeight(false);
             SetCardData(myCardData);
         }
     }
