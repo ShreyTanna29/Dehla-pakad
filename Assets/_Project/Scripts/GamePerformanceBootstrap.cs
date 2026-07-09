@@ -24,6 +24,8 @@ public static class GamePerformanceBootstrap
 
         DOTween.useSmoothDeltaTime = true;
         DOTween.SetTweensCapacity(400, 125);
+
+        AddressablesSpriteCache.EnsureInitialized();
     }
 
     public static bool IsMobile => Application.isMobilePlatform;

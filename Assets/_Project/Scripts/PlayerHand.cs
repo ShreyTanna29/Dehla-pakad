@@ -2172,6 +2172,15 @@ private static bool _resultPanelShown = false;
             for (int i = 0; i < cardsInBatch; i++)
             {
                 GameObject flyingCard = Object.Instantiate(dummyCardPrefab, dealParent);
+                CardDisplay flyingCardDisplay = flyingCard.GetComponent<CardDisplay>();
+                if (flyingCardDisplay != null)
+                    flyingCardDisplay.SetHiddenState(true);
+                else
+                {
+                    Image flyingImage = flyingCard.GetComponent<Image>();
+                    if (flyingImage != null && GameManager.Instance != null && GameManager.Instance.cardBackSprite != null)
+                        flyingImage.sprite = GameManager.Instance.cardBackSprite;
+                }
                 PlaceDealCardBehindOverlays(flyingCard.transform);
                 RectTransform cardRt = flyingCard.GetComponent<RectTransform>();
                 cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -2372,22 +2381,18 @@ private static bool _resultPanelShown = false;
             if (display != null)
             {
                 if (isThisCardHidden)
-                {
-                    if (display.centerSuitImage != null) display.centerSuitImage.gameObject.SetActive(false);
-                    if (display.cornerRankImage != null) display.cornerRankImage.gameObject.SetActive(false);
-                    if (display.cardBackgroundImage != null) display.cardBackgroundImage.color = Color.grey;
-                }
+                    display.SetHiddenState(true);
                 else if (isRevealedHiddenCard)
                 {
-                    if (display.centerSuitImage != null) display.centerSuitImage.gameObject.SetActive(true);
-                    if (display.cornerRankImage != null) display.cornerRankImage.gameObject.SetActive(true);
-                    if (display.cardBackgroundImage != null) display.cardBackgroundImage.color = new Color(1.0f, 0.95f, 0.82f, 1.0f); // Soft gold cream tint
+                    display.SetHiddenState(false);
+                    if (display.cardBackgroundImage != null)
+                        display.cardBackgroundImage.color = new Color(1.0f, 0.95f, 0.82f, 1.0f);
                 }
                 else
                 {
-                    if (display.centerSuitImage != null) display.centerSuitImage.gameObject.SetActive(true);
-                    if (display.cornerRankImage != null) display.cornerRankImage.gameObject.SetActive(true);
-                    if (display.cardBackgroundImage != null) display.cardBackgroundImage.color = Color.white;
+                    display.SetHiddenState(false);
+                    if (display.cardBackgroundImage != null)
+                        display.cardBackgroundImage.color = Color.white;
                 }
             }
 

@@ -17,8 +17,8 @@ public class LeaderboardScreenController : MonoBehaviour
     [Tooltip("When enabled, tab/toggle colors set in the Editor are not overwritten at runtime.")]
     [SerializeField] private bool preserveManualAppearance = true;
 
-    static readonly Color TabActive = Color.white;
-    static readonly Color TabInactive = new Color(1f, 1f, 1f, 0.5f);
+    static readonly Color TabActive = new Color(0xB0 / 255f, 0x45 / 255f, 0x1C / 255f, 1f);
+    static readonly Color TabInactive = new Color(0f, 0f, 0f, 100f / 255f);
     static readonly Color LabelActive = Color.white;
     static readonly Color LabelInactive = new Color(1f, 0.93f, 0.82f, 0.62f);
     static readonly Color ToggleActive = new Color(0.69f, 0.27f, 0.11f, 1f);
@@ -57,6 +57,7 @@ public class LeaderboardScreenController : MonoBehaviour
     {
         Resolve();
         Wire();
+        ApplyTabStyles();
         if (!preserveManualAppearance)
             Refresh();
     }
@@ -142,17 +143,23 @@ public class LeaderboardScreenController : MonoBehaviour
     void SetTab(string tab)
     {
         _tab = tab;
+        ApplyTabStyles();
         if (!preserveManualAppearance)
             Refresh();
     }
 
+    void ApplyTabStyles()
+    {
+        Style(_tWorldBg, _tWorldL, _tab == "World");
+        Style(_tCountryBg, _tCountryL, _tab == "Country");
+        Style(_tFriendsBg, _tFriendsL, _tab == "Friends");
+    }
+
     void Refresh()
     {
+        ApplyTabStyles();
         if (!preserveManualAppearance)
         {
-            Style(_tWorldBg, _tWorldL, _tab == "World");
-            Style(_tCountryBg, _tCountryL, _tab == "Country");
-            Style(_tFriendsBg, _tFriendsL, _tab == "Friends");
             StyleSeg(_botsBg, _botsL, _vsBots);
             StyleSeg(_onlineBg, _onlineL, !_vsBots);
             StyleSeg(_skillBg, _skillL, _bySkill);

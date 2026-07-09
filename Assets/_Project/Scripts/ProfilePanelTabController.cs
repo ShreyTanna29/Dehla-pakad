@@ -58,14 +58,15 @@ public class ProfilePanelTabController : MonoBehaviour
             bool active = t.id == id;
             if (t.screen != null) t.screen.SetActive(active);
 
-            // Only switch which screen is visible — images and text colors stay as authored in the scene.
-            if (preserveManualNavAppearance)
-                continue;
-
             if (t.label != null)
                 t.label.color = active
-                    ? new Color(0.984f, 0.937f, 0.851f, 1f)
+                    ? Color.white
                     : new Color(0.227f, 0.141f, 0.071f, 1f);
+
+            // Keep the authored button/background look when requested, but still enforce the
+            // selected-tab label color so every active tab matches the intended white state.
+            if (preserveManualNavAppearance)
+                continue;
         }
     }
 }

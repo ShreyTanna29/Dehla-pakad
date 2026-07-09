@@ -9,7 +9,7 @@ public class BGAudioManager : MonoBehaviour
     public static BGAudioManager Instance { get; private set; }
 
     public AudioSource bgAudioSource;
-    public float fadeDuration = 1.2f;
+    public float fadeDuration = 0.35f;
 
     float _maxVolume = 1f;
     bool _pausedForGameplay;
@@ -36,7 +36,8 @@ public class BGAudioManager : MonoBehaviour
     void Start()
     {
         if (bgAudioSource == null) return;
-        _maxVolume = bgAudioSource.volume;
+        if (bgAudioSource.volume > 0.01f)
+            _maxVolume = bgAudioSource.volume;
     }
 
     void OnDestroy()
@@ -46,7 +47,9 @@ public class BGAudioManager : MonoBehaviour
     }
 
     /// <summary>Home or Modes panel became visible — play / resume from paused position.</summary>
-    public void OnMenuScreenShown()
+    public void OnMenuScreenShown() => FadeInMenuMusic();
+
+    public void FadeInMenuMusic(float duration = -1f)
     {
         if (bgAudioSource == null) return;
 
@@ -58,6 +61,8 @@ public class BGAudioManager : MonoBehaviour
             return;
         }
 
+        Debug.Log("[Audio] Menu music fade in");
+
         bgAudioSource.UnPause();
         if (!bgAudioSource.isPlaying)
             bgAudioSource.Play();
@@ -68,25 +73,24 @@ public class BGAudioManager : MonoBehaviour
             return;
         }
 
-        RestartFade(FadeInCoroutine());
+        RestartFade(FadeInCoroutine(duration > 0f ? duration : fadeDuration));
     }
 
     /// <summary>Player left menu flow (Start clicked or game table shown) — fade out and pause.</summary>
-    public void OnGameplayStarting()
+    public void OnGameplayStarting() => FadeOutMenuMusic();
+
+    public void FadeOutMenuMusic(float duration = -1f)
     {
         if (bgAudioSource == null) return;
         if (_pausedForGameplay && !bgAudioSource.isPlaying && bgAudioSource.volume <= 0.01f)
             return;
 
         _pausedForGameplay = true;
-        FadeOutAndPause();
+        Debug.Log("[Audio] Menu music fade out");
+        RestartFade(FadeOutCoroutine(duration > 0f ? duration : fadeDuration));
     }
 
-    public void FadeOutAndPause()
-    {
-        if (bgAudioSource == null) return;
-        RestartFade(FadeOutCoroutine());
-    }
+    public void FadeOutAndPause() => FadeOutMenuMusic();
 
     public void ResumeAndFadeIn() => OnMenuScreenShown();
 
@@ -97,7 +101,7 @@ public class BGAudioManager : MonoBehaviour
         _fadeRoutine = StartCoroutine(routine);
     }
 
-    IEnumerator FadeOutCoroutine()
+    IEnumerator FadeOutCoroutine(float duration)
     {
         float startVol = bgAudioSource.volume;
         if (startVol <= 0f)
@@ -107,28 +111,31 @@ public class BGAudioManager : MonoBehaviour
             yield break;
         }
 
-        while (bgAudioSource.volume > 0f)
+        float elapsed = 0f;
+        while (elapsed < duration)
         {
-            bgAudioSource.volume -= startVol * (Time.unscaledDeltaTime / fadeDuration);
-            if (bgAudioSource.volume < 0f)
-                bgAudioSource.volume = 0f;
+            elapsed += Time.unscaledDeltaTime;
+            bgAudioSource.volume = Mathf.Lerp(startVol, 0f, elapsed / duration);
             yield return null;
         }
 
+        bgAudioSource.volume = 0f;
         bgAudioSource.Pause();
         _fadeRoutine = null;
     }
 
-    IEnumerator FadeInCoroutine()
+    IEnumerator FadeInCoroutine(float duration)
     {
-        while (bgAudioSource.volume < _maxVolume)
+        float startVol = bgAudioSource.volume;
+        float elapsed = 0f;
+        while (elapsed < duration)
         {
-            bgAudioSource.volume += _maxVolume * (Time.unscaledDeltaTime / fadeDuration);
-            if (bgAudioSource.volume > _maxVolume)
-                bgAudioSource.volume = _maxVolume;
+            elapsed += Time.unscaledDeltaTime;
+            bgAudioSource.volume = Mathf.Lerp(startVol, _maxVolume, elapsed / duration);
             yield return null;
         }
 
+        bgAudioSource.volume = _maxVolume;
         _fadeRoutine = null;
     }
 }

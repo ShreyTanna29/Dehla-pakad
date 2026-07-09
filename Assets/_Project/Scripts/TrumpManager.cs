@@ -118,6 +118,13 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         return CardSuit.Spades;
     }
 
+    static Color GetSuitDisplayColor(CardSuit suit)
+    {
+        return suit == CardSuit.Hearts || suit == CardSuit.Diamonds
+            ? Color.red
+            : Color.black;
+    }
+
     public void RefreshFromRoomProperties(bool showPopupIfChanged)
     {
         CardSuit oldSuit = currentTrumpSuit;
@@ -281,6 +288,22 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         }
     }
 
+    public void ShowHiddenTrump()
+    {
+        if (trumpIcon == null) return;
+
+        Sprite backSprite = hiddenTrumpSprite;
+        if (backSprite == null && GameManager.Instance != null)
+            backSprite = GameManager.Instance.cardBackSprite;
+
+        if (backSprite != null)
+        {
+            trumpIcon.sprite = backSprite;
+            trumpIcon.color = Color.white;
+            trumpIcon.enabled = true;
+        }
+    }
+
     public void UpdateTrumpUI(CardSuit newTrump)
     {
         EnsureTrumpDisplayVisible();
@@ -290,15 +313,28 @@ public class TrumpManager : MonoBehaviourPunCallbacks
 
         if (trumpIcon != null)
         {
-            Sprite sprite = GetSpriteForTrump(displaySuit, displayHidden);
-            if (sprite != null)
+            if (displayHidden)
             {
-                trumpIcon.sprite = sprite;
-                trumpIcon.color = displayHidden ? new Color(0.85f, 0.85f, 0.85f, 1f) : Color.white;
-                trumpIcon.enabled = true;
+                Sprite sprite = GetSpriteForTrump(displaySuit, false);
+                if (sprite != null)
+                {
+                    trumpIcon.sprite = sprite;
+                    trumpIcon.color = new Color(0.85f, 0.85f, 0.85f, 1f);
+                    trumpIcon.enabled = true;
+                }
             }
             else
-                Debug.LogWarning($"[Trump] No sprite for {displaySuit} (displayHidden={displayHidden}). Assign suit sprites on TrumpManager.");
+            {
+                Sprite sprite = GetSpriteForTrump(displaySuit, false);
+                if (sprite != null)
+                {
+                    trumpIcon.sprite = sprite;
+                    trumpIcon.color = GetSuitDisplayColor(displaySuit);
+                    trumpIcon.enabled = true;
+                }
+                else
+                    Debug.LogWarning($"[Trump] No sprite for {displaySuit}. Assign suit sprites on TrumpManager.");
+            }
         }
         else
         {
@@ -424,7 +460,11 @@ $"[TrumpUI] Current Trump: {displaySuit} (gameplay revealed={isTrumpRevealed})\n
     Sprite GetSpriteForTrump(CardSuit suit, bool displayHidden)
     {
         if (displayHidden)
+        {
+            if (GameManager.Instance != null && GameManager.Instance.cardBackSprite != null)
+                return GameManager.Instance.cardBackSprite;
             return hiddenTrumpSprite != null ? hiddenTrumpSprite : spadeSprite;
+        }
 
         switch (suit)
         {

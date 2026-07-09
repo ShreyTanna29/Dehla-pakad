@@ -72,8 +72,26 @@ public class CardDisplay : MonoBehaviour
     public Sprite[] suitSprites; 
     public Sprite[] rankSprites; 
 
+    Sprite _faceBackgroundSprite;
+
+    void CacheFaceBackgroundSprite()
+    {
+        if (_faceBackgroundSprite == null && cardBackgroundImage != null)
+            _faceBackgroundSprite = cardBackgroundImage.sprite;
+    }
+
+    static Sprite ResolveHiddenBackSprite()
+    {
+        if (TrumpManager.Instance != null && TrumpManager.Instance.hiddenTrumpSprite != null)
+            return TrumpManager.Instance.hiddenTrumpSprite;
+        if (GameManager.Instance != null && GameManager.Instance.cardBackSprite != null)
+            return GameManager.Instance.cardBackSprite;
+        return null;
+    }
+
     public void SetCardData(CardData newData)
     {
+        CacheFaceBackgroundSprite();
         myCardData = newData;
         gameObject.name = myCardData.cardRank + " of " + myCardData.cardSuit;
 
@@ -108,6 +126,37 @@ public class CardDisplay : MonoBehaviour
                 cornerRankImage.color = Color.black; 
                 centerSuitImage.color = Color.black;
             }
+        }
+    }
+
+    public void SetHiddenState(bool isHidden)
+    {
+        CacheFaceBackgroundSprite();
+
+        if (isHidden)
+        {
+            Sprite backSprite = ResolveHiddenBackSprite();
+            if (backSprite != null && cardBackgroundImage != null)
+            {
+                cardBackgroundImage.sprite = backSprite;
+                cardBackgroundImage.color = Color.white;
+            }
+
+            if (cornerRankImage != null) cornerRankImage.gameObject.SetActive(false);
+            if (centerSuitImage != null) centerSuitImage.gameObject.SetActive(false);
+        }
+        else
+        {
+            if (cardBackgroundImage != null && _faceBackgroundSprite != null)
+            {
+                cardBackgroundImage.sprite = _faceBackgroundSprite;
+                cardBackgroundImage.color = Color.white;
+            }
+
+            if (cornerRankImage != null) cornerRankImage.gameObject.SetActive(true);
+            if (centerSuitImage != null) centerSuitImage.gameObject.SetActive(true);
+
+            SetCardData(myCardData);
         }
     }
 }

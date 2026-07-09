@@ -8,6 +8,9 @@ using UnityEngine;
 [RequireComponent(typeof(RectTransform))]
 public class SafeAreaFitter : MonoBehaviour
 {
+    [Tooltip("When enabled, keeps the RectTransform anchors/offsets exactly as set in the Editor.")]
+    [SerializeField] private bool preserveManualAnchors;
+
     RectTransform _rt;
     Rect _lastSafe;
     Vector2Int _lastScreen;
@@ -17,12 +20,14 @@ public class SafeAreaFitter : MonoBehaviour
 
     void Update()
     {
+        if (preserveManualAnchors) return;
         if (Screen.safeArea != _lastSafe || Screen.width != _lastScreen.x || Screen.height != _lastScreen.y)
             Apply();
     }
 
     void Apply()
     {
+        if (preserveManualAnchors) return;
         if (_rt == null) _rt = GetComponent<RectTransform>();
         if (Screen.width <= 0 || Screen.height <= 0) return;
 

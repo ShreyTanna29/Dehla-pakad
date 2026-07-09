@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.Purchasing;
 
 /// <summary>
@@ -38,6 +39,9 @@ public class ShopIAPManager : MonoBehaviour, IDetailedStoreListener
     private IStoreController _controller;
     private IExtensionProvider _extensions;
 
+    [Header("UI")]
+    [SerializeField] private GameObject buyCoinsPanel;
+
     /// <summary>Raised after a successful purchase, with the product id and granted coin amount.</summary>
     public event Action<string, int> OnPurchaseSucceeded;
     /// <summary>Raised when a purchase fails, with the product id and a human-readable reason.</summary>
@@ -63,6 +67,56 @@ public class ShopIAPManager : MonoBehaviour, IDetailedStoreListener
     {
         if (!IsInitialized)
             InitializePurchasing();
+
+        WireBuyCoinsCloseButton();
+    }
+
+    public void CloseBuyCoinsPanel()
+    {
+        EnsureBuyCoinsPanel();
+        if (buyCoinsPanel != null)
+            buyCoinsPanel.SetActive(false);
+    }
+
+    void EnsureBuyCoinsPanel()
+    {
+        if (buyCoinsPanel != null)
+            return;
+
+        GameObject found = GameObject.Find("Panel_BuyCoins");
+        if (found != null)
+        {
+            buyCoinsPanel = found;
+            return;
+        }
+
+        // Panel starts inactive, so GameObject.Find misses it — search loaded scene objects.
+        foreach (GameObject go in Resources.FindObjectsOfTypeAll<GameObject>())
+        {
+            if (go.name != "Panel_BuyCoins" || !go.scene.isLoaded)
+                continue;
+            buyCoinsPanel = go;
+            return;
+        }
+    }
+
+    void WireBuyCoinsCloseButton()
+    {
+        EnsureBuyCoinsPanel();
+
+        if (buyCoinsPanel == null)
+            return;
+
+        Transform close = buyCoinsPanel.transform.Find("Window/Btn_Close");
+        if (close == null)
+            return;
+
+        Button btn = close.GetComponent<Button>();
+        if (btn == null)
+            return;
+
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(CloseBuyCoinsPanel);
     }
 
     private void OnDestroy()

@@ -55,8 +55,8 @@ public class FriendsPanelUIController : MonoBehaviour
     // Reference mockup colors
     static readonly Color GreenBtn = Hex("#1ab26a");
     static readonly Color RedBtn = Hex("#df0007");
-    static readonly Color ActiveTabTint = Color.white;
-    static readonly Color InactiveTabTint = new Color(0.55f, 0.55f, 0.55f, 1f);
+    static readonly Color ActiveTabTint = Hex("#7A7020");
+    static readonly Color InactiveTabTint = Hex("#B8A40F");
     static readonly Color DividerColor = new Color(0f, 0f, 0f, 0.28f);
     static readonly Color HighlightLineColor = new Color(1f, 1f, 1f, 0.10f);
 

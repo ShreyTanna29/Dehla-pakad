@@ -3,11 +3,14 @@ using Photon.Pun;
 using UnityEngine;
 
 /// <summary>
-/// Central round-flow coordinator. Ensures the leaderboard fully finishes before the next deal begins.
+/// Central round-flow coordinator. Leaderboard shows while next-round dealing runs in the background.
 /// </summary>
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
+
+    [Header("Global Card Assets")]
+    public Sprite cardBackSprite;
 
     [Header("Round-End Sequence")]
     [Tooltip("Root of the inter-round leaderboard panel (e.g. Panel_Winning).")]
@@ -24,7 +27,7 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Starts the strict leaderboard-then-deal sequence for the next round.
+    /// Starts inter-round flow: dealing begins immediately while leaderboard stays visible.
     /// Only the authoritative (master / offline) client triggers the networked deal RPC.
     /// </summary>
     public void BeginRoundEndSequence(bool authoritative)
@@ -36,25 +39,23 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Blocks dealing until the leaderboard has been visible for the full display window.
+    /// Deals next-round cards immediately behind the leaderboard, then auto-hides after display window.
+    /// Player can also close the leaderboard anytime via Close button.
     /// </summary>
     public IEnumerator HandleRoundEndSequence(bool authoritative)
     {
         ResolveLeaderboardPanel();
 
-        // Leaderboard is already shown by ResultManager.ShowRoundLeaderboard — do not re-open here.
+        // Cards peeche turant distribute — leaderboard wait ki zaroorat nahi.
+        if (authoritative)
+            DealCardsHorizontally();
 
-        // Task 13: the inter-round leaderboard must stay visible for a full 5 seconds. Use a hard
-        // fallback if the serialized field was accidentally left at 0/negative, and use REALTIME so
-        // the window is unaffected by any Time.timeScale changes (pauses) elsewhere.
         float displaySeconds = leaderboardDisplaySeconds > 0f ? leaderboardDisplaySeconds : 5f;
         yield return new WaitForSecondsRealtime(displaySeconds);
 
-        if (leaderboardPanel != null)
+        // Agar player ne pehle hi X se band kar diya to panel already inactive hoga.
+        if (leaderboardPanel != null && leaderboardPanel.activeSelf)
             leaderboardPanel.SetActive(false);
-
-        if (authoritative)
-            DealCardsHorizontally();
 
         if (ResultManager.Instance != null)
             ResultManager.Instance.NotifyRoundEndSequenceComplete();

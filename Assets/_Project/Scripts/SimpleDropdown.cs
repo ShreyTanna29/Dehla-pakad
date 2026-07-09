@@ -19,6 +19,8 @@ public class SimpleDropdown : MonoBehaviour
     public GameObject blocker;
     public List<Button> optionButtons = new List<Button>();
     public List<string> optionValues = new List<string>();
+    [Tooltip("When enabled, the authored scene hierarchy order is preserved and the dropdown does not move its objects to the last sibling at runtime.")]
+    public bool preserveAuthoredHierarchy = false;
 
     public int Current { get; private set; }
 
@@ -71,12 +73,12 @@ public class SimpleDropdown : MonoBehaviour
         if (blocker != null)
         {
             blocker.SetActive(open);
-            if (open) blocker.transform.SetAsLastSibling();
+            if (open && !preserveAuthoredHierarchy) blocker.transform.SetAsLastSibling();
         }
         if (optionsPanel != null)
         {
             optionsPanel.gameObject.SetActive(open);
-            if (open) optionsPanel.SetAsLastSibling();
+            if (open && !preserveAuthoredHierarchy) optionsPanel.SetAsLastSibling();
         }
     }
 

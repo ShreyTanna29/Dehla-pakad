@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Photon.Pun;
 using Photon.Realtime;
 using System.Collections.Generic;
+using DG.Tweening;
 
 /// <summary>
 /// Handles Google Sign-In and Firebase Authentication.
@@ -74,7 +75,6 @@ public class GoogleLogin : MonoBehaviour
 
         if (NetworkManager.Instance != null)
         {
-            NetworkManager.Instance.FadeOutStartupCover(1.0f);
             NetworkManager.Instance.HideHomeUntilLogin();
             // TASK 3 — clear any lingering loading overlay so a failed/cancelled login (or a logout)
             // never leaves the user stuck on a loading screen when we return to the login panel.
@@ -84,14 +84,46 @@ public class GoogleLogin : MonoBehaviour
         if (homePanel != null)
             homePanel.SetActive(false);
 
-        if (loginPanel != null)
-        {
-            loginPanel.SetActive(true);
-            loginPanel.transform.SetAsLastSibling();
-        }
+        ShowLoginPanelUI();
 
         if (PlayerProfileManager.Instance != null)
             PlayerProfileManager.Instance.HideUntilLoginComplete();
+    }
+
+    /// <summary>
+    /// Login panel ko smoothly (fade-in) dikhata hai. Agar Firebase mein user pehle se
+    /// logged-in hai (auto-login), to login panel bilkul aane nahi deta — flash se bachne ke liye.
+    /// </summary>
+    public void ShowLoginPanelUI()
+    {
+        // BUG FIX 1: Auto-login active hai to login panel ko aage mat aane do.
+        if (Firebase.Auth.FirebaseAuth.DefaultInstance != null &&
+            Firebase.Auth.FirebaseAuth.DefaultInstance.CurrentUser != null)
+        {
+            Debug.Log("[Login UI] Auto-login active, preventing flash.");
+            return;
+        }
+
+        if (loginPanel == null) return;
+
+        bool wasHidden = !loginPanel.activeSelf;
+        loginPanel.SetActive(true);
+        loginPanel.transform.SetAsLastSibling();
+
+        CanvasGroup cg = loginPanel.GetComponent<CanvasGroup>();
+        if (cg == null) cg = loginPanel.AddComponent<CanvasGroup>();
+
+        // BUG FIX 2: Purani atki hui animation kill karo taaki jhatka na lage.
+        cg.DOKill();
+        cg.interactable = true;
+        cg.blocksRaycasts = true;
+
+        // Sirf tab fade-in karo jab panel pehle hidden tha (dubara call par jhatka na ho).
+        if (wasHidden || cg.alpha < 0.99f)
+        {
+            cg.alpha = 0f;
+            cg.DOFade(1f, 0.4f).SetUpdate(true);
+        }
     }
 
     void ClearDisplayedProfileName()
@@ -850,14 +882,17 @@ public class GoogleLogin : MonoBehaviour
             PhotonReadyMaxWait,
             null);
 
-        EndLoginLoading();
         openHomePanels?.Invoke();
+        yield return null;
+        EndLoginLoading();
     }
 
     IEnumerator OpenHomeAfterLoginReadySimpleRoutine(float minWaitSeconds, System.Action openHomePanels)
     {
         yield return new WaitForSecondsRealtime(minWaitSeconds);
         openHomePanels?.Invoke();
+        yield return null;
+        EndLoginLoading();
     }
 
     IEnumerator BeginHomeWhenReadyRoutine(float minWaitSeconds)
@@ -873,11 +908,10 @@ public class GoogleLogin : MonoBehaviour
     private void TransitionToHome()
     {
         NotifyLoginFlowComplete();
+        ShowHomePanel();
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.EndLoginTransitionLoading();
-
-        ShowHomePanel();
 
         if (PlayerProfileSync.Instance != null)
             PlayerProfileSync.Instance.UpdateAllNames();

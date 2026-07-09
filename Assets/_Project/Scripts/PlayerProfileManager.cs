@@ -889,45 +889,27 @@ public class PlayerProfileManager : MonoBehaviour
         GoogleLogin.NotifyLoginFlowComplete();
         UpdateProfileUI();
 
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.EndLoginTransitionLoading();
+        if (GoogleLogin.Instance != null && GoogleLogin.Instance.loginPanel != null)
+            GoogleLogin.Instance.loginPanel.SetActive(false);
 
-        GameObject home = ResolveHomePanel();
-        if (home != null)
-        {
-            home.SetActive(true);
-            UnityEngine.CanvasGroup homeCG = home.GetComponent<UnityEngine.CanvasGroup>();
-            if (homeCG == null) homeCG = home.AddComponent<UnityEngine.CanvasGroup>();
-            homeCG.alpha = 0f;
-            homeCG.DOFade(1f, 0.4f);
-        }
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.UpdateUIState(true);
 
         if (panelProfileSetup != null)
         {
             UnityEngine.CanvasGroup setupCG = panelProfileSetup.GetComponent<UnityEngine.CanvasGroup>();
             if (setupCG != null)
             {
-                setupCG.DOFade(0f, 0.4f).OnComplete(() =>
-                {
-                    panelProfileSetup.SetActive(false);
-                    if (NetworkManager.Instance != null)
-                        NetworkManager.Instance.UpdateUIState(true);
-                });
+                setupCG.DOFade(0f, 0.4f).OnComplete(() => panelProfileSetup.SetActive(false));
             }
             else
             {
                 panelProfileSetup.SetActive(false);
-                if (NetworkManager.Instance != null)
-                    NetworkManager.Instance.UpdateUIState(true);
             }
         }
-        else if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.UpdateUIState(true);
-        }
 
-        if (GoogleLogin.Instance != null && GoogleLogin.Instance.loginPanel != null)
-            GoogleLogin.Instance.loginPanel.SetActive(false);
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.EndLoginTransitionLoading();
 
         WireHomeProfileAvatarClick();
 

@@ -36,6 +36,8 @@ public class InGameAddFriendController : MonoBehaviour
     static readonly Color WoodTint = Color.white;
     static readonly Color PanelFallbackBg = new Color(0.25f, 0.15f, 0.05f, 0.98f);
     static readonly Color BrownBox = new Color(0.35f, 0.22f, 0.12f, 1f);
+    static readonly Color CloseButtonBg = new Color(80f / 255f, 52f / 255f, 28f / 255f, 1f); // #50341C
+    static readonly Color ContentTextColor = Color.black;
     static readonly Color GreenBtn = new Color(0.30f, 0.62f, 0.22f, 1f);
     static readonly Color SentBtn = new Color(0.45f, 0.45f, 0.45f, 1f);
 
@@ -69,6 +71,25 @@ public class InGameAddFriendController : MonoBehaviour
             openButton.onClick.RemoveListener(Open);
             openButton.onClick.AddListener(Open);
         }
+
+        RefreshOpenButtonVisibility();
+    }
+
+    public void RefreshOpenButtonVisibility()
+    {
+        if (openButton == null) return;
+        openButton.gameObject.SetActive(!ShouldHideOpenButton());
+    }
+
+    static bool ShouldHideOpenButton()
+    {
+        if (NetworkManager.Instance != null && NetworkManager.Instance.isPlayBotsMode)
+            return true;
+        if (PhotonNetwork.OfflineMode)
+            return true;
+        if (GameSettings.Instance != null && GameSettings.Instance.currentMatchType == MatchType.OfflineBots)
+            return true;
+        return false;
     }
 
     void Start()
@@ -131,6 +152,7 @@ public class InGameAddFriendController : MonoBehaviour
         if (!_built) BuildPanel();
         if (_panelGroup == null) return;
 
+        ApplyAuthoredPanelStyles();
         PopulateRows();
 
         if (PlayWithFriendsManager.Instance != null)
@@ -179,6 +201,29 @@ public class InGameAddFriendController : MonoBehaviour
     // ============================================================
     // PANEL CONSTRUCTION
     // ============================================================
+    void ApplyAuthoredPanelStyles()
+    {
+        Transform frame = _mainFrame;
+        if (frame == null && panelRoot != null)
+            frame = panelRoot.transform.Find("MainFrame");
+        if (frame == null) return;
+
+        Transform closeT = frame.Find("CloseButton");
+        if (closeT != null)
+        {
+            Image closeImg = closeT.GetComponent<Image>();
+            if (closeImg != null) closeImg.color = CloseButtonBg;
+        }
+
+        Transform titleT = frame.Find("Title");
+        if (titleT != null)
+        {
+            TMP_Text titleTmp = titleT.GetComponent<TMP_Text>();
+            if (titleTmp == null) titleTmp = titleT.GetComponentInChildren<TMP_Text>(true);
+            if (titleTmp != null) titleTmp.color = ContentTextColor;
+        }
+    }
+
     void BuildPanel()
     {
         if (_canvas == null)
@@ -224,7 +269,7 @@ public class InGameAddFriendController : MonoBehaviour
         titleRt.pivot = new Vector2(0.5f, 1f);
         titleRt.sizeDelta = new Vector2(600, 90);
         titleRt.anchoredPosition = new Vector2(0, -40);
-        AddTmp(title.transform, "ADD FRIEND", Color.white, 52, TextAlignmentOptions.Center, FontStyles.Bold);
+        AddTmp(title.transform, "ADD FRIEND", ContentTextColor, 52, TextAlignmentOptions.Center, FontStyles.Bold);
 
         // Title underline
         GameObject underline = NewRect("Underline", frame.transform);
@@ -243,7 +288,7 @@ public class InGameAddFriendController : MonoBehaviour
         closeRt.sizeDelta = new Vector2(72, 72);
         closeRt.anchoredPosition = new Vector2(-25, -25);
         Image closeImg = closeGo.AddComponent<Image>();
-        closeImg.color = BrownBox;
+        closeImg.color = CloseButtonBg;
         // Task 20: keep the close button ROUNDED — use the circular frame if available, otherwise
         // fall back to Unity's built-in rounded (9-sliced) UISprite so it stays rounded in builds too.
         if (circleFrameSprite != null)
@@ -397,7 +442,7 @@ public class InGameAddFriendController : MonoBehaviour
         {
             GameObject empty = NewRect("EmptyRow", _rowsContent);
             empty.AddComponent<LayoutElement>().preferredHeight = 120;
-            AddTmp(empty.transform, "No players to add right now.", new Color(1, 1, 1, 0.7f), 26, TextAlignmentOptions.Center, FontStyles.Italic);
+            AddTmp(empty.transform, "No players to add right now.", ContentTextColor, 26, TextAlignmentOptions.Center, FontStyles.Italic);
             _rows.Add(empty);
         }
     }
@@ -409,7 +454,7 @@ public class InGameAddFriendController : MonoBehaviour
         LayoutElement le = header.AddComponent<LayoutElement>();
         le.preferredHeight = 44;
         le.preferredWidth = 700;
-        var txt = AddTmp(header.transform, text, new Color(1f, 0.86f, 0.45f, 1f), 26, TextAlignmentOptions.Left, FontStyles.Bold);
+        var txt = AddTmp(header.transform, text, ContentTextColor, 26, TextAlignmentOptions.Left, FontStyles.Bold);
         var rt = txt.rectTransform;
         rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
         rt.offsetMin = new Vector2(18, 0); rt.offsetMax = new Vector2(-18, 0);
@@ -435,7 +480,7 @@ public class InGameAddFriendController : MonoBehaviour
         nbRt.sizeDelta = new Vector2(330, 76);
         nbRt.anchoredPosition = new Vector2(20, 0);
         string displayName = string.IsNullOrEmpty(fromName) ? "Player" : fromName;
-        var nameTxt = AddTmp(nameBox.transform, displayName, Color.white, 30, TextAlignmentOptions.Left, FontStyles.Bold);
+        var nameTxt = AddTmp(nameBox.transform, displayName, ContentTextColor, 30, TextAlignmentOptions.Left, FontStyles.Bold);
         var nameRt = nameTxt.rectTransform;
         nameRt.anchorMin = Vector2.zero; nameRt.anchorMax = Vector2.one;
         nameRt.offsetMin = new Vector2(10, 0); nameRt.offsetMax = new Vector2(-10, 0);
@@ -506,8 +551,8 @@ public class InGameAddFriendController : MonoBehaviour
         nbRt.sizeDelta = new Vector2(380, 76);
         nbRt.anchoredPosition = new Vector2(20, 0);
         string status = online ? "Online" : "Offline";
-        var nameTxt = AddTmp(nameBox.transform, $"{displayName}\n<size=22><color=#C8E6C9>{status}</color></size>",
-            Color.white, 28, TextAlignmentOptions.Left, FontStyles.Bold);
+        var nameTxt = AddTmp(nameBox.transform, $"{displayName}\n{status}",
+            ContentTextColor, 28, TextAlignmentOptions.Left, FontStyles.Bold);
         var nameRt = nameTxt.rectTransform;
         nameRt.anchorMin = Vector2.zero; nameRt.anchorMax = Vector2.one;
         nameRt.offsetMin = new Vector2(10, 0); nameRt.offsetMax = new Vector2(-10, 0);
@@ -603,7 +648,7 @@ public class InGameAddFriendController : MonoBehaviour
         nbImg.color = BrownBox;
         if (woodBoardSprite != null) { nbImg.sprite = woodBoardSprite; nbImg.type = Image.Type.Sliced; }
 string displayName = string.IsNullOrEmpty(player.NickName) ? ("Player " + player.ActorNumber) : player.NickName;
-        var nameTxt = AddTmp(nameBox.transform, displayName, Color.white, 30, TextAlignmentOptions.Center, FontStyles.Bold);
+        var nameTxt = AddTmp(nameBox.transform, displayName, ContentTextColor, 30, TextAlignmentOptions.Center, FontStyles.Bold);
         var nameRt = nameTxt.rectTransform;
         nameRt.anchorMin = Vector2.zero; nameRt.anchorMax = Vector2.one;
         nameRt.offsetMin = new Vector2(15, 0); nameRt.offsetMax = new Vector2(-15, 0);

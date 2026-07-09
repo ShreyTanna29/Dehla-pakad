@@ -786,9 +786,9 @@ PlayerSettings:
     Build: 0
     Game Performance: 0
     Legacy Analytics: 0
-    Purchasing: 0
+    Purchasing: 1
     UDP: 0
-    Unity Ads: 0
+    Unity Ads: 1
   luminIcon:
     m_Name: 
     m_ModelFolderPath: 
@@ -810,11 +810,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 1
   windowsGamepadBackendHint: 0
-  cloudProjectId: 8931a12e-b9ff-4808-bccb-c4d66efb8fca
+  cloudProjectId: 7a5185bc-cd23-43d2-9d63-96c2202e0d42
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: 'Dehla Pakad : Mindi Kot'
-  organizationId: shreytanna15
+  projectName: Dehla Pakad
+  organizationId: inishantsaharan
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}

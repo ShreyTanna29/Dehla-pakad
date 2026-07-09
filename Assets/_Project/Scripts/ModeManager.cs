@@ -46,6 +46,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public SlidingModeToggle deckToggle;
     public SlidingModeToggle handsToggle;
 
+    [Header("UI Layout Fixes")]
+    public UnityEngine.UI.VerticalLayoutGroup leftColumnLayoutGroup;
+    public UnityEngine.UI.VerticalLayoutGroup middleColumnLayoutGroup;
+
     private bool findMatchAfterLobby = false;
     private bool _pendingMatchmakingAfterLeave;
     private bool isFriendsMatchMode = false;
@@ -69,6 +73,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
             _connectionBufferRoutine = null;
         }
     }
+
+    public bool IsFriendsConnectionBufferActive() => _connectionBufferRoutine != null;
 
     public void ScheduleMatchmakingAfterLobby()
     {
@@ -289,12 +295,20 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public void OnClick_PlayBots_Home()
     {
         Debug.Log("[UI] Button Clicked: Play With Bots");
-        PrepareForNewModeFromMenu();
+
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.PrepareForBotModeFromMenu();
+        else
+            PrepareForNewModeFromMenu();
 
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.isPlayBotsMode = true;
         if (GameSettings.Instance != null)
             GameSettings.Instance.currentMatchType = MatchType.OfflineBots;
+
+        // Layout ko normal rakhne ke liye (Force Expand OFF)
+        if (leftColumnLayoutGroup != null) leftColumnLayoutGroup.childForceExpandWidth = false;
+        if (middleColumnLayoutGroup != null) middleColumnLayoutGroup.childForceExpandWidth = false;
 
         OpenModePanelInternal();
     }
@@ -317,6 +331,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         isFriendsMatchMode = false;
 
+        // Layout ko normal rakhne ke liye (Force Expand OFF)
+        if (leftColumnLayoutGroup != null) leftColumnLayoutGroup.childForceExpandWidth = false;
+        if (middleColumnLayoutGroup != null) middleColumnLayoutGroup.childForceExpandWidth = false;
+
         ForceHideHomeUi();
         OpenModePanelInternal(false);
     }
@@ -326,7 +344,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
         ResetStartGuard();
 
         if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.BumpFlowToken("ModeSelection switch");
             NetworkManager.Instance.ResetGameStartGuards();
+        }
 
         if (MatchmakingManager.Instance != null)
             MatchmakingManager.Instance.ResetMatchmakingState(cancelledByUser: false);
@@ -639,7 +660,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         if (NetworkManager.Instance != null)
         {
-            NetworkManager.Instance.HideLoading();
+            if (!NetworkManager.Instance.IsProtectedLoadingActive())
+                NetworkManager.Instance.HideLoading();
             NetworkManager.Instance.EnsurePersistentBackdrop();
         }
 
@@ -681,7 +703,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
             PlayWithFriendsManager.Instance.CancelPinJoinUiState();
         }
 
-        HideAllMainPanelsAndOverlays();
+        HideAllMainPanelsAndOverlays(preserveHomeAndLoading: true);
 
         if (InGameSettingsController.Instance != null)
             InGameSettingsController.Instance.DismissAllPanels();
@@ -690,6 +712,7 @@ public class ModeManager : MonoBehaviourPunCallbacks
         ForceShowHomeUi();
         ResetButtonScales();
         ApplyHomeScreenButtonColors();
+        BGAudioManager.Instance?.OnMenuScreenShown();
 
         bool modesActive = panelModes != null && panelModes.activeSelf;
         bool homeActive = panelHomeScreen != null && panelHomeScreen.activeSelf;
@@ -709,7 +732,8 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
         if (NetworkManager.Instance != null)
         {
-            NetworkManager.Instance.HideLoadingInstant();
+            if (!NetworkManager.Instance.IsProtectedLoadingActive())
+                NetworkManager.Instance.HideLoadingInstant();
             NetworkManager.Instance.ForceClearBlackOverlay();
             NetworkManager.Instance.HideAllMenuOverlays();
         }
@@ -718,20 +742,24 @@ public class ModeManager : MonoBehaviourPunCallbacks
         LogHomeModesState("ShowModesForPlayFriends");
     }
 
-    void HideAllMainPanelsAndOverlays()
+    void HideAllMainPanelsAndOverlays(bool preserveHomeAndLoading = false)
     {
         HideJoinTablePanel();
         HidePlayWithFriendsPanel();
         SetPanelVisible(panelModes, false);
-        ForceHideHomeUi();
+        if (!preserveHomeAndLoading)
+            ForceHideHomeUi();
 
         if (NetworkManager.Instance != null)
         {
-            NetworkManager.Instance.HideLoadingInstant();
             NetworkManager.Instance.HideGamePanelsForMenu();
             NetworkManager.Instance.HideAllMenuOverlays();
             NetworkManager.Instance.ClearUiInputBlockers();
-            NetworkManager.Instance.ForceClearBlackOverlay();
+            if (!preserveHomeAndLoading)
+            {
+                NetworkManager.Instance.HideLoadingInstant();
+                NetworkManager.Instance.ForceClearBlackOverlay();
+            }
         }
     }
 
@@ -752,12 +780,155 @@ public class ModeManager : MonoBehaviourPunCallbacks
         ShowModesScreenOnly();
     }
 
+    void UpdateModesLayout()
+    {
+        // Find the columns and groups
+        GameObject leftColGo = GameObject.Find("LeftColumn");
+        GameObject middleColGo = GameObject.Find("MiddleColumn");
+        GameObject modesColsGo = GameObject.Find("ModesColumns");
+        GameObject bottomActionsGo = GameObject.Find("BottomActions");
+        
+        if (leftColGo == null || middleColGo == null || modesColsGo == null) return;
+
+        Transform leftCol = leftColGo.transform;
+        Transform middleCol = middleColGo.transform;
+        Transform modesCols = modesColsGo.transform;
+        Transform leftGroup = modesCols.parent;
+
+        // Find or create a horizontal row for buttons
+        Transform buttonsRow = leftGroup.Find("HorizontalModesRow");
+        if (buttonsRow == null)
+        {
+            GameObject go = new GameObject("HorizontalModesRow", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement), typeof(ContentSizeFitter));
+            buttonsRow = go.transform;
+            buttonsRow.SetParent(leftGroup, false);
+            buttonsRow.SetSiblingIndex(modesCols.GetSiblingIndex() + 1);
+        }
+
+        HorizontalLayoutGroup rowHlg = buttonsRow.GetComponent<HorizontalLayoutGroup>();
+        LayoutElement rowLe = buttonsRow.GetComponent<LayoutElement>();
+        if (rowLe == null) rowLe = buttonsRow.gameObject.AddComponent<LayoutElement>();
+        ContentSizeFitter rowCsf = buttonsRow.GetComponent<ContentSizeFitter>();
+        if (rowCsf == null) rowCsf = buttonsRow.gameObject.AddComponent<ContentSizeFitter>();
+
+        HorizontalLayoutGroup colsHlg = modesCols.GetComponent<HorizontalLayoutGroup>();
+        HorizontalLayoutGroup baHlg = bottomActionsGo != null ? bottomActionsGo.GetComponent<HorizontalLayoutGroup>() : null;
+
+        if (!isFriendsMatchMode)
+        {
+            // --- HorizontalModesRow Setup (Image 1) ---
+            rowHlg.padding.left = -100;
+            rowHlg.padding.top = -350;
+            rowHlg.spacing = 30;
+            rowHlg.childControlWidth = true;
+            rowHlg.childControlHeight = false; 
+            rowHlg.childForceExpandWidth = false; 
+            rowHlg.childForceExpandHeight = false;
+            rowHlg.childAlignment = TextAnchor.MiddleCenter;
+
+            rowLe.preferredHeight = 160; 
+            rowLe.flexibleWidth = 1;
+            rowCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // --- ModesColumns Setup (Image 3) ---
+            if (colsHlg != null)
+            {
+                colsHlg.padding.left = -200;
+                colsHlg.padding.top = 50;
+                colsHlg.spacing = 180;
+                colsHlg.childAlignment = TextAnchor.MiddleCenter;
+                colsHlg.childControlWidth = true;
+                colsHlg.childControlHeight = true;
+            }
+
+            // --- BottomActions Setup (Image 2) ---
+            if (baHlg != null)
+            {
+                baHlg.padding.left = -150;
+                baHlg.spacing = 200;
+                baHlg.childAlignment = TextAnchor.MiddleCenter;
+            }
+
+            // Move buttons to HorizontalModesRow and set width to 360
+            MoveAndSizeButton("Button_PlayTrumpMode", buttonsRow, 360);
+            MoveAndSizeButton("Button_PlayCut2Trump", buttonsRow, 360);
+            MoveAndSizeButton("Button_Play13CardMode", buttonsRow, 360);
+            MoveAndSizeButton("Button_PlayFirstCut", buttonsRow, 360);
+            
+            buttonsRow.gameObject.SetActive(true);
+        }
+        else
+        {
+            // Restore Original Layout for Friends Mode
+            if (colsHlg != null)
+            {
+                colsHlg.padding.left = 0;
+                colsHlg.padding.top = 0;
+                colsHlg.spacing = 50;
+                colsHlg.childAlignment = TextAnchor.UpperLeft;
+            }
+
+            if (baHlg != null)
+            {
+                baHlg.padding.left = 0;
+                baHlg.spacing = 100;
+            }
+
+            // Move buttons back to their columns and reset width
+            MoveAndSizeButton("Button_PlayTrumpMode", leftCol, -1);
+            MoveAndSizeButton("Button_PlayCut2Trump", leftCol, -1);
+            MoveAndSizeButton("Button_Play13CardMode", middleCol, -1);
+            MoveAndSizeButton("Button_PlayFirstCut", middleCol, -1);
+            
+            buttonsRow.gameObject.SetActive(false);
+        }
+
+        // BottomActions child alignment must stay Middle Center at runtime (never UpperLeft/other).
+        if (baHlg != null)
+            baHlg.childAlignment = TextAnchor.MiddleCenter;
+    }
+
+    void MoveAndSizeButton(string buttonName, Transform newParent, float width)
+    {
+        if (UiSafeLookup.TryGet(buttonName, out GameObject go) && go != null)
+        {
+            if (go.transform.parent != newParent)
+                go.transform.SetParent(newParent, false);
+
+            LayoutElement le = go.GetComponent<LayoutElement>();
+            if (le == null) le = go.AddComponent<LayoutElement>();
+            
+            if (width > 0)
+            {
+                le.preferredWidth = width;
+                le.minWidth = width;
+            }
+            else
+            {
+                // Reset to default/column control
+                le.preferredWidth = -1;
+                le.minWidth = -1;
+            }
+        }
+    }
+
+    void MoveButtonToParent(string buttonName, Transform newParent)
+{
+        if (UiSafeLookup.TryGet(buttonName, out GameObject go) && go != null)
+        {
+            if (go.transform.parent != newParent)
+                go.transform.SetParent(newParent, false);
+        }
+    }
+
     /// <summary>
     /// Bots/Online: 1v1v1v1 only, hide Join Table. Friends: 2v2 only, show Join Table.
     /// </summary>
-    void ApplyModePanelRules()
+void ApplyModePanelRules()
     {
         EnsureUiSearchRoot();
+
+        UpdateModesLayout();
 
         if (!isFriendsMatchMode)
             HideJoinTablePanel();
@@ -997,7 +1168,14 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public void OnClick_PlayFriends()
     {
         Debug.Log("[Friends] PlayFriends clicked");
+        if (NetworkManager.Instance != null)
+            NetworkManager.Instance.BumpFlowToken("Home -> FriendsPreparing");
         isFriendsMatchMode = true;
+
+        // Layout ko bada karne ke liye (Force Expand ON)
+        if (leftColumnLayoutGroup != null) leftColumnLayoutGroup.childForceExpandWidth = true;
+        if (middleColumnLayoutGroup != null) middleColumnLayoutGroup.childForceExpandWidth = true;
+
         if (GameSettings.Instance != null)
             GameSettings.Instance.currentMatchType = MatchType.PlayWithFriends;
         UpdateFriendsOverlay();
@@ -1323,6 +1501,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
                 return;
             }
             gameStartInProgress = true;
+            if (NetworkManager.Instance != null)
+                NetworkManager.Instance.BeginProtectedLoading(
+                    NetworkManager.ProtectedLoadingFlow.FriendsCreatingRoom,
+                    "Creating room...");
             StartOnlineConnectionBuffer(() =>
             {
                 if (PlayWithFriendsManager.Instance != null)
@@ -1400,7 +1582,10 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         if (string.IsNullOrEmpty(loadingMessage)) loadingMessage = "Connecting Online...";
         if (NetworkManager.Instance != null)
-            NetworkManager.Instance.ShowLoading(loadingMessage);
+        {
+            if (!NetworkManager.Instance.IsProtectedLoadingActive())
+                NetworkManager.Instance.ShowLoading(loadingMessage);
+        }
         else if (UiFlowManager.Current != UIState.LoadingGame)
             UiFlowManager.ShowLoadingOnly(loadingMessage);
 
@@ -1413,12 +1598,6 @@ public class ModeManager : MonoBehaviourPunCallbacks
         }
 
         yield return new WaitForSecondsRealtime(5f);
-
-        if (NetworkManager.Instance != null)
-        {
-            NetworkManager.Instance.HideLoadingInstant();
-            NetworkManager.Instance.ClearUiInputBlockers();
-        }
 
         _connectionBufferRoutine = null;
         onBufferComplete?.Invoke();
@@ -1516,6 +1695,14 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     void StartSmartMatchmaking()
     {
+        if (NetworkManager.Instance != null && NetworkManager.Instance.IsBotsMatchFlowActive())
+        {
+            Debug.Log("[ModeManager] StartSmartMatchmaking blocked because Bot mode is active");
+            findMatchAfterLobby = false;
+            _pendingMatchmakingAfterLeave = false;
+            return;
+        }
+
         if (NetworkManager.Instance != null)
             NetworkManager.Instance.CancelReconnectUiForMenu();
 
@@ -1618,6 +1805,13 @@ public class ModeManager : MonoBehaviourPunCallbacks
 
     public override void OnLeftRoom()
     {
+        if (NetworkManager.Instance != null && NetworkManager.Instance.IsBotsMatchFlowActive())
+        {
+            _pendingMatchmakingAfterLeave = false;
+            findMatchAfterLobby = false;
+            return;
+        }
+
         if (!_pendingMatchmakingAfterLeave) return;
 
         _pendingMatchmakingAfterLeave = false;
@@ -1640,6 +1834,14 @@ public class ModeManager : MonoBehaviourPunCallbacks
         if (panelModes != null && panelModes.activeSelf)
             UpdateModeSelectionUIColors();
 
+        if (NetworkManager.Instance != null && NetworkManager.Instance.IsBotsMatchFlowActive())
+        {
+            Debug.Log("[Photon] JoinedLobby ignored because Bot mode is active");
+            findMatchAfterLobby = false;
+            _pendingMatchmakingAfterLeave = false;
+            return;
+        }
+
         if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
         {
             Debug.Log("[Photon] JoinedLobby ignored because user cancelled matchmaking");
@@ -1654,6 +1856,14 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public override void OnJoinRandomFailed(short returnCode, string message)
     {
         Debug.LogWarning($"[Photon] OnJoinRandomFailed | code={returnCode} | {message}");
+        if (NetworkManager.Instance != null && NetworkManager.Instance.IsBotsMatchFlowActive())
+        {
+            Debug.Log("[Photon] JoinRandomFailed ignored because Bot mode is active");
+            findMatchAfterLobby = false;
+            _pendingMatchmakingAfterLeave = false;
+            return;
+        }
+
         if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
         {
             Debug.Log("[Photon] JoinRandomFailed ignored because user cancelled matchmaking");
@@ -1680,6 +1890,14 @@ public class ModeManager : MonoBehaviourPunCallbacks
     {
         Debug.LogWarning($"[Photon] CreateRoomFailed | {returnCode} | {message}");
         gameStartInProgress = false;
+        if (NetworkManager.Instance != null && NetworkManager.Instance.IsBotsMatchFlowActive())
+        {
+            Debug.LogWarning("[Photon] CreateRoomFailed ignored by ModeManager because NetworkManager owns Bot room creation.");
+            findMatchAfterLobby = false;
+            _pendingMatchmakingAfterLeave = false;
+            return;
+        }
+
         if (MatchmakingManager.Instance != null && MatchmakingManager.Instance.WasCancelledByUser)
         {
             GameFlowState.SetPhase(GameFlowPhase.Home, true);

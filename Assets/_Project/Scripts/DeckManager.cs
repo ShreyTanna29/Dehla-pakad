@@ -63,7 +63,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
     private bool gameStarted 
     { 
         get {
-            if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object started))
+            // If we locally marked it as NOT started (during reset), trust that locally 
+            // until we start again or hear otherwise from a remote master.
+            if (!_localGameStarted) return false;
+
+            if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && 
+                PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object started))
                 return (bool)started || _localGameStarted;
             return _localGameStarted;
         }
@@ -558,6 +563,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
         masterTrackingCounts.Clear();
         masterDeck.Clear();
         PlayerHand.CleanupRuntimeCardUi();
+
+        if (ResultManager.Instance != null)
+            ResultManager.Instance.InitializeForMatch();
     }
 
     public void ResetMatchState()
@@ -567,7 +575,10 @@ public class DeckManager : MonoBehaviourPunCallbacks
         _ignoringMatchRpcs = true;
         StopOnlineMatchmaking();
         StopAllDealCoroutines();
-        
+
+        if (ResultManager.Instance != null)
+            ResultManager.Instance.InitializeForMatch();
+
         // 🚀 Authoritative Reset — only when fully joined. During a LeaveRoom teardown InRoom is
         // still true but writing properties is rejected/logged, so require ClientState == Joined.
         if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient
@@ -1873,14 +1884,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
     [PunRPC]
     public void RPC_BeginNextRound(int newRound)
     {
-        // STRICT SEQUENCE GATE: guarantee the leaderboard is gone on THIS client BEFORE any
-        // dealing visuals begin. Without this, cross-client 5s-timer skew could let cards deal
-        // underneath a still-visible leaderboard on slower peers.
+        // Inter-round: leaderboard screen pe rehne do — dealing background mein chalti rahe.
+        // Match-end ya explicit close ForceHideLeaderboardNow / CloseResult se handle hota hai.
+        // Pehle yahan ForceHideLeaderboardNow() tha jo dealing start hote hi panel gayab kar deta tha.
+
         if (ResultManager.Instance != null)
-        {
-            ResultManager.Instance.ForceHideLeaderboardNow();
             ResultManager.Instance.ApplyNextRoundStart(newRound);
-        }
 
         PrepareLocalDealingStateForNextRound();
         GameFlowState.SetPhase(GameFlowPhase.Dealing, forceRecovery: true);

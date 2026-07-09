@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,7 +13,7 @@ using UnityEditor.AddressableAssets.Settings;
 
 /// <summary>
 /// Loads a sprite for UI Images whose editor reference was cleared for Addressables.
-/// Falls back to direct asset load in the Editor so Play Mode works without a full Addressables build.
+/// Uses <see cref="AddressablesSpriteCache"/> for fast, deduplicated loads.
 /// </summary>
 [RequireComponent(typeof(Image))]
 [DisallowMultipleComponent]
@@ -29,19 +28,16 @@ public class AddressableUIImageLoader : MonoBehaviour
     public float fadeDuration = 0.25f;
 
     Image _image;
-AsyncOperationHandle<Sprite> _loadHandle;
     bool _loadStarted;
     Color _originalColor;
 
     void Awake()
     {
-        _image = GetComponent<UnityEngine.UI.Image>();
+        _image = GetComponent<Image>();
         if (_image != null)
         {
             _originalColor = _image.color;
-            
-            // CRITICAL: Hide immediately in Awake to prevent white box flash 
-            // if the sprite is null and we have a key to load.
+
             if (_image.sprite == null && !string.IsNullOrWhiteSpace(addressableKey))
             {
                 Color c = _image.color;
@@ -62,12 +58,9 @@ AsyncOperationHandle<Sprite> _loadHandle;
         TryLoadSprite();
     }
 
-    void Start() => TryLoadSprite();
-
     void OnDestroy()
     {
-        if (_loadHandle.IsValid())
-            Addressables.Release(_loadHandle);
+        // Sprites are owned by AddressablesSpriteCache — no per-component release.
     }
 
     public void EnsureLoaded()
@@ -98,7 +91,15 @@ AsyncOperationHandle<Sprite> _loadHandle;
             return;
         }
 
-        // Hide image until sprite is loaded to prevent white/gray flash.
+        // Cache hit — assign immediately (no coroutine / no extra async hop).
+        if (AddressablesSpriteCache.TryGetCached(addressableKey, out Sprite cached))
+        {
+            _image.sprite = cached;
+            RestoreColor();
+            _loadStarted = true;
+            return;
+        }
+
         Color c = _image.color;
         c.a = 0f;
         _image.color = c;
@@ -111,7 +112,7 @@ AsyncOperationHandle<Sprite> _loadHandle;
 #if UNITY_EDITOR
         if (TryAssignEditorSprite())
         {
-            RestoreColor(false); // No fade in editor
+            RestoreColor(false);
             return;
         }
 #endif
@@ -123,8 +124,6 @@ AsyncOperationHandle<Sprite> _loadHandle;
         if (_image == null) return;
 
         Color target = _originalColor;
-        // If the original alpha was 0 (hidden to prevent flash), we force it to 1
-        // so the loaded sprite is visible. If it was already non-zero, we keep it.
         if (target.a < 0.01f) target.a = 1f;
 
         if (allowFade && fadeIn && Application.isPlaying)
@@ -146,7 +145,6 @@ AsyncOperationHandle<Sprite> _loadHandle;
         AddressableAssetSettings settings = AddressableAssetSettingsDefaultObject.Settings;
         if (settings == null) return false;
 
-        // 1. Try to find the entry by address to get the REAL path.
         AddressableAssetEntry entry = null;
         foreach (var group in settings.groups)
         {
@@ -157,12 +155,9 @@ AsyncOperationHandle<Sprite> _loadHandle;
 
         string path = "";
         if (entry != null)
-        {
             path = AssetDatabase.GUIDToAssetPath(entry.guid);
-        }
         else
         {
-            // Fallback: assume the key is a path (old behavior)
             path = addressableKey.Replace("\\", "/");
             if (!path.StartsWith("Assets/"))
                 path = "Assets/" + path.TrimStart('/');
@@ -188,93 +183,55 @@ AsyncOperationHandle<Sprite> _loadHandle;
             return false;
 
         _image.sprite = picked;
-        Debug.Log($"[AddressableUIImageLoader] Editor direct load '{path}' (Key: {addressableKey}) → '{name}'.", this);
         return true;
     }
 #endif
 
     IEnumerator LoadSpriteRoutine()
     {
-        AsyncOperationHandle init = Addressables.InitializeAsync();
-        if (!init.IsDone)
-            yield return init;
+        yield return AddressablesSpriteCache.WaitUntilReady();
 
         if (_image == null)
             yield break;
 
-        // Guard: verify the key actually resolves to a location before loading.
-        // Use typeof(Object) instead of typeof(Sprite) because if an asset is stored as a Texture2D,
-        // it might not show up as a Sprite location, yet LoadAssetAsync<Sprite> can still extract it.
-        AsyncOperationHandle<IList<UnityEngine.ResourceManagement.ResourceLocations.IResourceLocation>> locHandle =
-            Addressables.LoadResourceLocationsAsync(addressableKey, typeof(Object));
-        yield return locHandle;
-
-        bool hasLocation = locHandle.Status == AsyncOperationStatus.Succeeded &&
-                           locHandle.Result != null && locHandle.Result.Count > 0;
-        
-        if (locHandle.IsValid())
-            Addressables.Release(locHandle);
-
-        if (!hasLocation)
+        bool done = false;
+        Sprite loaded = null;
+        AddressablesSpriteCache.GetSprite(addressableKey, sprite =>
         {
-            Debug.LogWarning(
-                $"[AddressableUIImageLoader] No Addressables location for key '{addressableKey}' on '{name}' — " +
-                "image left blank (asset missing from group or Addressables not built).",
-                this);
-            yield break;
-        }
+            loaded = sprite;
+            done = true;
+        });
+
+        while (!done)
+            yield return null;
 
         if (_image == null)
             yield break;
 
-        if (_loadHandle.IsValid())
-            Addressables.Release(_loadHandle);
-
-        Debug.Log($"[AddressableUIImageLoader] Loading '{addressableKey}' for '{name}'...");
-
-        _loadHandle = Addressables.LoadAssetAsync<Sprite>(addressableKey);
-        yield return _loadHandle;
-
-        if (_image == null)
-            yield break;
-
-        if (_loadHandle.Status == AsyncOperationStatus.Succeeded && _loadHandle.Result != null)
+        if (loaded != null)
         {
-            _image.sprite = _loadHandle.Result;
+            _image.sprite = loaded;
             RestoreColor();
-            Debug.Log($"[AddressableUIImageLoader] Loaded '{addressableKey}' → '{name}'.", this);
             yield break;
         }
 
-        if (_loadHandle.IsValid())
-        {
-            Addressables.Release(_loadHandle);
-            _loadHandle = default;
-        }
-
-        // Fallback for sub-assets if primary load failed
-        AsyncOperationHandle<IList<Sprite>> listHandle = Addressables.LoadAssetsAsync<Sprite>(
-            addressableKey, null, Addressables.MergeMode.None);
+        // Rare fallback: texture with multiple sub-sprites.
+        AsyncOperationHandle<System.Collections.Generic.IList<Sprite>> listHandle =
+            Addressables.LoadAssetsAsync<Sprite>(addressableKey, null, Addressables.MergeMode.None);
         yield return listHandle;
 
         if (_image == null)
             yield break;
 
-        if (listHandle.Status == AsyncOperationStatus.Succeeded && listHandle.Result != null && listHandle.Result.Count > 0)
+        if (listHandle.Status == AsyncOperationStatus.Succeeded
+            && listHandle.Result != null
+            && listHandle.Result.Count > 0)
         {
             _image.sprite = listHandle.Result[0];
             RestoreColor();
-            Debug.Log($"[AddressableUIImageLoader] Loaded sub-sprite '{addressableKey}' → '{name}'.", this);
-            Addressables.Release(listHandle);
-            yield break;
         }
 
         if (listHandle.IsValid())
             Addressables.Release(listHandle);
-
-        Debug.LogWarning(
-            $"[AddressableUIImageLoader] Failed to load '{addressableKey}' on '{name}' (Status: {_loadHandle.Status}) — image stays blank.",
-            this);
     }
-
 }

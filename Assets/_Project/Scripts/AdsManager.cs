@@ -1,21 +1,21 @@
-using System;
 using UnityEngine;
+using UnityEngine.Advertisements;
+using System;
 
-/// <summary>
-/// Compile-safe ads facade. The full LevelPlay implementation lives in git commit 562d6cd
-/// (Ads Integration) and requires the Unity package com.unity.services.levelplay to be resolved
-/// in Package Manager. Until that package downloads, all ad calls safely no-op so the game builds.
-/// </summary>
-public class AdsManager : MonoBehaviour
+public class AdsManager : MonoBehaviour, IUnityAdsInitializationListener, IUnityAdsLoadListener, IUnityAdsShowListener
 {
     public static AdsManager Instance { get; private set; }
 
-    const string LevelPlayPackageHint =
-        "Install/resolve com.unity.services.levelplay in Unity Package Manager, then restore AdsManager from git commit 562d6cd if you need live ads.";
+    [Header("Unity Ads Setup")]
+    [SerializeField] private string androidGameId = "800080692";
+    [SerializeField] private bool testMode = true; // Isko TRUE hi rakhiye jab tak public release na ho
 
-    bool _initRequested;
+    // Unity Ads Default Placement IDs
+    private string interstitialAdUnitId = "Interstitial_Android";
+    private string rewardedAdUnitId = "Rewarded_Android";
+    private string bannerAdUnitId = "Banner_Android";
 
-    public bool IsInitialized => false;
+    private Action onInterstitialClosed;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void Bootstrap()
@@ -35,51 +35,169 @@ public class AdsManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
-        Debug.Log("[AdsManager] Stub active (LevelPlay package not loaded). " + LevelPlayPackageHint);
     }
 
     void Start()
     {
-        if (_initRequested) return;
-        _initRequested = true;
-        Debug.LogWarning("[AdsManager] LevelPlay SDK unavailable — ads disabled. " + LevelPlayPackageHint);
+        InitializeAds();
     }
 
-    void OnDestroy()
+    public void InitializeAds()
     {
-        if (Instance == this)
-            Instance = null;
+        if (!Advertisement.isInitialized && Advertisement.isSupported)
+        {
+            Debug.Log("[UnityAds] Initializing...");
+            Advertisement.Initialize(androidGameId, testMode, this);
+        }
     }
 
-    public void LoadBanner() => LogStub(nameof(LoadBanner));
-    public void ShowBanner() => LogStub(nameof(ShowBanner));
-    public void HideBanner() => LogStub(nameof(HideBanner));
+    public void OnInitializationComplete()
+    {
+        Debug.Log("[UnityAds] Initialization complete.");
+        LoadInterstitial();
+        LoadRewardedAd();
+        LoadBanner();
+    }
 
-    public void LoadInterstitial() => LogStub(nameof(LoadInterstitial));
-    public void ShowInterstitial() => LogStub(nameof(ShowInterstitial));
+    public void OnInitializationFailed(UnityAdsInitializationError error, string message)
+    {
+        Debug.LogError($"[UnityAds] Init Failed: {error} - {message}");
+    }
+
+    // ================= 1 & 2: BANNER ADS (Leaderboard & Exit Panel) =================
+    public void LoadBanner()
+    {
+        if (!Advertisement.isInitialized) return;
+
+        Advertisement.Banner.SetPosition(BannerPosition.BOTTOM_CENTER);
+        BannerLoadOptions options = new BannerLoadOptions
+        {
+            loadCallback = OnBannerLoaded,
+            errorCallback = OnBannerError
+        };
+        Advertisement.Banner.Load(bannerAdUnitId, options);
+    }
+
+    void OnBannerLoaded() { Debug.Log("[UnityAds] Banner Loaded"); }
+    void OnBannerError(string message) { Debug.LogError($"[UnityAds] Banner Error: {message}"); }
+
+    public void ShowBanner()
+    {
+        if (Advertisement.isInitialized)
+            Advertisement.Banner.Show(bannerAdUnitId);
+    }
+
+    public void HideBanner()
+    {
+        if (Advertisement.isInitialized)
+            Advertisement.Banner.Hide();
+    }
+
+    // ================= 4: INTERSTITIAL ADS (Game Exit) =================
+    public void PreloadAds() => LoadInterstitial();
+
+    public void LoadInterstitial()
+    {
+        if (Advertisement.isInitialized)
+            Advertisement.Load(interstitialAdUnitId, this);
+    }
+
+    public bool IsInterstitialReady() => Advertisement.isInitialized;
+
+    public void ShowInterstitial()
+    {
+        if (Advertisement.isInitialized)
+            Advertisement.Show(interstitialAdUnitId, this);
+        else
+            LoadInterstitial();
+    }
 
     public void ShowInterstitialThenRun(Action onClosed)
     {
-        LogStub(nameof(ShowInterstitialThenRun));
-        onClosed?.Invoke();
+        if (Advertisement.isInitialized)
+        {
+            onInterstitialClosed = onClosed;
+            Advertisement.Show(interstitialAdUnitId, this);
+        }
+        else
+        {
+            onClosed?.Invoke();
+            LoadInterstitial();
+        }
     }
-
-    public bool IsInterstitialReady() => false;
 
     public void ShowBestEffortFullscreenAd(Action onClosed)
     {
-        LogStub(nameof(ShowBestEffortFullscreenAd));
-        onClosed?.Invoke();
+        ShowInterstitialThenRun(onClosed);
     }
 
-    public void PreloadAds() => LogStub(nameof(PreloadAds));
-
-    public bool IsRewardedAdReady() => false;
-    public void ShowRewardedAd() => LogStub(nameof(ShowRewardedAd));
-    public void LoadRewardedAd() => LogStub(nameof(LoadRewardedAd));
-
-    static void LogStub(string method)
+    // ================= 3: REWARDED ADS (1 Ad = 1 Coin) =================
+    public void LoadRewardedAd()
     {
-        Debug.Log($"[AdsManager] {method}() skipped — LevelPlay not loaded.");
+        if (Advertisement.isInitialized)
+            Advertisement.Load(rewardedAdUnitId, this);
+    }
+
+    public bool IsRewardedAdReady() => Advertisement.isInitialized;
+
+    public void ShowRewardedAd()
+    {
+        if (Advertisement.isInitialized)
+            Advertisement.Show(rewardedAdUnitId, this);
+        else
+            Debug.LogWarning("Rewarded Ad not ready!");
+    }
+
+    // ================= LOAD LISTENERS =================
+    public void OnUnityAdsAdLoaded(string adUnitId)
+    {
+        Debug.Log($"[UnityAds] Ad Loaded: {adUnitId}");
+    }
+
+    public void OnUnityAdsFailedToLoad(string adUnitId, UnityAdsLoadError error, string message)
+    {
+        Debug.LogWarning($"[UnityAds] Error loading {adUnitId}: {error} - {message}");
+    }
+
+    // ================= SHOW LISTENERS & REWARD LOGIC =================
+    public void OnUnityAdsShowFailure(string adUnitId, UnityAdsShowError error, string message)
+    {
+        Debug.LogError($"[UnityAds] Error showing {adUnitId}: {error} - {message}");
+        ExecuteCallbackAndReset(adUnitId);
+    }
+
+    public void OnUnityAdsShowStart(string adUnitId) { }
+    public void OnUnityAdsShowClick(string adUnitId) { }
+
+    public void OnUnityAdsShowComplete(string adUnitId, UnityAdsShowCompletionState showCompletionState)
+    {
+        Debug.Log($"[UnityAds] Ad Completed: {adUnitId} | State: {showCompletionState}");
+
+        // Reward logic: Agar video poora dekha hai, toh 1 Coin add kardo.
+        if (adUnitId == rewardedAdUnitId && showCompletionState == UnityAdsShowCompletionState.COMPLETED)
+        {
+            if (CurrencyAndInventoryManager.Instance != null)
+            {
+                CurrencyAndInventoryManager.Instance.AddCoins(1);
+                Debug.Log("Reward granted: +1 Coin added to Firebase & Local!");
+            }
+            LoadRewardedAd();
+        }
+        else if (adUnitId == interstitialAdUnitId)
+        {
+            LoadInterstitial();
+        }
+
+        ExecuteCallbackAndReset(adUnitId);
+    }
+
+    private void ExecuteCallbackAndReset(string adUnitId)
+    {
+        if (adUnitId == interstitialAdUnitId && onInterstitialClosed != null)
+        {
+            var callback = onInterstitialClosed;
+            onInterstitialClosed = null;
+            callback.Invoke();
+        }
     }
 }
