@@ -110,6 +110,9 @@ public class VoiceManager : MonoBehaviourPun
 
     public void OpenPanel()
     {
+        if (DeckManager.ShouldHideInGameEmoteButtons())
+            return;
+
         EnsureAutoBlocker();
 
         if (_autoBlocker != null)
@@ -121,6 +124,23 @@ public class VoiceManager : MonoBehaviourPun
             voicePanel.SetActive(true);
             voicePanel.transform.SetAsLastSibling();
         }
+    }
+
+    public void InitializeGameScene()
+    {
+        RefreshSpectatorUi();
+    }
+
+    public void RefreshSpectatorUi()
+    {
+        bool show = !DeckManager.ShouldHideInGameEmoteButtons();
+        if (openVoiceButton != null)
+            openVoiceButton.gameObject.SetActive(show);
+        else if (UiSafeLookup.TryGet("Button_OpenVoice", out GameObject voiceBtn) && voiceBtn != null)
+            voiceBtn.SetActive(show);
+
+        if (!show)
+            ClosePanel();
     }
 
     public void ClosePanel()
@@ -135,6 +155,9 @@ public class VoiceManager : MonoBehaviourPun
 
     public void Click_SendVoice(int index)
     {
+        if (DeckManager.ShouldHideInGameEmoteButtons())
+            return;
+
         ClosePanel();
         PlayVoiceLocal(index);
 

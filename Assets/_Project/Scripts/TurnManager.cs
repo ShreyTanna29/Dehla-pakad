@@ -47,6 +47,21 @@ public class TurnManager : MonoBehaviourPunCallbacks
     void EnsureTimerVisible()
     {
         ResolveTimerUi();
+
+        // Always show the black turn timer panel in every mode (Bots / Online / Friends).
+        if (UiSafeLookup.TryGet("Panel_Timer", out GameObject panelTimer) && panelTimer != null)
+        {
+            if (!panelTimer.activeSelf) panelTimer.SetActive(true);
+            CanvasGroup panelCg = panelTimer.GetComponent<CanvasGroup>();
+            if (panelCg != null)
+            {
+                panelCg.DOKill();
+                panelCg.alpha = 1f;
+                panelCg.interactable = false;
+                panelCg.blocksRaycasts = false;
+            }
+        }
+
         if (timerText == null) return;
 
         Transform t = timerText.transform;
@@ -67,6 +82,19 @@ public class TurnManager : MonoBehaviourPunCallbacks
             if (timerFillBar.transform.parent != null)
                 timerFillBar.transform.parent.gameObject.SetActive(true);
         }
+    }
+
+    void HideTimerUi()
+    {
+        ResolveTimerUi();
+        if (UiSafeLookup.TryGet("Panel_Timer", out GameObject panelTimer) && panelTimer != null)
+            panelTimer.SetActive(false);
+        else if (timerText != null && timerText.transform.parent != null)
+            timerText.transform.parent.gameObject.SetActive(false);
+
+        if (timerFillBar != null && timerFillBar.transform.parent != null
+            && DynamicTimerSetup.Instance == null)
+            timerFillBar.transform.parent.gameObject.SetActive(false);
     }
 
     public void SetPaused(bool paused)
@@ -131,16 +159,6 @@ public class TurnManager : MonoBehaviourPunCallbacks
         HideTimerUi();
     }
 
-    void HideTimerUi()
-    {
-        ResolveTimerUi();
-        if (timerText != null && timerText.transform.parent != null)
-            timerText.transform.parent.gameObject.SetActive(false);
-        if (timerFillBar != null && timerFillBar.transform.parent != null
-            && DynamicTimerSetup.Instance == null)
-            timerFillBar.transform.parent.gameObject.SetActive(false);
-    }
-
     // 🚀 MASTER SWITCH: If the previous master left mid-timer, the new one takes over.
     public override void OnMasterClientSwitched(Player newMasterClient)
     {
@@ -171,26 +189,61 @@ public class TurnManager : MonoBehaviourPunCallbacks
             }
         }
 
-        if (currentTime <= 0)
-        {
-            if (PlayerHand.IsTrickLocked) yield break;
+        if (currentTime > 0) yield break;
 
-            // Task 10: a turn timeout is NOT a disconnect. When the 18s timer elapses we ONLY
-            // auto-play a valid card for the current actor — we never mark the player offline,
-            // inactive, abandoned, or kick/replace them with a bot. (Offline/abandon handling lives
-            // exclusively in NetworkManager and is driven by real Photon disconnect events, never by
-            // this timer.) This keeps a slow/AFK human in their seat with a card auto-played for them.
-            if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null
-                && DeckManager.Instance.IsActorBotControlled(currentActorTurn)
-                && PlayerHand.LocalInstance != null)
+        // Brief wait if a trick resolve briefly overlaps the timer — do not soft-lock forever.
+        float unlockWait = 2.5f;
+        while (PlayerHand.IsTrickLocked && unlockWait > 0f)
+        {
+            yield return new WaitForSeconds(0.25f);
+            unlockWait -= 0.25f;
+        }
+        if (PlayerHand.IsTrickLocked) yield break;
+
+        int timedOutActor = currentActorTurn;
+        if (timedOutActor < 1 || !PhotonNetwork.IsMasterClient || PlayerHand.LocalInstance == null)
+            yield break;
+
+        // Prefer local auto-play on the timed-out client first.
+        if (DeckManager.Instance != null && DeckManager.Instance.IsActorBotControlled(timedOutActor))
+        {
+            PlayerHand.LocalInstance.ForceBotPlayImmediate(timedOutActor);
+        }
+        else
+        {
+            Player turnPlayer = PhotonNetwork.CurrentRoom != null
+                ? PhotonNetwork.CurrentRoom.GetPlayer(timedOutActor)
+                : null;
+            bool fullyLeft = turnPlayer == null;
+            bool inactive = turnPlayer != null && turnPlayer.IsInactive;
+
+            if (fullyLeft && DeckManager.Instance != null)
             {
-                PlayerHand.LocalInstance.ForceBotPlayImmediate(currentActorTurn);
+                DeckManager.Instance.MasterConvertAbsentPlayerToBot(timedOutActor);
+                PlayerHand.LocalInstance.ForceBotPlayImmediate(timedOutActor);
             }
-            else if (!PlayerHand.IsTrickLocked)
+            else if (inactive)
             {
-                photonView.RPC("RPC_TimeUpAutoPlay", RpcTarget.All, currentActorTurn);
+                // Still inside PlayerTTL — force-play without converting so reconnect can reclaim the seat.
+                PlayerHand.LocalInstance.MasterForceTimeoutPlay(timedOutActor);
+                StartCoroutine(MasterTimeoutRecovery(timedOutActor));
+            }
+            else
+            {
+                photonView.RPC("RPC_TimeUpAutoPlay", RpcTarget.All, timedOutActor);
+                StartCoroutine(MasterTimeoutRecovery(timedOutActor));
             }
         }
+    }
+
+    IEnumerator MasterTimeoutRecovery(int actorNumber)
+    {
+        yield return new WaitForSeconds(1.35f);
+        if (!PhotonNetwork.IsMasterClient || PlayerHand.LocalInstance == null) yield break;
+        if (PlayerHand.IsTrickLocked) yield break;
+        if (actorNumber != PlayerHand.LocalInstance.GetAuthoritativeTurnActor()) yield break;
+
+        PlayerHand.LocalInstance.MasterForceTimeoutPlay(actorNumber);
     }
 
     [PunRPC]
@@ -270,14 +323,22 @@ public class TurnManager : MonoBehaviourPunCallbacks
     {
         isTimerRunning = false;
 
-        if (!GameStabilityAudit.CanAcceptPlayerInput() || PlayerHand.IsTrickLocked)
+        if (PlayerHand.IsTrickLocked)
             return;
-        
-        if (PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.ActorNumber == actorNumber)
-        {
-            Debug.Log("⏳ Time Up! Forcefully auto-playing a valid card...");
-            AutoPlayValidCard();
-        }
+
+        if (PhotonNetwork.LocalPlayer == null || PhotonNetwork.LocalPlayer.ActorNumber != actorNumber)
+            return;
+
+        // Clear a stuck play-lock so timeout auto-play can still advance the turn.
+        CardInteract.isPlayingCard = false;
+        CardInteract.canPlayCards = true;
+
+        // Do not gate timeout auto-play on CanAcceptPlayerInput — a stale phase/lock was soft-locking matches.
+        if (GameFlowState.Current == GameFlowPhase.GameFinished)
+            return;
+
+        Debug.Log("⏳ Time Up! Forcefully auto-playing a valid card...");
+        AutoPlayValidCard();
     }
 
     void AutoPlayValidCard()
@@ -285,31 +346,22 @@ public class TurnManager : MonoBehaviourPunCallbacks
         if (PlayerHand.IsTrickLocked) return;
 
         PlayerHand myHand = PlayerHand.LocalInstance;
-        if (myHand == null || myHand.myCards == null || myHand.myCards.Count == 0 || CardInteract.isPlayingCard) return;
+        if (myHand == null || myHand.myCards == null || myHand.myCards.Count == 0) return;
+
+        // Never leave timeout blocked by a stale drag/play lock.
+        CardInteract.isPlayingCard = false;
 
         int localActor = PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : -1;
         List<CardData> legalCards = PlayerHand.GetValidCards(myHand.myCards, myHand.currentTrick, localActor);
         if (legalCards == null || legalCards.Count == 0) return;
         CardData cardToPlay = legalCards[0];
 
-        GameObject cardUIObj = null;
-        
-        CardDisplay[] allDisplays = Object.FindObjectsByType<CardDisplay>(FindObjectsSortMode.None);
-        foreach (CardDisplay display in allDisplays)
-        {
-            if (display != null && display.myCardData.cardSuit == cardToPlay.cardSuit && display.myCardData.cardRank == cardToPlay.cardRank)
-            {
-                cardUIObj = display.gameObject;
-                break;
-            }
-        }
+        // Prefer the local hand UI only — FindObjectsByType can hit opponent/table cards.
+        GameObject cardUIObj = myHand.FindCardObjectInLocalHand(cardToPlay);
 
-        if (cardUIObj != null)
-        {
-            Debug.Log("[TurnManager] Auto-playing card due to timeout.");
-            CardInteract.canPlayCards = true; 
-            CardInteract.isPlayingCard = true; // Set lock
-            myHand.OnLocalPlayerPlayedCard(cardToPlay, cardUIObj);
-        }
+        Debug.Log("[TurnManager] Auto-playing card due to timeout.");
+        CardInteract.canPlayCards = true;
+        CardInteract.isPlayingCard = true;
+        myHand.OnLocalPlayerPlayedCard(cardToPlay, cardUIObj);
     }
 }

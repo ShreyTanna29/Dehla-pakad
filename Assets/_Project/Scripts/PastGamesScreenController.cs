@@ -153,7 +153,9 @@ public class PastGamesScreenController : MonoBehaviour
 
         Firebase.Database.DatabaseReference pastGamesRef =
             Firebase.Database.FirebaseDatabase
-                .GetInstance("https://dehla-pakad-a7859-default-rtdb.firebaseio.com/")
+                // Old: "https://dehla-pakad-mindi-kot-c0645-default-rtdb.firebaseio.com/"
+                // Older: "https://dehla-pakad-a7859-default-rtdb.firebaseio.com/"
+                .GetInstance("https://dehlapakad-c207c-default-rtdb.firebaseio.com/")
                 .RootReference
                 .Child("users").Child(uid).Child("pastGames");
 

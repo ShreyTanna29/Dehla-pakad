@@ -3,7 +3,6 @@ using System.Collections;
 using UnityEngine;
 using Firebase;
 using Firebase.Auth;
-using Firebase.Database;
 using Firebase.Extensions;
 using Google;
 using System.Threading.Tasks;
@@ -36,8 +35,8 @@ public class GoogleLogin : MonoBehaviour
     private FirebaseAuth auth;
     private GoogleSignInConfiguration configuration;
 
+    // private const string WEB_CLIENT_ID = "42510352079-sjbojvc7ho51477f16hr7vd6catvlscj.apps.googleusercontent.com";
     private const string WEB_CLIENT_ID = "391594214961-sl1o3653ias0johhdv653ndgg0gjfhtn.apps.googleusercontent.com";
-    private const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
     private const float SimulatedLoginMinWait = 3f;
     private const float RealLoginMinWait = 2.5f;
     private const float PhotonReadyMaxWait = 12f;
@@ -45,6 +44,7 @@ public class GoogleLogin : MonoBehaviour
     private bool isFirebaseReady = false;
     private bool _loginFlowStarted;
     private bool _pendingGuestLogin;
+    private bool _pendingEditorAuth;
     public bool IsFirebaseReady { get { if(isFirebaseReady) {} return isFirebaseReady; } }
 
     /// <summary>True only after login + profile setup (or existing profile load) finished.</summary>
@@ -194,6 +194,15 @@ public class GoogleLogin : MonoBehaviour
                 if (TryAutoLogin())
                 {
                     UpdateStatus("Welcome back...");
+                    return;
+                }
+
+                if (_pendingEditorAuth)
+                {
+                    _pendingEditorAuth = false;
+#if UNITY_EDITOR
+                    EditorSignInAnonymouslyForFirestore();
+#endif
                     return;
                 }
 
@@ -396,15 +405,18 @@ public class GoogleLogin : MonoBehaviour
     {
         if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(displayName)) return;
 
-        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
-            .Child("users").Child(userId).Child("username").SetValueAsync(displayName)
-            .ContinueWithOnMainThread(task =>
-            {
-                if (task.IsFaulted)
-                    Debug.LogError("[Firebase DB] Username save failed: " + task.Exception);
-                else
-                    Debug.Log("[Firebase DB] Username saved for: " + userId);
-            });
+        FirestoreUsersService.MergeUser(userId, new Dictionary<string, object>
+        {
+            { FirestoreUsersService.FieldUsername, displayName },
+            { FirestoreUsersService.FieldIsBot, false },
+            { FirestoreUsersService.FieldIsActiveNow, true }
+        }, ok =>
+        {
+            if (!ok)
+                Debug.LogWarning("[Firestore] Username save failed for: " + userId);
+            else
+                Debug.Log("[Firestore] Username saved for: " + userId);
+        });
     }
 
     void ConnectPhotonAfterLogin(string photonUserId)
@@ -467,6 +479,12 @@ public class GoogleLogin : MonoBehaviour
         // Anonymous (guest) accounts have no DisplayName, so seed a random guest name.
         // Google accounts keep their existing DisplayName-based flow unchanged.
         bool isGuest = user.IsAnonymous;
+#if UNITY_EDITOR
+        // Editor "Google" login uses anonymous Auth so Firestore gets a real token,
+        // but the UI should still behave like a linked Google session.
+        if (!_editorSimGuest)
+            isGuest = false;
+#endif
 
         ShowLoginLoading();
 
@@ -486,7 +504,14 @@ public class GoogleLogin : MonoBehaviour
         else if (!string.IsNullOrWhiteSpace(user.DisplayName))
             defaultName = user.DisplayName.Trim();
         else
-            defaultName = PlayerProfileManager.GenerateDefaultUsername(user.Email);
+        {
+            string email = user.Email;
+#if UNITY_EDITOR
+            if (string.IsNullOrEmpty(email))
+                email = PlayerPrefs.GetString("PlayerEmail", "");
+#endif
+            defaultName = PlayerProfileManager.GenerateDefaultUsername(email);
+        }
 
         Debug.Log($"✅ Authenticated: {(isGuest ? "Guest" : defaultName)} (anonymous={isGuest})");
         UpdateStatus(isGuest ? "Welcome, Guest" : "Welcome, " + defaultName);
@@ -525,7 +550,14 @@ public class GoogleLogin : MonoBehaviour
         try
         {
             FirebaseUser u = FirebaseAuth.DefaultInstance != null ? FirebaseAuth.DefaultInstance.CurrentUser : null;
-            if (u != null) return u.IsAnonymous;
+            if (u != null)
+            {
+#if UNITY_EDITOR
+                // Editor Google login uses anonymous Auth for Firestore tokens, but is not a guest.
+                if (u.IsAnonymous) return _editorSimGuest;
+#endif
+                return u.IsAnonymous;
+            }
         }
         catch { /* Firebase not ready — fall through */ }
 
@@ -587,6 +619,13 @@ public class GoogleLogin : MonoBehaviour
         // if (NetworkManager.Instance != null)
         //     NetworkManager.Instance.ShowLoading("Signing in as Guest...");
 
+        if (auth.CurrentUser != null && auth.CurrentUser.IsAnonymous)
+        {
+            Debug.Log($"[Auth] Reusing existing anonymous user {auth.CurrentUser.UserId}");
+            CompleteLogin(auth.CurrentUser);
+            return;
+        }
+
         auth.SignInAnonymouslyAsync().ContinueWithOnMainThread(OnGuestSignInFinished);
 #endif
     }
@@ -633,18 +672,17 @@ public class GoogleLogin : MonoBehaviour
     /// </summary>
     private bool TryAutoLogin()
     {
-#if UNITY_EDITOR
-        return false; // Editor uses simulated login; no persisted Firebase session to restore.
-#else
         if (auth == null || auth.CurrentUser == null)
             return false;
 
         FirebaseUser user = auth.CurrentUser;
-        Debug.Log($"[Auth] Auto-login: existing session found (anonymous={user.IsAnonymous}).");
+        Debug.Log($"[Auth] Auto-login: existing session found (anonymous={user.IsAnonymous}, uid={user.UserId}).");
         _loginFlowStarted = true;
+#if UNITY_EDITOR
+        _editorSimGuest = user.IsAnonymous && string.IsNullOrEmpty(PlayerPrefs.GetString("PlayerEmail", ""));
+#endif
         CompleteLogin(user);
         return true;
-#endif
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -767,38 +805,39 @@ public class GoogleLogin : MonoBehaviour
 #endif
 
 #if UNITY_EDITOR
-    const string SimulatedGuestUserId = "simulate_guest_uid";
+    /// <summary>
+    /// Editor login must use real Firebase Auth (anonymous). Fake UIDs have no auth token,
+    /// so Firestore rejects every read/write with "Missing or insufficient permissions."
+    /// </summary>
+    void EditorSignInAnonymouslyForFirestore()
+    {
+        if (!isFirebaseReady || auth == null)
+        {
+            _pendingEditorAuth = true;
+            UpdateStatus("Firebase Initializing...");
+            InitializeFirebase();
+            return;
+        }
+
+        // Reuse the existing Auth session. Calling SignInAnonymously again creates a NEW uid
+        // and makes Firestore look like a brand-new account (profile setup every login).
+        if (auth.CurrentUser != null)
+        {
+            Debug.Log($"[Auth] Reusing existing Firebase user {auth.CurrentUser.UserId}");
+            CompleteLogin(auth.CurrentUser);
+            return;
+        }
+
+        UpdateStatus(_editorSimGuest ? "Signing in as Guest..." : "Signing in...");
+        auth.SignInAnonymouslyAsync().ContinueWithOnMainThread(OnGuestSignInFinished);
+    }
 
     private void SimulateGuestLogin()
     {
         _editorSimGuest = true;
-        UpdateStatus("Signing in as Guest...");
-
-        // Clear any cached email so the profile shows the "Bind with Google" option in the editor.
         PlayerPrefs.DeleteKey("PlayerEmail");
         PlayerPrefs.Save();
-
-        // ShowLoading suppressed during login flow per user request.
-        // if (NetworkManager.Instance != null)
-        //     NetworkManager.Instance.ShowLoading("Signing in as Guest...");
-
-        ConnectPhotonAfterLogin(SimulatedGuestUserId);
-
-        if (PlayerProfileManager.Instance != null)
-        {
-            // ShowLoading suppressed during login flow per user request.
-            // if (NetworkManager.Instance != null)
-            //     NetworkManager.Instance.ShowLoading("Loading profile setup...");
-
-            PlayerProfileManager.Instance.CheckAndLoadUserProfile(
-                SimulatedGuestUserId, "Guest" + UnityEngine.Random.Range(1000, 9999));
-        }
-        else
-        {
-            UpdateStatus("Profile manager missing");
-            EndLoginLoading();
-            ResetGuestLoginFailure();
-        }
+        EditorSignInAnonymouslyForFirestore();
     }
 
     private void SimulateLinkGoogle()
@@ -925,6 +964,7 @@ public class GoogleLogin : MonoBehaviour
 
     const string SimulatedPhotonUserId = "simulate_editor_uid";
 
+#if UNITY_EDITOR
     private void SimulateLogin()
     {
         _editorSimGuest = false;
@@ -933,34 +973,15 @@ public class GoogleLogin : MonoBehaviour
         // Editor-only: no real Google account, so seed a placeholder email so the profile panel's
         // "Synced with" line can be verified. On device the real email from CompleteLogin is used.
         if (string.IsNullOrEmpty(PlayerPrefs.GetString("PlayerEmail", "")))
+        {
             PlayerPrefs.SetString("PlayerEmail", "editor.test@gmail.com");
-
-        // ShowLoading suppressed during login flow per user request.
-        // if (NetworkManager.Instance != null)
-        //     NetworkManager.Instance.ShowLoading("Signing in...");
-
-        // Ensure we don't have stale local data if we want a fresh start
-        // PlayerPrefs.DeleteKey("PlayerUsername"); 
-
-        ConnectPhotonAfterLogin(SimulatedPhotonUserId);
-
-        if (PlayerProfileManager.Instance != null)
-        {
-            // ShowLoading suppressed during login flow per user request.
-            // if (NetworkManager.Instance != null)
-            //     NetworkManager.Instance.ShowLoading("Loading profile setup...");
-            string defaultName = PlayerProfileManager.GenerateDefaultUsername(
-                PlayerPrefs.GetString("PlayerEmail", "editor.test@gmail.com"));
-            PlayerProfileManager.Instance.CheckAndLoadUserProfile(SimulatedPhotonUserId, defaultName);
+            PlayerPrefs.Save();
         }
-        else
-        {
-            UpdateStatus("Profile manager missing");
-            _loginFlowStarted = false;
-            SetLoginButtonsInteractable(true);
-            EndLoginLoading();
-        }
+
+        // Real anonymous Auth token is required for Firestore rules (request.auth != null).
+        EditorSignInAnonymouslyForFirestore();
     }
+#endif
 
     public void SimulateLoginME()
     {

@@ -16,17 +16,17 @@ MonoBehaviour:
   m_GUID: d39794d96b23b9940849e3f3db40a001
   m_SerializeEntries:
   - m_GUID: 0037a126456919147838a0c80904973b
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/FriendList_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/FriendList_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 00f74f560840b8040a5ffcd5930d6a64
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/ROBOT_IMAGE.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/ROBOT_IMAGE.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 034242bea66197c419f437ce04aacd69
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -36,7 +36,7 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 0d1bfd1879e3f8444b58071b4949fcb4
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icon_X.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Icon_X.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -47,27 +47,27 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 13e3163d841d0d043acdda3ff70b64e4
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 198fd6d0cb67aea498317b7e5ae661ff
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/ToggleKnob.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/ToggleKnob.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1dfcb1c501badc04c8c098bd501bd9c7
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 240e30663fe286447a024183ed17cd59
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Speaker_On.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Speaker_On.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 269992a7c16af254aae226fd0393b470
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/settings_button.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/settings_button.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -77,28 +77,28 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 2a3ebfd6e86088843bb61f8c95883da8
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/BG_BUTTON.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BG_BUTTON.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 2ef909d55af3f5e4aa2eb56c3d74fe34
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/LOGOUT_ICON.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/LOGOUT_ICON.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 2f3d7c64966a43a45a4e0f01501ea982
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/WhatsApp Image 2026-06-22 at
-      19.22.55.jpeg
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/WhatsApp Image 2026-06-22
+      at 19.22.55.jpeg
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3207682fdcc8a2d43bcfdb5b8ed45dcb
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icon_AcceptFriend.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Icon_AcceptFriend.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 32a898592625fa2458d47b6e88d367d6
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/ToggleTrack_Hands.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/ToggleTrack_Hands.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -118,32 +118,32 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 36907ec83c5b8a04595fcc54d5df37e6
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/BACK_BUTTON_IMAGE.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BACK_BUTTON_IMAGE.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 39ca0aea9d3f82241b2e944f492564f4
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Leaderboard_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Leaderboard_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3a93b9255defbb241ba1eaec84515bf9
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG 1.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG 1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3d577c7791c511444bd1b9da0c04794b
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/PLAYONLINE_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/PLAYONLINE_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3f938ba3577ff8f42b6832e2b5b266fe
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/RateUs_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/RateUs_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 403057fcde83f544296d9ae7c688e4c8
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -153,12 +153,12 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 459f0d6c6ea54fd4681ad06fc08a9a46
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/BGIMAGE1.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BGIMAGE1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 46531ce74f053e748a1edffbae23ec02
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/d1c5464331126d13c44344cacb4b3392-Photoroom.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/d1c5464331126d13c44344cacb4b3392-Photoroom.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -168,17 +168,17 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 4bf47430147f9574383021b24139e979
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 4fed660f696b730438c15144bb38f313
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/FRIEND_INVITE_BUTTON.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/FRIEND_INVITE_BUTTON.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 523fd14873b32b54c93e4798f88d6c3a
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Buttons_BG_Image 1.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Buttons_BG_Image 1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -193,12 +193,12 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 615ec29dd7ea06d4c96e0e2408b688d6
-    m_Address: Assets/_Project/Art/Sprites/Images/BG_WithoutCard.jpeg
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BG_WithoutCard.jpeg
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 67c6a54d038af0049a8b70adf7e4d363
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/WatchAds_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/WatchAds_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -208,17 +208,17 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 6c0b7d1f91915184da1ee39cbbba96d3
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Friendlist_BG1.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Friendlist_BG1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 6ddb742024342604882dbe6055e4af73
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 774a92296baa72e43aac72f2fd03344f
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/MSGCHAT_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/MSGCHAT_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -228,17 +228,17 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 7c3ee14831d915f46861205ce61426f4
-    m_Address: Assets/_Project/Art/Sprites/Buttons/Home/Friendlist_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Friendlist_BG 1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 7e9c2f38aaaed5d40a3103c17db2755e
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icons_BG_Image.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Icons_BG_Image.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 81f621d46fcec27468efba2a9f605c4f
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Leave_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Leave_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -248,28 +248,28 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8648e13fadded994dab8e0c656ceade4
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/PLAYFRIENDS_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/PLAYFRIENDS_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 86939abc649a28a44b0d77b0b1becd6e
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Leaderboard_BG_Image.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Leaderboard_BG_Image.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 87eb2453cd651114eb08550b9ea70e32
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/ChatGPT Image Jun 17, 2026,
-      01_00_31 PM-Photoroom.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/ChatGPT Image Jun 17,
+      2026, 01_00_31 PM-Photoroom.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 895bae497c47dbd498a70a371d8641b0
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/ToggleTrack.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/ToggleTrack.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 898fbf5e757c2bd4cb089d7c88376d29
-    m_Address: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BGImage.jpeg
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -279,12 +279,12 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8b0e3b8baa101444da08927eb2429e8d
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/AddFriend_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/AddFriend_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8c1e934375146ae47b5cb5e2b512b012
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icons_BG_IMAGE 1.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Icons_BG_IMAGE 1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -294,42 +294,47 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9b2c55f6c1479fe4183b1f917b11a846
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/SHOP_BUTTON.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/SHOP_BUTTON.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9d73a3eb34577d24d83b58002d122aa3
-    m_Address: Assets/_Project/Art/Sprites/Images/GAME_LOGO-WithoutBG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/GAME_LOGO-WithoutBG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: a09f7e3095c37414fbd63763f6f29b62
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Speaker_Off.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Speaker_Off.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: a1a44bfa9264bfe428d09c1214f0ac70
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/SHARE_BUTTON 1.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/SHARE_BUTTON 1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: a4038304f8cf79241bfb73a3f325f02e
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/BG_Leaderboard.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BG_Leaderboard.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: a8e7ddc7abd984e4a9ca5b7a569825ed
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/NOADS_BUTTON.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/NOADS_BUTTON.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: ae761e1e43a38cd4691f4123546cc446
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b51e3ff63e1877c4789d2c6bfc1e09b9
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/CardUIBack 1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: bb0a44215a6044646be880f360abf8c0
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Leaderboard_Image.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Leaderboard_Image.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -339,17 +344,17 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: c32b7cdfa9c2dfb47a4db517d76babf4
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Appearance_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Appearance_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: c4cc5ac746e4aac48a6272935258653e
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/WWW_ICON.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/WWW_ICON.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: c674d18ddb2420747810e2e4bb448069
-    m_Address: Assets/_Project/Art/Sprites/Images/StatsImage.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/StatsImage.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -359,7 +364,7 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cb7a64c90edc1ff498326386c5db893a
-    m_Address: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -369,7 +374,7 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cc41adc2cfb68974d9f13a3261bc9eb8
-    m_Address: Assets/_Project/Art/Sprites/Images/BG_Buttons.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BG_Buttons.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -379,42 +384,42 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d9c7c5161acfadc4a8ccf643dc302282
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icon_DeclineFriend.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Icon_DeclineFriend.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d9fa09c161309744fb05edd122724de2
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e3f16efd01414dd4880e5a44aedaa336
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/ToggleTrack_Deck.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/ToggleTrack_Deck.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e407d3b376fa93845b37cca029ade3d4
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Icon_Search.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Icon_Search.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: eb2b70fcf236c4e4c87cb52c08953d49
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Buttons_BG_Image.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Buttons_BG_Image.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: f0af48219d3862943bc033db8449a0f2
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: f1dc020e085b7744e975c5771fd6cbc4
-    m_Address: Assets/_Project/Art/Sprites/Images/GAME_LOGO.jpeg
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/GAME_LOGO.jpeg
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: f8b53889693b1e948b37d93be813a3b5
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/Voice_Icon.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/Voice_Icon.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -424,18 +429,18 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: fdb5fdf85ed855641b5483264b2ed5d8
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/WhatsApp Image 2026-06-22 at
-      19.22.55 (1).jpeg
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/WhatsApp Image 2026-06-22
+      at 19.22.55 (1).jpeg
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: fec3cc84172eafa4a9fc2ad6b6bb90bd
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/JoinTable_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/JoinTable_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: ff83d68ab5bfd784fad937d695c6fd0f
-    m_Address: Assets/_Project/Art/Sprites/Images/NEW/BUTTON_BG.png
+    m_Address: Assets/_Project/Art/Sprites/Images/AllImages/BUTTON_BG.png
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

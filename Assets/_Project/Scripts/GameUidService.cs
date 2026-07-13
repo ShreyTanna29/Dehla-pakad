@@ -17,6 +17,8 @@ using Firebase.Extensions;
 /// </summary>
 public static class GameUidService
 {
+    // Old Firebase RTDB (previous project) — kept for rollback:
+    // const string FirebaseDatabaseUrl = "https://dehla-pakad-mindi-kot-c0645-default-rtdb.firebaseio.com/";
     const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
     const string PrefsGameUid = "PlayerGameUid";
     const int UidLength = 10;

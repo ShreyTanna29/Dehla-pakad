@@ -85,7 +85,7 @@ public static class UidUI
         }
 
         tmp.color = new Color(1f, 0.92f, 0.7f, 0.95f);
-        tmp.fontStyle = FontStyles.Bold;
+        tmp.fontStyle = FontStyles.Normal;
         tmp.overflowMode = TextOverflowModes.Overflow;
         tmp.textWrappingMode = TextWrappingModes.NoWrap;
         return tmp;

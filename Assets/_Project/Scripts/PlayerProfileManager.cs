@@ -5,7 +5,7 @@ using TMPro;
 using System.Collections.Generic;
 using Firebase;
 using Firebase.Auth;
-using Firebase.Database;
+using Firebase.Firestore;
 using Firebase.Extensions;
 using Google;
 using Photon.Pun;
@@ -62,7 +62,6 @@ public class PlayerProfileManager : MonoBehaviour
 
     private const string PREFS_USERNAME = "PlayerUsername";
     private const string PREFS_AVATAR_INDEX = "PlayerAvatarIndex";
-    private const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
 
     // Photon custom-property key used to sync each player's chosen avatar to all clients.
     public const string PROP_AVATAR = "av";
@@ -102,6 +101,7 @@ public class PlayerProfileManager : MonoBehaviour
             inputPlayerName.onValueChanged.AddListener(_ => ClearProfileSetupError());
         }
 
+        EnsureProfileSetupErrorText();
         SetupAvatarButtons();
         WireHomeProfileAvatarClick();
     }
@@ -149,8 +149,79 @@ public class PlayerProfileManager : MonoBehaviour
     void ShowProfileSetupError(string message)
     {
         Debug.LogWarning("[Profile] " + message);
+        EnsureProfileSetupErrorText();
         if (profileSetupErrorText != null)
+        {
             profileSetupErrorText.text = message;
+            profileSetupErrorText.gameObject.SetActive(true);
+            return;
+        }
+
+        if (inputPlayerName != null && inputPlayerName.placeholder is TMP_Text placeholder)
+            placeholder.text = message;
+    }
+
+    void EnsureProfileSetupErrorText()
+    {
+        if (profileSetupErrorText != null) return;
+        if (panelProfileSetup == null) return;
+
+        foreach (TMP_Text label in panelProfileSetup.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (label == null) continue;
+            if (label.gameObject.name == "Txt_ProfileSetupError" || label.gameObject.name == "ProfileSetupError")
+            {
+                profileSetupErrorText = label;
+                return;
+            }
+        }
+
+        Transform anchor = inputPlayerName != null ? inputPlayerName.transform : panelProfileSetup.transform;
+        GameObject go = new GameObject("Txt_ProfileSetupError", typeof(RectTransform), typeof(TextMeshProUGUI));
+        go.transform.SetParent(anchor.parent != null ? anchor.parent : panelProfileSetup.transform, false);
+
+        RectTransform rt = go.GetComponent<RectTransform>();
+        RectTransform anchorRt = anchor as RectTransform;
+        if (anchorRt != null)
+        {
+            rt.anchorMin = anchorRt.anchorMin;
+            rt.anchorMax = anchorRt.anchorMax;
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.sizeDelta = new Vector2(anchorRt.sizeDelta.x, 36f);
+            rt.anchoredPosition = anchorRt.anchoredPosition + new Vector2(0f, -anchorRt.sizeDelta.y * 0.5f - 28f);
+        }
+        else
+        {
+            rt.sizeDelta = new Vector2(600f, 36f);
+            rt.anchoredPosition = new Vector2(0f, -220f);
+        }
+
+        profileSetupErrorText = go.GetComponent<TextMeshProUGUI>();
+        profileSetupErrorText.fontSize = 22f;
+        profileSetupErrorText.color = new Color(0.95f, 0.25f, 0.15f, 1f);
+        profileSetupErrorText.alignment = TextAlignmentOptions.Center;
+        profileSetupErrorText.fontStyle = FontStyles.Bold;
+        profileSetupErrorText.raycastTarget = false;
+        profileSetupErrorText.text = string.Empty;
+    }
+
+    void SyncProfilePanelIdentity()
+    {
+        if (panelPlayerProfile == null) return;
+
+        PlayerProfilePanelBinder binder = panelPlayerProfile.GetComponentInChildren<PlayerProfilePanelBinder>(true);
+        if (binder != null)
+            binder.SyncIdentityFields();
+        else
+        {
+            string username = PlayerPrefs.GetString(PREFS_USERNAME, string.Empty);
+            if (string.IsNullOrEmpty(username)) return;
+            foreach (TMP_Text label in panelPlayerProfile.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (label.gameObject.name == "Side_Name" || label.gameObject.name == "Text_ProfileName")
+                    label.text = username;
+            }
+        }
     }
 
     public void HideUntilLoginComplete()
@@ -262,40 +333,76 @@ public class PlayerProfileManager : MonoBehaviour
         _pendingDefaultUsername = defaultName;
         Debug.Log($"[ProfileManager] Checking profile for {userId}...");
 
-        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).GetReference("users").Child(userId)
-            .GetValueAsync().ContinueWithOnMainThread(task =>
+        FirestoreUsersService.GetUser(userId, snapshot =>
+        {
+            // Give this account a short public UID (PUBG / Free Fire style) if it doesn't have one yet.
+            GameUidService.EnsureGameUid(userId, _ =>
             {
-                // Give this account a short public UID (PUBG / Free Fire style) if it doesn't have one yet.
-                GameUidService.EnsureGameUid(userId, _ =>
-                {
-                    RefreshUidDisplays();
-                    if (PlayWithFriendsManager.Instance != null)
-                        PlayWithFriendsManager.Instance.DisplayMyID();
-                });
-
-                if (task.IsFaulted)
-                {
-                    Debug.LogError("[Firebase DB] Failed to fetch user data: " + task.Exception);
-                    ShowProfileSetupForNewUser(null);
-                    return;
-                }
-
-                DataSnapshot snapshot = task.Result;
-                if (TryReadCompleteProfile(snapshot, out string username, out int avatarIndex))
-                {
-                    Debug.Log($"[Firebase DB] Existing profile found for user: {username}");
-                    CacheProfileLocally(username, avatarIndex);
-                    TransitionToHome();
-                }
-                else
-                {
-                    Debug.Log("[Firebase DB] New Google account — profile setup required once.");
-                    ShowProfileSetupForNewUser(snapshot);
-                }
+                RefreshUidDisplays();
+                if (PlayWithFriendsManager.Instance != null)
+                    PlayWithFriendsManager.Instance.DisplayMyID();
             });
+
+            if (snapshot != null && TryReadCompleteProfile(snapshot, out string username, out int avatarIndex))
+            {
+                Debug.Log($"[Firestore] Existing profile found for user: {username}");
+                CacheProfileLocally(username, avatarIndex);
+                TransitionToHome();
+                return;
+            }
+
+            // Cloud miss (new Auth uid / permission blip) but this device already finished setup.
+            if (TryReadCompleteLocalProfile(out string localName, out int localAvatar))
+            {
+                Debug.Log($"[Profile] Cloud profile missing for {userId}; restoring local profile '{localName}' and re-syncing.");
+                CacheProfileLocally(localName, localAvatar);
+                ResyncLocalProfileToCloud(userId, localName, localAvatar);
+                TransitionToHome();
+                return;
+            }
+
+            if (snapshot == null)
+                Debug.LogWarning("[Firestore] No cloud profile yet (missing doc or rules not published). Using local setup.");
+            else
+                Debug.Log("[Firestore] New account — profile setup required once.");
+
+            ShowProfileSetupForNewUser(snapshot);
+        });
     }
 
-    void ShowProfileSetupForNewUser(DataSnapshot snapshot)
+    bool TryReadCompleteLocalProfile(out string username, out int avatarIndex)
+    {
+        username = PlayerPrefs.GetString(PREFS_USERNAME, string.Empty).Trim();
+        avatarIndex = PlayerPrefs.GetInt(PREFS_AVATAR_INDEX, -1);
+
+        if (!IsValidUsername(username, out _))
+            return false;
+        if (profileSprites == null || avatarIndex < 0 || avatarIndex >= profileSprites.Length)
+            return false;
+        return true;
+    }
+
+    void ResyncLocalProfileToCloud(string userId, string username, int avatarIndex)
+    {
+        if (string.IsNullOrEmpty(userId)) return;
+        if (FirebaseAuth.DefaultInstance?.CurrentUser == null) return;
+
+        var profileData = new Dictionary<string, object>
+        {
+            { FirestoreUsersService.FieldUsername, username },
+            { FirestoreUsersService.FieldAvatarId, avatarIndex },
+            { FirestoreUsersService.FieldIsBot, false },
+            { FirestoreUsersService.FieldIsActiveNow, true }
+        };
+
+        FirestoreUsersService.MergeUser(userId, profileData, ok =>
+        {
+            if (ok)
+                Debug.Log($"[Firestore] Re-synced local profile to users/{userId}");
+        });
+    }
+
+    void ShowProfileSetupForNewUser(DocumentSnapshot snapshot)
     {
         ShowProfileSetup(false);
         PrefillProfileSetupFromSnapshot(snapshot);
@@ -339,7 +446,7 @@ public class PlayerProfileManager : MonoBehaviour
         PlayerPrefs.Save();
     }
 
-    bool TryReadCompleteProfile(DataSnapshot snapshot, out string username, out int avatarIndex)
+    bool TryReadCompleteProfile(DocumentSnapshot snapshot, out string username, out int avatarIndex)
     {
         username = null;
         avatarIndex = -1;
@@ -347,15 +454,13 @@ public class PlayerProfileManager : MonoBehaviour
         if (snapshot == null || !snapshot.Exists)
             return false;
 
-        if (!snapshot.HasChild("username") || !snapshot.HasChild("avatarIndex"))
+        username = FirestoreUsersService.ResolveUsername(snapshot)?.Trim();
+        // Real player docs must have an explicit username field (doc id is the Auth UID).
+        if (!snapshot.ContainsField(FirestoreUsersService.FieldUsername)
+            || !IsValidUsername(username, out _))
             return false;
 
-        username = snapshot.Child("username").Value?.ToString()?.Trim();
-        if (!IsValidUsername(username, out _))
-            return false;
-
-        string avatarStr = snapshot.Child("avatarIndex").Value?.ToString();
-        if (!int.TryParse(avatarStr, out avatarIndex))
+        if (!FirestoreUsersService.TryGetAvatarId(snapshot, out avatarIndex))
             return false;
 
         if (profileSprites == null || avatarIndex < 0 || avatarIndex >= profileSprites.Length)
@@ -367,41 +472,27 @@ public class PlayerProfileManager : MonoBehaviour
     [ContextMenu("Dev: Clear All Firebase Users")]
     public void DevClearAllFirebaseUsers()
     {
-        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
-            .Child("users").RemoveValueAsync().ContinueWithOnMainThread(task =>
-            {
-                if (task.IsFaulted)
-                    Debug.LogError("[Firebase DB] Failed to clear users: " + task.Exception);
-                else
-                    Debug.Log("[Firebase DB] All user profiles removed from database.");
-            });
+        Debug.LogWarning("[Firestore] Dev clear-all-users is not supported as a single wipe. Delete docs in the Firebase console.");
     }
 
-    void PrefillProfileSetupFromSnapshot(DataSnapshot snapshot)
+    void PrefillProfileSetupFromSnapshot(DocumentSnapshot snapshot)
     {
         if (snapshot == null || !snapshot.Exists)
             return;
 
-        if (snapshot.HasChild("username"))
+        string username = FirestoreUsersService.ResolveUsername(snapshot);
+        if (IsValidUsername(username, out _))
         {
-            string username = snapshot.Child("username").Value?.ToString();
-            if (IsValidUsername(username, out _))
-            {
-                if (inputPlayerName != null)
-                    inputPlayerName.text = username.Trim();
-            }
+            if (inputPlayerName != null)
+                inputPlayerName.text = username.Trim();
         }
 
-        if (snapshot.HasChild("avatarIndex"))
+        if (FirestoreUsersService.TryGetAvatarId(snapshot, out int avatarIndex)
+            && profileSprites != null
+            && avatarIndex >= 0
+            && avatarIndex < profileSprites.Length)
         {
-            string avatarStr = snapshot.Child("avatarIndex").Value?.ToString();
-            if (int.TryParse(avatarStr, out int avatarIndex)
-                && profileSprites != null
-                && avatarIndex >= 0
-                && avatarIndex < profileSprites.Length)
-            {
-                SelectAvatar(avatarIndex);
-            }
+            SelectAvatar(avatarIndex);
         }
     }
 
@@ -459,6 +550,9 @@ public class PlayerProfileManager : MonoBehaviour
             cg.interactable = true;
             cg.blocksRaycasts = true;
         }
+
+        EnsureProfileSetupErrorText();
+        ClearProfileSetupError();
     }
 
     public static bool IsValidUsername(string username, out string error)
@@ -466,7 +560,7 @@ public class PlayerProfileManager : MonoBehaviour
         error = null;
         if (string.IsNullOrWhiteSpace(username))
         {
-            error = "Name cannot be empty.";
+            error = "Please enter a username.";
             return false;
         }
 
@@ -550,10 +644,7 @@ public class PlayerProfileManager : MonoBehaviour
             return;
         }
 
-        FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
-            .Child("users").Child(uid)
-            .RemoveValueAsync()
-            .ContinueWithOnMainThread(_ => onDone?.Invoke());
+        FirestoreUsersService.DeleteUser(uid, _ => onDone?.Invoke());
     }
 
     void AttemptFirebaseAccountDelete(FirebaseUser user, bool alreadyReauthed, System.Action<bool, string> onComplete)
@@ -604,6 +695,7 @@ public class PlayerProfileManager : MonoBehaviour
 
     void ReauthenticateGoogleUser(FirebaseUser user, System.Action<bool> onDone)
     {
+        // const string webClientId = "42510352079-sjbojvc7ho51477f16hr7vd6catvlscj.apps.googleusercontent.com";
         const string webClientId = "391594214961-sl1o3653ias0johhdv653ndgg0gjfhtn.apps.googleusercontent.com";
         var config = new GoogleSignInConfiguration
         {
@@ -659,36 +751,37 @@ public class PlayerProfileManager : MonoBehaviour
         PlayerPrefs.SetInt(PREFS_AVATAR_INDEX, avatarIndex);
         PlayerPrefs.Save();
 
-        if (string.IsNullOrEmpty(userId))
+        bool hasAuth = Firebase.Auth.FirebaseAuth.DefaultInstance?.CurrentUser != null;
+        if (string.IsNullOrEmpty(userId) || !hasAuth)
         {
+            if (!hasAuth)
+                Debug.LogWarning("[Profile] No Firebase Auth session — saved locally only.");
             UpdateProfileUI();
             FinishProfileSave();
             return;
         }
 
-        var userRef = FirebaseDatabase.GetInstance(FirebaseDatabaseUrl).RootReference
-            .Child("users").Child(userId);
-
         var profileData = new Dictionary<string, object>
         {
-            { "username", username },
-            { "avatarIndex", avatarIndex }
+            { FirestoreUsersService.FieldUsername, username },
+            { FirestoreUsersService.FieldAvatarId, avatarIndex },
+            { FirestoreUsersService.FieldIsBot, false },
+            { FirestoreUsersService.FieldIsActiveNow, true }
         };
 
-        userRef.UpdateChildrenAsync(profileData).ContinueWithOnMainThread(task =>
+        // Only stamp createdAt on first-time profile setup, not on later edits.
+        if (!_isEditingExistingProfile)
+            profileData[FirestoreUsersService.FieldCreatedAt] = FieldValue.ServerTimestamp;
+
+        FirestoreUsersService.MergeUser(userId, profileData, ok =>
         {
-            if (task.IsCompleted && !task.IsFaulted)
-            {
-                Debug.Log("Profile saved to Firebase.");
-                UpdateProfileUI();
-                FinishProfileSave();
-            }
+            if (ok)
+                Debug.Log($"[Firestore] Profile saved under users/{userId} (username={username}, avatar_id={avatarIndex}).");
             else
-            {
-                Debug.LogError("Failed to save profile: " + task.Exception);
-                UpdateProfileUI();
-                FinishProfileSave();
-            }
+                Debug.LogWarning("[Profile] Cloud save skipped/failed — continuing with local profile. Publish firestore.rules if this persists.");
+
+            UpdateProfileUI();
+            FinishProfileSave();
         });
     }
 
@@ -697,7 +790,7 @@ public class PlayerProfileManager : MonoBehaviour
         if (_isEditingExistingProfile)
             TransitionEditComplete();
         else
-            TransitionSetupToHome();
+            TransitionToHome();
     }
 
     public void UpdateProfileUI()
@@ -739,6 +832,7 @@ public class PlayerProfileManager : MonoBehaviour
             PhotonNetwork.NickName = username;
 
         PublishAvatarToNetwork(avatarIndex);
+        SyncProfilePanelIdentity();
 
         if (!preserveManualProfileLayout)
             RefreshUidDisplays();
@@ -886,38 +980,8 @@ public class PlayerProfileManager : MonoBehaviour
 
     private void TransitionSetupToHome()
     {
-        GoogleLogin.NotifyLoginFlowComplete();
-        UpdateProfileUI();
-
-        if (GoogleLogin.Instance != null && GoogleLogin.Instance.loginPanel != null)
-            GoogleLogin.Instance.loginPanel.SetActive(false);
-
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.UpdateUIState(true);
-
-        if (panelProfileSetup != null)
-        {
-            UnityEngine.CanvasGroup setupCG = panelProfileSetup.GetComponent<UnityEngine.CanvasGroup>();
-            if (setupCG != null)
-            {
-                setupCG.DOFade(0f, 0.4f).OnComplete(() => panelProfileSetup.SetActive(false));
-            }
-            else
-            {
-                panelProfileSetup.SetActive(false);
-            }
-        }
-
-        if (NetworkManager.Instance != null)
-            NetworkManager.Instance.EndLoginTransitionLoading();
-
-        WireHomeProfileAvatarClick();
-
-        if (PlayWithFriendsManager.Instance != null)
-            PlayWithFriendsManager.Instance.EnsureFriendServicesStarted();
-
-        if (PlayerProfileSync.Instance != null)
-            PlayerProfileSync.Instance.UpdateAllNames();
+        // Keep as a thin wrapper — new-profile save must open Home the same way as returning users.
+        TransitionToHome();
     }
 
     public void OpenPlayerProfile()
@@ -944,6 +1008,7 @@ public class PlayerProfileManager : MonoBehaviour
             cg.blocksRaycasts = true;
         }
 
+        SyncProfilePanelIdentity();
         panelPlayerProfile.SetActive(true);
         panelPlayerProfile.transform.SetAsLastSibling();
     }

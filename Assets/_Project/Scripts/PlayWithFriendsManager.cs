@@ -8524,8 +8524,15 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public bool IsOnlineMode => _onlineMode;
 
     [Header("Live Player List UI")]
+    // UNITY EDITOR: set BOTH arrays size to 5 (0-3 chairs, 4 = Spectate)
     public TMP_Text[] playerSlotsText;
     public UnityEngine.UI.Image[] playerSlotsAvatar;
+
+    const int PlayingSeatCount = 4;
+    const int TotalSeatSlots = 5;
+    const int SpectateSeatIndex = 4;
+    const string SeatMapPropKey = "SeatMap";
+    bool _seatClickHandlersWired;
 
     [Header("Room Creation / PIN Display")]
     public GameObject createRoomButton;
@@ -8539,6 +8546,12 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     [Header("Game Table UI")]
     public GameObject homeMenuPanel;
     public GameObject gameTablePanel;
+
+    [Header("Card Back Styles (Inventory Classic / Modern)")]
+    [Tooltip("Red classic card back — used when inventory Classic is equipped.")]
+    public Sprite classicCardBackSprite;
+    [Tooltip("Blue modern card back — used when inventory Modern is equipped.")]
+    public Sprite modernCardBackSprite;
 
     [Header("Friends UI Slots")]
     public TMP_Text myUserIdText;
@@ -8557,6 +8570,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
     private const string FriendsPrefsKey = "SavedFriendsList";
     private const string FriendNamesPrefsKey = "SavedFriendsNames";
+    // Old Firebase RTDB (mindi-kot) — kept for rollback:
+    // private const string FirebaseDatabaseUrl = "https://dehla-pakad-mindi-kot-c0645-default-rtdb.firebaseio.com/";
     private const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
     public List<string> myFriends = new List<string>();
     readonly Dictionary<string, string> friendDisplayNames = new Dictionary<string, string>();
@@ -8605,6 +8620,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         _pendingSeatLobbyOpen = false;
         _creatingPrivateRoom = false;
         SuppressSeatLobbyOnJoin = false;
+
+        if (ModeManager.Instance != null)
+            ModeManager.Instance.EndFriendsRoomCreationFlow();
 
         if (NetworkManager.Instance != null)
         {
@@ -8954,6 +8972,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (errorText != null) errorText.gameObject.SetActive(false);
         HideClientWaitingPresentation();
         if (includeBotsButton != null) includeBotsButton.SetActive(false);
+        EnsureLobbyChrome();
 
         if (_onlineMode)
         {
@@ -9120,14 +9139,154 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         string newPin = GenerateRoomPin();
         _creatingPrivateRoom = true;
 
+        int[] initialSeats = CreateEmptySeatMap();
         RoomOptions roomOptions = new RoomOptions
         {
-            MaxPlayers = 4, IsVisible = false, IsOpen = true, PublishUserId = true
+            MaxPlayers = TotalSeatSlots,
+            IsVisible = false,
+            IsOpen = true,
+            PublishUserId = true,
+            CustomRoomProperties = new ExitGames.Client.Photon.Hashtable { { SeatMapPropKey, initialSeats } }
         };
         PhotonNetwork.CreateRoom(newPin, roomOptions);
     }
 
     static string GenerateRoomPin() => UnityEngine.Random.Range(10000, 100000).ToString();
+
+    static int[] CreateEmptySeatMap() => new int[TotalSeatSlots] { -1, -1, -1, -1, -1 };
+
+    static int[] CloneSeatMap(int[] source)
+    {
+        int[] copy = CreateEmptySeatMap();
+        if (source == null) return copy;
+        int len = Mathf.Min(copy.Length, source.Length);
+        for (int i = 0; i < len; i++) copy[i] = source[i];
+        return copy;
+    }
+
+    static bool TryGetSeatMap(out int[] seatMap)
+    {
+        seatMap = null;
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return false;
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(SeatMapPropKey, out object mapObj) || mapObj == null)
+            return false;
+        if (mapObj is int[] arr)
+        {
+            seatMap = CloneSeatMap(arr);
+            return true;
+        }
+        return false;
+    }
+
+    void EnsureSeatMapExists()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
+        if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(SeatMapPropKey)) return;
+        if (!PhotonNetwork.IsMasterClient) return;
+        PhotonNetwork.CurrentRoom.SetCustomProperties(
+            new ExitGames.Client.Photon.Hashtable { { SeatMapPropKey, CreateEmptySeatMap() } });
+    }
+
+    void TryAutoSitLocalPlayer()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.LocalPlayer == null) return;
+        EnsureSeatMapExists();
+        if (!TryGetSeatMap(out int[] seatMap)) return;
+
+        int myId = PhotonNetwork.LocalPlayer.ActorNumber;
+        for (int i = 0; i < seatMap.Length; i++)
+        {
+            if (seatMap[i] == myId) return;
+        }
+
+        for (int i = 0; i < seatMap.Length; i++)
+        {
+            if (seatMap[i] != -1) continue;
+            seatMap[i] = myId;
+            PhotonNetwork.CurrentRoom.SetCustomProperties(
+                new ExitGames.Client.Photon.Hashtable { { SeatMapPropKey, seatMap } });
+            return;
+        }
+    }
+
+    public void OnClick_ChangeSeat(int targetSeatIndex)
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.LocalPlayer == null) return;
+        if (targetSeatIndex < 0 || targetSeatIndex >= TotalSeatSlots) return;
+        if (IsFriendsMatchStarted()) return;
+
+        EnsureSeatMapExists();
+        if (!TryGetSeatMap(out int[] currentSeats)) return;
+        if (currentSeats[targetSeatIndex] != -1) return;
+
+        int myActorNumber = PhotonNetwork.LocalPlayer.ActorNumber;
+        for (int i = 0; i < currentSeats.Length; i++)
+        {
+            if (currentSeats[i] == myActorNumber)
+                currentSeats[i] = -1;
+        }
+
+        currentSeats[targetSeatIndex] = myActorNumber;
+        PhotonNetwork.CurrentRoom.SetCustomProperties(
+            new ExitGames.Client.Photon.Hashtable { { SeatMapPropKey, currentSeats } });
+    }
+
+    void EnsureSeatClickHandlers()
+    {
+        if (_seatClickHandlersWired) return;
+        _seatClickHandlersWired = true;
+
+        for (int i = 0; i < TotalSeatSlots; i++)
+        {
+            Transform chair = FindSeatTransform(i);
+            if (chair == null) continue;
+
+            Button btn = chair.GetComponent<Button>();
+            if (btn == null) btn = chair.gameObject.AddComponent<Button>();
+
+            Image img = chair.GetComponent<Image>();
+            if (img != null)
+            {
+                img.raycastTarget = true;
+                if (btn.targetGraphic == null) btn.targetGraphic = img;
+            }
+
+            int seatIndex = i;
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(() => OnClick_ChangeSeat(seatIndex));
+            btn.transition = Selectable.Transition.None;
+        }
+    }
+
+    Transform FindSeatTransform(int seatIndex)
+    {
+        string[] names = seatIndex == SpectateSeatIndex
+            ? new[] { "Chair_4", "Spectate", "SpectateSeat", "Chair_Spectate" }
+            : new[] { "Chair_" + seatIndex };
+
+        foreach (string name in names)
+        {
+            Transform found = transform.Find(name);
+            if (found != null) return found;
+            foreach (Transform t in GetComponentsInChildren<Transform>(true))
+            {
+                if (t != null && t.name == name) return t;
+            }
+        }
+        return null;
+    }
+
+    static int CountPlayingSeats(int[] seatMap)
+    {
+        if (seatMap == null) return 0;
+        int count = 0;
+        int limit = Mathf.Min(PlayingSeatCount, seatMap.Length);
+        for (int i = 0; i < limit; i++)
+        {
+            if (seatMap[i] != -1) count++;
+        }
+        return count;
+    }
 
     IEnumerator WaitAndCreatePrivateRoomRoutine()
     {
@@ -9407,6 +9566,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         }
 
         _creatingPrivateRoom = false; _createRoomRetries = 0; _pendingSeatLobbyOpen = false;
+        if (ModeManager.Instance != null)
+        {
+            ModeManager.Instance.EndFriendsRoomCreationFlow();
+            ModeManager.Instance.ResetStartGuard();
+        }
         if (NetworkManager.Instance != null) { NetworkManager.Instance.HideLoadingInstant(); NetworkManager.Instance.ForceClearBlackOverlay(); }
         if (ModeManager.Instance != null) ModeManager.Instance.ShowModesScreenOnly();
         ShowUIError("Could not create room. Please try again.");
@@ -9434,6 +9598,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (isPrivateFriendsRoom)
         {
             _onlineMode = false; _previewBotsInOnlineLobby = false;
+            EnsureSeatMapExists();
+            TryAutoSitLocalPlayer();
             if (SuppressSeatLobbyOnJoin && PhotonNetwork.IsMasterClient && !_pendingSeatLobbyOpen)
             {
                 TrySendPendingInvite(); RefreshRoomIdPlaque(); return;
@@ -9621,6 +9787,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (errorText != null) errorText.gameObject.SetActive(false);
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("BotsIncluded", out object botsObj) && botsObj is bool botsObjVal) ApplyBotsIncludedState(botsObjVal); else ApplyBotsIncludedState(false);
         UpdatePlayerListUI(); EnsureLobbyInviteButton(true); SyncRoomLobbyUIForRole(); BeginLobbyPlayerListRefresh();
+        EnsureSeatClickHandlers();
+        EnsureLobbyChrome();
         if (NetworkManager.Instance != null) NetworkManager.Instance.HideLoadingInstant();
     }
 
@@ -9637,6 +9805,85 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         areBotsIncluded = included;
         if (includeBotsBtnText != null) includeBotsBtnText.text = areBotsIncluded ? "Remove Bots" : "Include Bots";
+        EnsureIncludeBotsBackground();
+    }
+
+    void EnsureLobbyChrome()
+    {
+        EnsureIncludeBotsBackground();
+        EnsureStartButtonBackground();
+        EnsurePinInputContrast();
+        SetVsDividerVisible(!_onlineMode);
+    }
+
+    void EnsureIncludeBotsBackground()
+    {
+        if (includeBotsButton == null) return;
+
+        Image bg = includeBotsButton.GetComponent<Image>();
+        if (bg != null)
+            bg.color = Color.white;
+
+        if (includeBotsBtnText != null)
+        {
+            includeBotsBtnText.color = Color.white;
+            includeBotsBtnText.fontStyle = FontStyles.Bold;
+        }
+    }
+
+    void EnsureStartButtonBackground()
+    {
+        if (startGameButton == null)
+            UiSafeLookup.TryGet("Btn_StartPrivateGame", out startGameButton);
+        if (startGameButton == null) return;
+
+        Image img = startGameButton.GetComponent<Image>();
+        if (img != null)
+        {
+            if (img.sprite == null)
+            {
+                Transform backBtn = transform.Find("BACK") ?? FindDeepChild(transform, "Btn_Back");
+                if (backBtn != null)
+                {
+                    Image backImg = backBtn.GetComponent<Image>();
+                    if (backImg != null && backImg.sprite != null)
+                    {
+                        img.sprite = backImg.sprite;
+                        img.type = backImg.type;
+                    }
+                }
+            }
+            img.color = Color.white;
+        }
+
+        TMP_Text label = startGameButton.GetComponentInChildren<TMP_Text>(true);
+        if (label != null)
+        {
+            label.color = Color.white;
+            label.fontStyle = FontStyles.Bold;
+        }
+    }
+
+    void EnsurePinInputContrast()
+    {
+        if (pinInputField == null) return;
+
+        Color pinText = new Color(0.12f, 0.06f, 0.02f, 1f);
+        if (pinInputField.textComponent != null)
+        {
+            pinInputField.textComponent.color = pinText;
+            pinInputField.textComponent.fontStyle = FontStyles.Bold;
+        }
+
+        if (pinInputField.placeholder is TMP_Text placeholder)
+            placeholder.color = new Color(0.35f, 0.22f, 0.12f, 0.9f);
+
+        pinInputField.contentType = TMP_InputField.ContentType.IntegerNumber;
+        pinInputField.keyboardType = TouchScreenKeyboardType.NumberPad;
+        pinInputField.characterLimit = 5;
+        pinInputField.shouldHideMobileInput = true;
+        pinInputField.caretColor = pinText;
+        pinInputField.customCaretColor = true;
     }
 
     void UpdatePlayerListUI()
@@ -9645,12 +9892,61 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (_onlineMode && !PhotonNetwork.InRoom) { ShowLocalPlayerInOnlineMatchmaking(); return; }
         if (!PhotonNetwork.InRoom) return;
 
+        bool isPrivateFriendsRoom = !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode;
+
+        if (isPrivateFriendsRoom && TryGetSeatMap(out int[] seatMap))
+        {
+            int displaySlotsFilled = CountPlayingSeats(seatMap);
+            if (areBotsIncluded) displaySlotsFilled = DeckManager.MaxTableSeats;
+
+            RefreshLobbyPlayerCountLabel(displaySlotsFilled, displaySlotsFilled);
+
+            for (int i = 0; i < playerSlotsText.Length; i++)
+            {
+                if (playerSlotsText[i] == null) continue;
+                if (i >= seatMap.Length) break;
+
+                int actorId = seatMap[i];
+                if (actorId != -1)
+                {
+                    Player p = PhotonNetwork.CurrentRoom.GetPlayer(actorId);
+                    if (p != null)
+                    {
+                        bool isRoomHost = p.ActorNumber == GetRoomHostActorNumber();
+                        string hostTag = isRoomHost ? " (Host)" : "";
+                        playerSlotsText[i].text = GetPlayerDisplayName(p) + hostTag;
+                        playerSlotsText[i].color = Color.black;
+                        SetSeatAvatar(i, GetAvatarIndexForPlayer(p), true);
+                    }
+                    else
+                    {
+                        playerSlotsText[i].text = i == SpectateSeatIndex ? "Spectate" : "Waiting for Friend...";
+                        playerSlotsText[i].color = new Color(0f, 0f, 0f, 0.55f);
+                        SetSeatAvatar(i, -1, false);
+                    }
+                }
+                else if (areBotsIncluded && i < PlayingSeatCount)
+                {
+                    playerSlotsText[i].text = "AI Bot";
+                    playerSlotsText[i].color = new Color(0.4f, 1f, 0.4f, 1f);
+                    SetSeatAvatar(i, -1, true);
+                }
+                else
+                {
+                    playerSlotsText[i].text = i == SpectateSeatIndex ? "Spectate" : "Waiting for Friend...";
+                    playerSlotsText[i].color = new Color(0f, 0f, 0f, 0.55f);
+                    SetSeatAvatar(i, -1, false);
+                }
+            }
+            return;
+        }
+
         Player[] currentPlayers = PhotonRoomPlayers.GetSorted();
         int realPlayerCount = currentPlayers.Length;
-        int displaySlotsFilled = realPlayerCount;
-        if (areBotsIncluded || (_onlineMode && _previewBotsInOnlineLobby)) displaySlotsFilled = DeckManager.MaxTableSeats;
+        int displaySlotsFilledOnline = realPlayerCount;
+        if (areBotsIncluded || (_onlineMode && _previewBotsInOnlineLobby)) displaySlotsFilledOnline = DeckManager.MaxTableSeats;
 
-        RefreshLobbyPlayerCountLabel(realPlayerCount, displaySlotsFilled);
+        RefreshLobbyPlayerCountLabel(realPlayerCount, displaySlotsFilledOnline);
 
         for (int i = 0; i < playerSlotsText.Length; i++)
         {
@@ -9673,7 +9969,9 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             }
             else
             {
-                playerSlotsText[i].text = _onlineMode ? "Waiting..." : "Waiting for Friend...";
+                playerSlotsText[i].text = _onlineMode
+                    ? "Waiting..."
+                    : (i == SpectateSeatIndex ? "Spectate" : "Waiting for Friend...");
                 playerSlotsText[i].color = new Color(0f, 0f, 0f, 0.55f);
                 SetSeatAvatar(i, -1, false);
             }
@@ -9764,7 +10062,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         for (int i = 0; i < playerSlotsText.Length; i++)
         {
             if (playerSlotsText[i] == null) continue;
-            playerSlotsText[i].text = "Waiting for Friend...";
+            playerSlotsText[i].text = i == SpectateSeatIndex ? "Spectate" : "Waiting for Friend...";
             playerSlotsText[i].color = new Color(0f, 0f, 0f, 0.55f);
         }
     }
@@ -9778,7 +10076,14 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.IsMasterClient) { if (startGameButton != null) startGameButton.SetActive(false); return; }
         if (startGameButton == null) return;
         startGameButton.SetActive(true);
-        bool canStart = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats || areBotsIncluded;
+
+        bool canStart;
+        if (TryGetSeatMap(out int[] seatMap))
+            canStart = CountPlayingSeats(seatMap) == PlayingSeatCount || areBotsIncluded;
+        else
+            canStart = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats || areBotsIncluded;
+
+        EnsureStartButtonBackground();
         SetStartButtonInteractable(canStart);
     }
 
@@ -9909,6 +10214,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     void PresentSeatLobbyUI()
     {
         _pendingSeatLobbyOpen = false;
+        // Show lobby first so Modes never flashes between loading hide and lobby open.
+        OnSeatPanelOpened();
         if (NetworkManager.Instance != null)
         {
             NetworkManager.Instance.EndProtectedLoading(NetworkManager.ProtectedLoadingFlow.FriendsCreatingRoom);
@@ -9916,7 +10223,11 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             NetworkManager.Instance.HideLoadingInstant();
             NetworkManager.Instance.ResetRoomLobbyCanvasGroup();
         }
-        OnSeatPanelOpened();
+        if (ModeManager.Instance != null)
+        {
+            ModeManager.Instance.EndFriendsRoomCreationFlow();
+            ModeManager.Instance.ResetStartGuard();
+        }
     }
 
     public void OnSeatPanelOpened()
@@ -9928,11 +10239,13 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         ClearPlayerListUI();
         if (startGameButton == null) UiSafeLookup.TryGet("Btn_StartPrivateGame", out startGameButton);
         if (startGameButton != null) { startGameButton.SetActive(true); SetStartButtonInteractable(false); }
+        EnsureLobbyChrome();
 
         _onlineMode = false; ApplyModeControls(false); SetSeatPanelTitle("SELECT CHAIRS");
         if (pinCreationPanel != null) { pinCreationPanel.SetActive(true); pinCreationPanel.transform.SetAsLastSibling(); }
         if (!PhotonNetwork.InRoom) return;
         UpdatePlayerListUI(); StartRoomIdPlaqueWatch(); CheckPlayerCountAndToggleStart(); EnsureLobbyInviteButton(true);
+        EnsureSeatClickHandlers();
     }
 
     public void ShowOnlineMatchmakingLobby()
@@ -9995,6 +10308,37 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (online && includeBotsButton != null) includeBotsButton.SetActive(false);
         if (matchmakingTimerPlaque != null) matchmakingTimerPlaque.SetActive(online);
         if (matchmakingTimerText != null) matchmakingTimerText.gameObject.SetActive(online);
+
+        // Spectate seat UI is friends-only — hide for public online matchmaking.
+        SetSpectatePanelVisible(!online);
+        // VS divider is friends 2v2 only — hide for online (1v1v1v1 chairs).
+        SetVsDividerVisible(!online);
+    }
+
+    void SetSpectatePanelVisible(bool visible)
+    {
+        Transform spectate = FindDeepChild(transform, "SpectatePanel");
+        if (spectate != null && spectate.gameObject.activeSelf != visible)
+            spectate.gameObject.SetActive(visible);
+    }
+
+    void SetVsDividerVisible(bool visible)
+    {
+        Transform vs = FindDeepChild(transform, "VS");
+        if (vs != null && vs.gameObject.activeSelf != visible)
+            vs.gameObject.SetActive(visible);
+    }
+
+    static Transform FindDeepChild(Transform parent, string name)
+    {
+        if (parent == null) return null;
+        if (parent.name == name) return parent;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            Transform found = FindDeepChild(parent.GetChild(i), name);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     void SetSeatPanelTitle(string text)
@@ -10113,6 +10457,8 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
         if (isPrivateFriendsRoom)
         {
             _onlineMode = false; _previewBotsInOnlineLobby = false;
+            EnsureSeatMapExists();
+            TryAutoSitLocalPlayer();
             if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats && areBotsIncluded)
             {
                 ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable { { "BotsIncluded", false } };
@@ -10129,7 +10475,29 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     {
         if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
         bool isPrivateFriendsRoom = !PhotonNetwork.CurrentRoom.IsVisible && !PhotonNetwork.OfflineMode;
-        if (isPrivateFriendsRoom) { _onlineMode = false; UpdatePlayerListUI(); CheckPlayerCountAndToggleStart(); return; }
+        if (isPrivateFriendsRoom)
+        {
+            if (PhotonNetwork.IsMasterClient && otherPlayer != null && TryGetSeatMap(out int[] seatMap))
+            {
+                bool changed = false;
+                for (int i = 0; i < seatMap.Length; i++)
+                {
+                    if (seatMap[i] != otherPlayer.ActorNumber) continue;
+                    seatMap[i] = -1;
+                    changed = true;
+                }
+                if (changed)
+                {
+                    PhotonNetwork.CurrentRoom.SetCustomProperties(
+                        new ExitGames.Client.Photon.Hashtable { { SeatMapPropKey, seatMap } });
+                }
+            }
+
+            _onlineMode = false;
+            UpdatePlayerListUI();
+            CheckPlayerCountAndToggleStart();
+            return;
+        }
         if (_onlineMode) UpdatePlayerListUI();
     }
 
@@ -10188,7 +10556,13 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
     public void OnHostStartFriendsGame()
     {
         if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return;
-        bool full = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats || areBotsIncluded;
+
+        bool full;
+        if (TryGetSeatMap(out int[] seatMap))
+            full = CountPlayingSeats(seatMap) == PlayingSeatCount || areBotsIncluded;
+        else
+            full = PhotonNetwork.CurrentRoom.PlayerCount == DeckManager.MaxTableSeats || areBotsIncluded;
+
         if (!full) { ShowUIError("Need 4 players to start!"); return; }
         ConfirmHostSeatStart();
         FinalStartWithSelectedModes();
@@ -10215,20 +10589,40 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         customRoomProperties["ModesLocked"] = true; customRoomProperties["GS"] = true; customRoomProperties["BotsIncluded"] = areBotsIncluded; customRoomProperties["HAN"] = PhotonNetwork.MasterClient.ActorNumber;
 
-        int realPlayers = PhotonNetwork.CurrentRoom.PlayerCount;
-        int botsNeeded = DeckManager.MaxTableSeats - realPlayers;
+        List<int> playingActors = new List<int>(PlayingSeatCount);
+        int spectatorActor = -1;
+        if (TryGetSeatMap(out int[] seatMap))
+        {
+            for (int i = 0; i < PlayingSeatCount && i < seatMap.Length; i++)
+            {
+                if (seatMap[i] != -1) playingActors.Add(seatMap[i]);
+            }
+            if (seatMap.Length > SpectateSeatIndex) spectatorActor = seatMap[SpectateSeatIndex];
+        }
+        else
+        {
+            Player[] sortedPlayers = PhotonRoomPlayers.GetSorted();
+            for (int i = 0; i < sortedPlayers.Length && playingActors.Count < PlayingSeatCount; i++)
+            {
+                if (sortedPlayers[i] != null) playingActors.Add(sortedPlayers[i].ActorNumber);
+            }
+        }
+
+        int botsNeeded = DeckManager.MaxTableSeats - playingActors.Count;
         DeckManager.botActorNumbers.Clear();
         for (int i = 0; i < botsNeeded; i++) DeckManager.botActorNumbers.Add(100 + i);
 
         int deckSeed = UnityEngine.Random.Range(1, int.MaxValue);
         customRoomProperties["DS"] = deckSeed; DeckManager.SetSharedDeckSeed(deckSeed); customRoomProperties["BS"] = DeckManager.botActorNumbers.ToArray();
 
-        int[] realActorNumbers = new int[realPlayers];
-        Player[] sortedPlayers = PhotonRoomPlayers.GetSorted();
-        for (int i = 0; i < realPlayers && i < sortedPlayers.Length; i++) realActorNumbers[i] = sortedPlayers[i].ActorNumber;
-        customRoomProperties["RPA"] = realActorNumbers;
+        customRoomProperties["RPA"] = playingActors.ToArray();
+        customRoomProperties["SpectatorActor"] = spectatorActor;
 
-        if (DeckManager.Instance != null) customRoomProperties["SMP"] = DeckManager.Instance.BuildActiveSeatList().ToArray();
+        var activeSeats = new List<int>(DeckManager.MaxTableSeats);
+        activeSeats.AddRange(playingActors);
+        for (int i = 0; i < DeckManager.botActorNumbers.Count && activeSeats.Count < DeckManager.MaxTableSeats; i++)
+            activeSeats.Add(DeckManager.botActorNumbers[i]);
+        customRoomProperties["SMP"] = activeSeats.ToArray();
 
         PhotonNetwork.CurrentRoom.SetCustomProperties(customRoomProperties);
         PhotonNetwork.CurrentRoom.IsOpen = false; PhotonNetwork.CurrentRoom.IsVisible = false;
@@ -10277,9 +10671,18 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
             }
             else
             {
-                int realPlayerCount = PhotonNetwork.CurrentRoom.PlayerCount;
-                int botsNeeded = DeckManager.MaxTableSeats - realPlayerCount;
-                for (int i = 0; i < botsNeeded; i++) DeckManager.botActorNumbers.Add(100 + i);
+                if (TryGetSeatMap(out int[] seatMap))
+                {
+                    int playingCount = CountPlayingSeats(seatMap);
+                    int botsNeeded = DeckManager.MaxTableSeats - playingCount;
+                    for (int i = 0; i < botsNeeded; i++) DeckManager.botActorNumbers.Add(100 + i);
+                }
+                else
+                {
+                    int realPlayerCount = PhotonNetwork.CurrentRoom.PlayerCount;
+                    int botsNeeded = DeckManager.MaxTableSeats - realPlayerCount;
+                    for (int i = 0; i < botsNeeded; i++) DeckManager.botActorNumbers.Add(100 + i);
+                }
             }
         }
         else
@@ -10324,6 +10727,7 @@ public class PlayWithFriendsManager : MonoBehaviourPunCallbacks
 
         if (propertiesThatChanged.ContainsKey("ModesLocked") && propertiesThatChanged["ModesLocked"] is bool locked && locked) { ExecuteFriendsGameStart(); return; }
         if (propertiesThatChanged.ContainsKey("Disbanded") && propertiesThatChanged["Disbanded"] is bool disbanded && disbanded) { HandleRoomDisbandedByHost(); return; }
+        if (propertiesThatChanged.ContainsKey(SeatMapPropKey)) { UpdatePlayerListUI(); CheckPlayerCountAndToggleStart(); return; }
 
         if (propertiesThatChanged.ContainsKey("HAN") || propertiesThatChanged.ContainsKey("BS") || propertiesThatChanged.ContainsKey("BotsIncluded") || propertiesThatChanged.ContainsKey("DS"))
         {

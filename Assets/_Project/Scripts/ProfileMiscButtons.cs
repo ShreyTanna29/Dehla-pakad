@@ -13,9 +13,17 @@ public class ProfileMiscButtons : MonoBehaviour
     [Tooltip("When enabled, tab colors and button graphics set in the Editor are never changed at runtime.")]
     [SerializeField] private bool preserveManualAppearance = true;
 
-    bool _wired;
+    static readonly Color TrophyTabSelected = new Color(0xFF / 255f, 0x91 / 255f, 0x5C / 255f, 1f);   // #FF915C
+    static readonly Color TrophyTabUnselected = new Color(0xFE / 255f, 0xDE / 255f, 0xDE / 255f, 1f); // #FEDEDE
 
-    void OnEnable() { Wire(); }
+    bool _wired;
+    bool _worldTabSelected = true;
+
+    void OnEnable()
+    {
+        Wire();
+        ApplyTrophyTabColors(_worldTabSelected);
+    }
 
     void Wire()
     {
@@ -42,19 +50,17 @@ public class ProfileMiscButtons : MonoBehaviour
 
     void SelectTrophyTab(bool world)
     {
-        if (!preserveManualAppearance)
-        {
-            Image wImg = Find<Image>("Tab_World");
-            Image cImg = Find<Image>("Tab_Country");
-            TMP_Text wL = FindLabel("Tab_World");
-            TMP_Text cL = FindLabel("Tab_Country");
-            if (wImg != null) wImg.color = world ? Color.white : new Color(1f, 1f, 1f, 0.5f);
-            if (cImg != null) cImg.color = world ? new Color(1f, 1f, 1f, 0.5f) : Color.white;
-            if (wL != null) wL.color = world ? Color.white : new Color(1f, 0.93f, 0.82f, 0.62f);
-            if (cL != null) cL.color = world ? new Color(1f, 0.93f, 0.82f, 0.62f) : Color.white;
-        }
-
+        _worldTabSelected = world;
+        ApplyTrophyTabColors(world);
         ProfileToast.Show(transform, world ? "Showing World rankings" : "Showing Country rankings");
+    }
+
+    void ApplyTrophyTabColors(bool worldSelected)
+    {
+        Image wImg = Find<Image>("Tab_World");
+        Image cImg = Find<Image>("Tab_Country");
+        if (wImg != null) wImg.color = worldSelected ? TrophyTabSelected : TrophyTabUnselected;
+        if (cImg != null) cImg.color = worldSelected ? TrophyTabUnselected : TrophyTabSelected;
     }
 
     void WireDeleteAccount()

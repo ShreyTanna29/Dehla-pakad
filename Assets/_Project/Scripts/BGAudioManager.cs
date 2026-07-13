@@ -13,6 +13,8 @@ public class BGAudioManager : MonoBehaviour
 
     float _maxVolume = 1f;
     bool _pausedForGameplay;
+    bool _pausedBySettings;
+    int _settingsPauseTimeSamples;
     Coroutine _fadeRoutine;
 
     void Awake()
@@ -93,6 +95,100 @@ public class BGAudioManager : MonoBehaviour
     public void FadeOutAndPause() => FadeOutMenuMusic();
 
     public void ResumeAndFadeIn() => OnMenuScreenShown();
+
+    /// <summary>
+    /// Settings music toggle: pause keeps playback position; on resumes from the same point.
+    /// </summary>
+    public void ApplyMusicSettingFromSettings()
+    {
+        if (bgAudioSource == null) return;
+
+        if (!SettingsService.MusicOn)
+        {
+            if (_fadeRoutine != null)
+            {
+                StopCoroutine(_fadeRoutine);
+                _fadeRoutine = null;
+            }
+
+            // Save playhead before pause — Unity 6 AudioResource + UnPause is unreliable alone.
+            try { _settingsPauseTimeSamples = bgAudioSource.timeSamples; }
+            catch (System.Exception) { /* ignore */ }
+
+            bgAudioSource.Pause();
+            _pausedBySettings = true;
+            return;
+        }
+
+        // User turned music ON from Settings — always resume menu BGM (even if a stale
+        // gameplay-pause flag was left set while still on Home/Modes).
+        if (_pausedForGameplay && !_pausedBySettings)
+        {
+            // Still in an active match fade-out: don't restart menu music mid-game.
+            if (!IsLikelyOnMenu())
+                return;
+            _pausedForGameplay = false;
+        }
+
+        ResumeMenuMusicFromSettingsPause();
+    }
+
+    void ResumeMenuMusicFromSettingsPause()
+    {
+        if (bgAudioSource == null) return;
+
+        if (_fadeRoutine != null)
+        {
+            StopCoroutine(_fadeRoutine);
+            _fadeRoutine = null;
+        }
+
+        bgAudioSource.mute = false;
+        float vol = _maxVolume > 0.01f ? _maxVolume : 1f;
+        bgAudioSource.volume = vol;
+
+        // UnPause first (keeps position when it works).
+        bgAudioSource.UnPause();
+
+        if (!bgAudioSource.isPlaying)
+        {
+            // Fallback: Play + restore saved samples (handles Unity Pause/UnPause quirks).
+            bgAudioSource.Play();
+            RestoreSavedTimeSamples();
+        }
+
+        // Final safety: if still silent/not playing, force Play again.
+        if (!bgAudioSource.isPlaying)
+        {
+            bgAudioSource.Stop();
+            bgAudioSource.Play();
+            RestoreSavedTimeSamples();
+        }
+
+        _pausedBySettings = false;
+    }
+
+    void RestoreSavedTimeSamples()
+    {
+        if (bgAudioSource == null || _settingsPauseTimeSamples <= 0) return;
+        try
+        {
+            // clip may be null on Unity 6 AudioResource; timeSamples still works while playing.
+            bgAudioSource.timeSamples = _settingsPauseTimeSamples;
+        }
+        catch (System.Exception)
+        {
+            // Ignore invalid sample seeks on short/unloaded clips.
+        }
+    }
+
+    static bool IsLikelyOnMenu()
+    {
+        // Home settings / modes: game table not the active flow.
+        if (NetworkManager.Instance == null) return true;
+        var table = NetworkManager.Instance.gameTablePanel;
+        return table == null || !table.activeInHierarchy;
+    }
 
     void RestartFade(IEnumerator routine)
     {

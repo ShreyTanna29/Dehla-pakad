@@ -60,6 +60,8 @@ public class FriendsPanelUIController : MonoBehaviour
     static readonly Color DividerColor = new Color(0f, 0f, 0f, 0.28f);
     static readonly Color HighlightLineColor = new Color(1f, 1f, 1f, 0.10f);
 
+    // Old Firebase RTDB (previous project) — kept for rollback:
+    // const string FirebaseDatabaseUrl = "https://dehla-pakad-mindi-kot-c0645-default-rtdb.firebaseio.com/";
     const string FirebaseDatabaseUrl = "https://dehlapakad-c207c-default-rtdb.firebaseio.com/";
 
     PanelTab _activeTab = PanelTab.Friends;

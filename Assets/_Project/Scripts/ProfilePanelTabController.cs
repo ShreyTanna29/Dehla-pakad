@@ -29,11 +29,13 @@ public class ProfilePanelTabController : MonoBehaviour
 
     bool _wired;
     string _current;
+    static TMP_FontAsset _regularFontCache;
 
     void OnEnable()
     {
         Wire();
         ShowTab(string.IsNullOrEmpty(_current) ? defaultTab : _current);
+        ApplySelectiveBoldText();
     }
 
     void Wire()
@@ -61,12 +63,80 @@ public class ProfilePanelTabController : MonoBehaviour
             if (t.label != null)
                 t.label.color = active
                     ? Color.white
-                    : new Color(0.227f, 0.141f, 0.071f, 1f);
+                    : Color.black;
 
             // Keep the authored button/background look when requested, but still enforce the
             // selected-tab label color so every active tab matches the intended white state.
             if (preserveManualNavAppearance)
                 continue;
         }
+    }
+
+    /// <summary>
+    /// Only Side_Name, Synced-with Title, and Email stay bold. Every other profile TMP is forced
+    /// back to normal weight (and off a Bold font asset when one was assigned).
+    /// </summary>
+    void ApplySelectiveBoldText()
+    {
+        TMP_Text[] labels = GetComponentsInChildren<TMP_Text>(true);
+        TMP_FontAsset regular = ResolveRegularFont(labels);
+
+        for (int i = 0; i < labels.Length; i++)
+        {
+            TMP_Text tmp = labels[i];
+            if (tmp == null) continue;
+
+            if (ShouldStayBold(tmp))
+            {
+                tmp.fontStyle = FontStyles.Bold;
+                continue;
+            }
+
+            tmp.fontStyle = FontStyles.Normal;
+            if (regular != null && IsBoldFontAsset(tmp.font))
+                tmp.font = regular;
+        }
+    }
+
+    static bool ShouldStayBold(TMP_Text tmp)
+    {
+        string n = tmp.gameObject.name;
+        if (n == "Side_Name" || n == "Email")
+            return true;
+
+        // "Synced with" label under SyncedWith
+        if (n == "Title" && tmp.transform.parent != null && tmp.transform.parent.name == "SyncedWith")
+            return true;
+
+        return false;
+    }
+
+    static bool IsBoldFontAsset(TMP_FontAsset font)
+    {
+        if (font == null || string.IsNullOrEmpty(font.name)) return false;
+        return font.name.IndexOf("Bold", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    static TMP_FontAsset ResolveRegularFont(TMP_Text[] labels)
+    {
+        if (_regularFontCache != null) return _regularFontCache;
+
+        _regularFontCache = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        if (_regularFontCache != null) return _regularFontCache;
+
+        // Fallback: any authored non-bold body font on this panel (skip display fonts).
+        for (int i = 0; i < labels.Length; i++)
+        {
+            TMP_Text tmp = labels[i];
+            if (tmp == null || tmp.font == null) continue;
+            if (ShouldStayBold(tmp)) continue;
+            if (IsBoldFontAsset(tmp.font)) continue;
+            if (tmp.font.name.IndexOf("BlackOps", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                continue;
+            _regularFontCache = tmp.font;
+            return _regularFontCache;
+        }
+
+        return null;
     }
 }

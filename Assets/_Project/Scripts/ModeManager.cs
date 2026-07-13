@@ -63,15 +63,38 @@ public class ModeManager : MonoBehaviourPunCallbacks
     private bool gameStartInProgress;
     Coroutine _connectionBufferRoutine;
 
+    /// <summary>
+    /// True from Friends Modes Start until the seat lobby is shown (or create is aborted/failed).
+    /// Blocks any path that would flash Modes back over the loading panel.
+    /// </summary>
+    bool _isCreatingFriendsRoom;
+    int _friendsCreateRequestId;
+
+    public bool IsCreatingFriendsRoom => _isCreatingFriendsRoom;
+
     /// <summary>Clears the start guard so a new match can be started after returning home / cancelling.</summary>
     public void ResetStartGuard()
     {
         gameStartInProgress = false;
+        EndFriendsRoomCreationFlow();
         if (_connectionBufferRoutine != null)
         {
             StopCoroutine(_connectionBufferRoutine);
             _connectionBufferRoutine = null;
         }
+    }
+
+    public void BeginFriendsRoomCreationFlow()
+    {
+        _isCreatingFriendsRoom = true;
+        _friendsCreateRequestId++;
+        // Modes must stay hidden under loading until the Friends lobby opens.
+        SetPanelVisible(panelModes, false);
+    }
+
+    public void EndFriendsRoomCreationFlow()
+    {
+        _isCreatingFriendsRoom = false;
     }
 
     public bool IsFriendsConnectionBufferActive() => _connectionBufferRoutine != null;
@@ -657,6 +680,13 @@ public class ModeManager : MonoBehaviourPunCallbacks
     public void ShowModesScreenOnly()
     {
         Debug.Log("[UI] ShowModes called");
+
+        // Friends Start → Loading → Lobby: never flash Modes while room creation is in flight.
+        if (_isCreatingFriendsRoom)
+        {
+            Debug.Log("[UI] ShowModes blocked — friends room creation in progress");
+            return;
+        }
 
         if (NetworkManager.Instance != null)
         {
@@ -1495,22 +1525,42 @@ void ApplyModePanelRules()
         {
             Debug.Log("[Friends] Start clicked — connecting buffer then opening seat lobby");
             SaveSelectedModes();
-            if (gameStartInProgress)
+            if (gameStartInProgress || _isCreatingFriendsRoom)
             {
-                Debug.Log("[GameStart] Duplicate start blocked");
+                Debug.Log("[GameStart] Duplicate friends start blocked");
                 return;
             }
             gameStartInProgress = true;
+            BeginFriendsRoomCreationFlow();
+
             if (NetworkManager.Instance != null)
                 NetworkManager.Instance.BeginProtectedLoading(
                     NetworkManager.ProtectedLoadingFlow.FriendsCreatingRoom,
                     "Creating room...");
+
+            // Eager create often already joined the room before Start — open lobby immediately
+            // instead of waiting 5s while Modes flashes over loading.
+            if (PhotonNetwork.InRoom && PlayWithFriendsManager.Instance != null)
+            {
+                PlayWithFriendsManager.Instance.OpenSeatLobbyWhenReady();
+                return;
+            }
+
+            int requestId = _friendsCreateRequestId;
             StartOnlineConnectionBuffer(() =>
             {
+                if (requestId != _friendsCreateRequestId || !_isCreatingFriendsRoom)
+                {
+                    gameStartInProgress = false;
+                    return;
+                }
                 if (PlayWithFriendsManager.Instance != null)
                     PlayWithFriendsManager.Instance.OpenSeatLobbyWhenReady();
                 else
+                {
+                    EndFriendsRoomCreationFlow();
                     gameStartInProgress = false;
+                }
             }, "Creating room...");
             return;
         }
@@ -1935,11 +1985,17 @@ void ApplyModePanelRules()
             bool rejoining = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs1) && gs1 is bool gsb1 && gsb1;
             if (!rejoining)
             {
-                // Eager invite-room: host must stay on the Modes panel until they tap Play.
+                // Eager invite-room: host stays on Modes until Start — unless Start already began
+                // room-creation loading, in which case Modes must NOT flash over the loading panel.
                 if (PlayWithFriendsManager.Instance != null
                     && PlayWithFriendsManager.Instance.SuppressSeatLobbyOnJoin
                     && PhotonNetwork.IsMasterClient)
                 {
+                    if (_isCreatingFriendsRoom)
+                    {
+                        Debug.Log("[ModeManager] Eager room joined during Start — keep loading, skip Modes.");
+                        yield break;
+                    }
                     Debug.Log("[ModeManager] Eager invite-room — host keeps Modes panel visible.");
                     if (NetworkManager.Instance != null)
                         NetworkManager.Instance.EnsureFriendsModesPanelVisible();

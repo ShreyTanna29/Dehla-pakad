@@ -83,13 +83,26 @@ public class EmojiManager : MonoBehaviourPun
     {
         ResolveSeatEmojiDisplays();
         HideAllSeatEmojis();
+        RefreshSpectatorUi();
+    }
 
+    public void RefreshSpectatorUi()
+    {
+        bool show = !DeckManager.ShouldHideInGameEmoteButtons();
         if (openEmojiButton != null)
-            openEmojiButton.gameObject.SetActive(true);
+            openEmojiButton.gameObject.SetActive(show);
+        else if (UiSafeLookup.TryGet("Button_Emojies", out GameObject emojiBtn) && emojiBtn != null)
+            emojiBtn.SetActive(show);
+
+        if (!show)
+            ClosePanel();
     }
 
     public void OpenPanel()
     {
+        if (DeckManager.ShouldHideInGameEmoteButtons())
+            return;
+
         EnsureRuntimeEmojiPanel();
         EnsureAutoBlocker();
 
@@ -121,6 +134,9 @@ public class EmojiManager : MonoBehaviourPun
     /// <summary>Hook this to each emoji button in the picker (0 = first sprite, etc.).</summary>
     public void SendEmoji(int emojiIndex)
     {
+        if (DeckManager.ShouldHideInGameEmoteButtons())
+            return;
+
         ClosePanel();
 
         if (emojiSprites == null || emojiIndex < 0 || emojiIndex >= emojiSprites.Length)

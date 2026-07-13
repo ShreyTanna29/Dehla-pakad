@@ -70,14 +70,29 @@ public static class SettingsService
     {
         AudioListener.volume = SoundOn ? 1f : 0f;
 
+        // Prefer BGAudioManager so Pause keeps the playhead (resume from same point).
+        if (BGAudioManager.Instance != null)
+        {
+            BGAudioManager.Instance.ApplyMusicSettingFromSettings();
+            return;
+        }
+
         bool musicOn = MusicOn;
         var sources = Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None);
         foreach (var src in sources)
         {
             if (src == null) continue;
-            // Treat looping sources as background music.
-            if (src.loop)
-                src.mute = !musicOn;
+            if (!src.loop) continue;
+            if (musicOn)
+            {
+                src.mute = false;
+                src.UnPause();
+                if (!src.isPlaying) src.Play();
+            }
+            else
+            {
+                src.Pause();
+            }
         }
     }
 

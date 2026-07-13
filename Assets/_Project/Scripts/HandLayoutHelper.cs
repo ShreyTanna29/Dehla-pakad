@@ -115,10 +115,10 @@ public static class HandLayoutHelper
 
     static float ComputeHandSpacing(float fitSpacing, float prefabCardWidth, bool is2Taash = false)
     {
-        float spacingBoost = is2Taash ? 28f : 22f;
-        float preferredMaxSpacing = 4f;
-        float maxOverlap = prefabCardWidth * 0.62f;
-        float minSpacing = -maxOverlap;
-        return Mathf.Clamp(fitSpacing, minSpacing, preferredMaxSpacing) + spacingBoost;
+        // Flat hand (no decorative fan): prefer side-by-side cards.
+        // Only allow light overlap when the full hand cannot fit in the area.
+        float maxGap = is2Taash ? 18f : 22f;
+        float minSpacing = -prefabCardWidth * 0.2f;
+        return Mathf.Clamp(fitSpacing, minSpacing, maxGap);
     }
 }

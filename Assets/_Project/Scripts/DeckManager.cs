@@ -109,9 +109,22 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public static int GetActiveHumanPlayerCount() => PhotonRoomPlayers.CountActiveHumans();
 
-    /// <summary>Real (active) humans in room. Bots are not counted.</summary>
+    /// <summary>Playing humans only (SeatMap chairs 0-3). Spectator seat is not counted.</summary>
     public static int GetRealPlayerCountInRoom()
     {
+        if (IsPrivateFriendsRoom()
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("SeatMap", out object mapObj)
+            && mapObj is int[] seatMap)
+        {
+            int playing = 0;
+            int limit = Mathf.Min(MaxTableSeats, seatMap.Length);
+            for (int i = 0; i < limit; i++)
+            {
+                if (seatMap[i] != -1) playing++;
+            }
+            return playing;
+        }
+
         int count = GetActiveHumanPlayerCount();
         if (count < 1 && PhotonNetwork.InRoom)
             count = 1;
@@ -126,6 +139,33 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public static bool IsPhantomBotActor(int actorNumber) => actorNumber >= PhantomBotActorBase;
 
+    public static bool IsLocalSpectator()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.LocalPlayer == null) return false;
+        int localActor = PhotonNetwork.LocalPlayer.ActorNumber;
+
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("SpectatorActor", out object specObj)
+            && specObj != null && int.TryParse(specObj.ToString(), out int specActor)
+            && specActor == localActor)
+            return true;
+
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("SeatMap", out object mapObj)
+            && mapObj is int[] seatMap && seatMap.Length > MaxTableSeats
+            && seatMap[MaxTableSeats] == localActor)
+            return true;
+
+        return false;
+    }
+
+    /// <summary>Hide voice/emoji buttons for spectators and offline bot matches.</summary>
+    public static bool ShouldHideInGameEmoteButtons()
+    {
+        if (IsLocalSpectator()) return true;
+        if (PhotonNetwork.OfflineMode) return true;
+        if (NetworkManager.Instance != null && NetworkManager.Instance.isPlayBotsMode) return true;
+        return false;
+    }
+
     public List<int> BuildActiveSeatList()
     {
         if (botActorNumbers == null) botActorNumbers = new List<int>();
@@ -133,15 +173,60 @@ public class DeckManager : MonoBehaviourPunCallbacks
         var seats = new List<int>(MaxTableSeats);
         var used = new HashSet<int>();
 
+        // Friends lobby SeatMap: chairs 0-3 only (index 4 = spectate, ignored).
+        if (IsPrivateFriendsRoom()
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("SeatMap", out object mapObj)
+            && mapObj is int[] seatMap)
+        {
+            int botIndex = 0;
+            int limit = Mathf.Min(MaxTableSeats, seatMap.Length);
+            for (int i = 0; i < limit; i++)
+            {
+                int actorId = seatMap[i];
+                if (actorId != -1)
+                {
+                    seats.Add(actorId);
+                    used.Add(actorId);
+                }
+                else if (botIndex < botActorNumbers.Count)
+                {
+                    int botId = botActorNumbers[botIndex++];
+                    seats.Add(botId);
+                    used.Add(botId);
+                }
+                else
+                {
+                    int fallbackBot = PhantomBotActorBase + i;
+                    while (used.Contains(fallbackBot)) fallbackBot++;
+                    seats.Add(fallbackBot);
+                    used.Add(fallbackBot);
+                    if (!botActorNumbers.Contains(fallbackBot))
+                        botActorNumbers.Add(fallbackBot);
+                }
+            }
+
+            while (seats.Count < MaxTableSeats)
+            {
+                int nextBotId = PhantomBotActorBase + seats.Count;
+                while (used.Contains(nextBotId)) nextBotId++;
+                seats.Add(nextBotId);
+                used.Add(nextBotId);
+                if (!botActorNumbers.Contains(nextBotId))
+                    botActorNumbers.Add(nextBotId);
+            }
+
+            Debug.Log($"[MULTIPLAYER SEATS] SeatMap Real={GetRealPlayerCountInRoom()}, Bots={botActorNumbers.Count}, Total={seats.Count}");
+            return seats;
+        }
+
         if (PhotonNetwork.InRoom)
         {
             foreach (Player p in PhotonRoomPlayers.GetSorted())
             {
                 if (p == null || p.IsInactive) continue;
+                if (seats.Count >= MaxTableSeats) break;
                 if (used.Add(p.ActorNumber))
-                {
                     seats.Add(p.ActorNumber);
-                }
             }
 
             foreach (int botActor in botActorNumbers)
@@ -150,15 +235,12 @@ public class DeckManager : MonoBehaviourPunCallbacks
                 if (seats.Count >= MaxTableSeats) break;
 
                 if (used.Add(botActor))
-                {
                     seats.Add(botActor);
-                }
             }
 
-            // Fallback: If still under 4, add more phantom bots
             while (seats.Count < MaxTableSeats)
             {
-                int nextBotId = PhantomBotActorBase + seats.Count; // Simple unique ID strategy
+                int nextBotId = PhantomBotActorBase + seats.Count;
                 while (used.Contains(nextBotId)) nextBotId++;
                 if (used.Add(nextBotId))
                 {
@@ -197,7 +279,9 @@ public class DeckManager : MonoBehaviourPunCallbacks
     public List<int> GetActiveSeatActorsSorted()
     {
         List<int> seats = BuildActiveSeatList();
-        seats.Sort();
+        // Friends SeatMap order = lobby chair order. Do not re-sort.
+        if (!IsPrivateFriendsRoom())
+            seats.Sort();
         return seats;
     }
 
@@ -406,11 +490,37 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (PlayerProfileSync.Instance != null)
             PlayerProfileSync.Instance.UpdateAllNames();
 
-        if (PhotonNetwork.IsMasterClient && PlayerHand.LocalInstance != null &&
-            PlayerHand.LocalInstance.currentTurnActor == actorNumber)
+        if (!PhotonNetwork.IsMasterClient || PlayerHand.LocalInstance == null)
+            return;
+
+        // Leaver's seat is now a bot — rebuild order and resume if it was their turn.
+        PlayerHand.LocalInstance.RebuildSeatOrderPublic();
+        PlayerHand.LocalInstance.EnsureBotWatchdogRunning();
+
+        if (PlayerHand.LocalInstance.currentTurnActor == actorNumber)
         {
+            CardInteract.isPlayingCard = false;
+            if (TurnManager.Instance != null)
+            {
+                TurnManager.Instance.StopTimer();
+                TurnManager.Instance.StartTurn(actorNumber);
+            }
             PlayerHand.LocalInstance.TriggerBotTurnIfApplicable(actorNumber);
         }
+    }
+
+    /// <summary>
+    /// Master-only: convert an absent / disconnected seat to a bot so the match can continue.
+    /// Safe to call repeatedly — <see cref="RPC_MarkPlayerAsBot"/> no-ops if already marked.
+    /// </summary>
+    public void MasterConvertAbsentPlayerToBot(int actorNumber)
+    {
+        if (!PhotonNetwork.IsMasterClient || actorNumber < 1) return;
+        if (botActorNumbers.Contains(actorNumber)) return;
+        if (photonView == null) return;
+
+        EnsureHandCachedForActor(actorNumber);
+        photonView.RPC(nameof(RPC_MarkPlayerAsBot), RpcTarget.All, actorNumber);
     }
 
     public void EnsureHandCachedForBot(int actorNumber)
@@ -624,15 +734,24 @@ public class DeckManager : MonoBehaviourPunCallbacks
     {
         yield return null;
 
-        if (gameStarted)
+        bool rejoining = PhotonNetwork.CurrentRoom != null
+            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
+            && gs is bool gsStarted && gsStarted;
+
+        // After disconnect OnLeftRoom clears local flags. Room GS=true means mid-match rejoin —
+        // restore local flags and run rejoin even when _localGameStarted was reset.
+        if (rejoining || gameStarted)
         {
+            if (rejoining)
+            {
+                _localGameStarted = true;
+                if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("DC", out object dc) && dc is bool dcComplete)
+                    _localIsDealingComplete = dcComplete;
+            }
+
             StartCoroutine(RejoinStateRoutine());
             yield break;
         }
-
-        bool rejoining = PhotonNetwork.CurrentRoom != null
-            && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GS", out object gs)
-            && (bool)gs;
 
         if (IsPrivateFriendsRoom() && !rejoining)
         {
@@ -753,10 +872,57 @@ public class DeckManager : MonoBehaviourPunCallbacks
         if (IsDealingComplete && PlayerHand.LocalInstance != null)
         {
             int currentActor = PlayerHand.LocalInstance.currentTurnActor;
+            if (PhotonNetwork.CurrentRoom != null
+                && PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("CTA", out object ctaObj)
+                && ctaObj is int ctaActor && ctaActor > 0)
+                currentActor = ctaActor;
+
             PlayerHand.LocalInstance.OnDealingComplete(currentActor);
             if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
                 TurnManager.Instance.StartTurn(currentActor);
         }
+
+        // If room hand props were missing, ask master to push a full reconnect sync.
+        if (PlayerHand.LocalInstance != null
+            && (PlayerHand.LocalInstance.myCards == null || PlayerHand.LocalInstance.myCards.Count == 0)
+            && photonView != null
+            && !PhotonNetwork.IsMasterClient)
+        {
+            photonView.RPC(nameof(RPC_RequestReconnectSync), RpcTarget.MasterClient);
+        }
+    }
+
+    /// <summary>
+    /// Rejoin helper: restore local hand from room property H{actor} without waiting for master RPC.
+    /// </summary>
+    public void TryRestoreLocalHandFromRoomProps()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.LocalPlayer == null || PlayerHand.LocalInstance == null)
+            return;
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("H" + PhotonNetwork.LocalPlayer.ActorNumber, out object handObj)
+            || handObj is not int[] interleaved
+            || interleaved.Length < 2)
+            return;
+
+        int count = interleaved.Length / 2;
+        int[] suits = new int[count];
+        int[] ranks = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            suits[i] = interleaved[i * 2];
+            ranks[i] = interleaved[i * 2 + 1];
+        }
+        PlayerHand.LocalInstance.AssignFullHandLocal(PhotonNetwork.LocalPlayer.ActorNumber, suits, ranks);
+    }
+
+    /// <summary>Rejoining client asks master to re-push hand / turn / dealing state.</summary>
+    [PunRPC]
+    void RPC_RequestReconnectSync(PhotonMessageInfo info)
+    {
+        if (!PhotonNetwork.IsMasterClient || info.Sender == null) return;
+        if (!gameStarted || !IsDealingComplete) return;
+        SyncReconnectingPlayer(info.Sender);
     }
 
     public override void OnLeftRoom() { ResetMatchState(); }
@@ -786,9 +952,13 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
         if (PhotonNetwork.IsMasterClient && gameStarted && IsDealingComplete)
         {
-            // A brand-new player joined a match in progress (e.g. host used REPLACE to invite a
-            // friend into a bot seat). Hand them an available bot's cards so they take that seat.
-            AssignBotSeatToNewPlayer(newPlayer);
+            // True reconnect (same actor, already has a hand) — never steal another bot seat.
+            // Brand-new join into an in-progress match still gets AssignBotSeatToNewPlayer.
+            EnsureHandCachedForActor(newPlayer.ActorNumber);
+            bool hasOwnHand = humanHandsOnMaster.TryGetValue(newPlayer.ActorNumber, out List<CardData> ownHand)
+                && ownHand != null && ownHand.Count > 0;
+            if (!hasOwnHand)
+                AssignBotSeatToNewPlayer(newPlayer);
             SyncReconnectingPlayer(newPlayer);
         }
         else if (PhotonNetwork.IsMasterClient)
@@ -945,25 +1115,58 @@ public class DeckManager : MonoBehaviourPunCallbacks
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
     {
+        if (otherPlayer == null) return;
+
         if (gameStarted)
         {
             if (PhotonNetwork.IsMasterClient)
+            {
                 EnsureHandCachedForActor(otherPlayer.ActorNumber);
 
-            if (otherPlayer.IsInactive)
-            {
-                if (PlayerProfileSync.Instance != null)
-                    PlayerProfileSync.Instance.UpdateAllNames();
+                // Soft disconnect (PlayerTTL): player stays inactive in the room and can ReconnectAndRejoin.
+                // Do NOT bot-convert yet — that was breaking Play Online reconnection.
+                Player stillInRoom = PhotonNetwork.CurrentRoom != null
+                    ? PhotonNetwork.CurrentRoom.GetPlayer(otherPlayer.ActorNumber)
+                    : null;
+                if (stillInRoom != null && stillInRoom.IsInactive)
+                {
+                    StartCoroutine(ConvertInactivePlayerAfterPlayerTtl(otherPlayer.ActorNumber));
+                    return;
+                }
+
+                photonView.RPC(nameof(RPC_MarkPlayerAsBot), RpcTarget.All, otherPlayer.ActorNumber);
             }
-            else if (PhotonNetwork.IsMasterClient)
+            else if (PlayerProfileSync.Instance != null)
             {
-                photonView.RPC("RPC_MarkPlayerAsBot", RpcTarget.All, otherPlayer.ActorNumber);
+                PlayerProfileSync.Instance.UpdateAllNames();
             }
         }
         else if (PhotonNetwork.IsMasterClient && !gameStarted)
         {
             OnRoomJoinedCheckStart();
         }
+    }
+
+    /// <summary>
+    /// After Photon PlayerTTL (~30s), inactive seats that never rejoined become bots.
+    /// </summary>
+    IEnumerator ConvertInactivePlayerAfterPlayerTtl(int actorNumber)
+    {
+        yield return new WaitForSeconds(31f);
+        if (!PhotonNetwork.IsMasterClient || !gameStarted || photonView == null) yield break;
+        if (IsActorBotControlled(actorNumber)) yield break;
+
+        Player p = PhotonNetwork.CurrentRoom != null
+            ? PhotonNetwork.CurrentRoom.GetPlayer(actorNumber)
+            : null;
+
+        // Reconnected as an active human — keep their seat.
+        if (p != null && !p.IsInactive)
+            yield break;
+
+        EnsureHandCachedForActor(actorNumber);
+        photonView.RPC(nameof(RPC_MarkPlayerAsBot), RpcTarget.All, actorNumber);
+        Debug.LogWarning($"[DeckManager] Actor {actorNumber} PlayerTTL expired without rejoin — converted to bot.");
     }
 
     public override void OnMasterClientSwitched(Player newMasterClient)
@@ -1669,14 +1872,13 @@ public class DeckManager : MonoBehaviourPunCallbacks
             else if (isHiddenMode && playerIdx == 0)
             {
                 CardData hiddenCard = hand[cardsPerPlayer - 1];
-                if (photonView != null)
+                // Apply locally first so the owner's hand UI can flip face-down even if the
+                // buffered RPC is processed after AssignFullHand / deal reveal.
+                PlayerHand.ApplyHiddenTrumpInfo(seatActor, (int)hiddenCard.cardSuit, (int)hiddenCard.cardRank);
+                if (photonView != null && PhotonNetwork.IsConnected && !PhotonNetwork.OfflineMode)
                 {
-                    photonView.RPC(nameof(RPC_SetHiddenTrumpInfo), RpcTarget.AllBuffered,
+                    photonView.RPC(nameof(RPC_SetHiddenTrumpInfo), RpcTarget.OthersBuffered,
                         seatActor, (int)hiddenCard.cardSuit, (int)hiddenCard.cardRank);
-                }
-                else
-                {
-                    PlayerHand.ApplyHiddenTrumpInfo(seatActor, (int)hiddenCard.cardSuit, (int)hiddenCard.cardRank);
                 }
             }
 

@@ -17,15 +17,23 @@ public class PlayerProfilePanelBinder : MonoBehaviour
 
     void OnEnable()
     {
-        if (!preserveManualLayout)
-            Refresh();
+        SyncIdentityFields();
+        UpdateSyncedWithSection();
     }
 
     public void Refresh()
     {
-        if (preserveManualLayout) return;
+        SyncIdentityFields();
+        UpdateSyncedWithSection();
+    }
 
-        string username = PlayerPrefs.GetString(PREFS_USERNAME, "Player");
+    /// <summary>Always syncs logged-in username/avatar — never left as scene placeholder text.</summary>
+    public void SyncIdentityFields()
+    {
+        string username = PlayerPrefs.GetString(PREFS_USERNAME, string.Empty);
+        if (string.IsNullOrEmpty(username))
+            username = "Player";
+
         int avatarIndex = PlayerPrefs.GetInt(PREFS_AVATAR_INDEX, 0);
         Sprite avatar = ResolveAvatar(avatarIndex);
 
@@ -33,7 +41,6 @@ public class PlayerProfilePanelBinder : MonoBehaviour
         SetChildSprite("Side_AvatarFrame", "Img", avatar);
         SetText("Text_ProfileName", username);
         SetSprite("Img_CurrentAvatar", avatar);
-        UpdateSyncedWithSection();
     }
 
     void UpdateSyncedWithSection()

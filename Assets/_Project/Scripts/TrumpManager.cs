@@ -293,6 +293,8 @@ public class TrumpManager : MonoBehaviourPunCallbacks
         if (trumpIcon == null) return;
 
         Sprite backSprite = hiddenTrumpSprite;
+        if (backSprite == null)
+            backSprite = CardBackStyle.GetBackSprite();
         if (backSprite == null && GameManager.Instance != null)
             backSprite = GameManager.Instance.cardBackSprite;
 
@@ -461,6 +463,8 @@ $"[TrumpUI] Current Trump: {displaySuit} (gameplay revealed={isTrumpRevealed})\n
     {
         if (displayHidden)
         {
+            Sprite styled = CardBackStyle.GetBackSprite();
+            if (styled != null) return styled;
             if (GameManager.Instance != null && GameManager.Instance.cardBackSprite != null)
                 return GameManager.Instance.cardBackSprite;
             return hiddenTrumpSprite != null ? hiddenTrumpSprite : spadeSprite;

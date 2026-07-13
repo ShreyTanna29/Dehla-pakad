@@ -38,6 +38,7 @@ public class InventoryScreenController : MonoBehaviour
     {
         EnsureResolved();
         Wire();
+        WireCardDeckItems();
         ShowSub(string.IsNullOrEmpty(_current) ? defaultSubTab : _current);
     }
 
@@ -142,6 +143,82 @@ public class InventoryScreenController : MonoBehaviour
     public static string GetSelected(string category, string fallback)
     {
         return PlayerPrefs.GetString("InvSelected_" + category, fallback);
+    }
+
+    /// <summary>
+    /// Wires inventory Cards tab Item_Classic / Item_Modern buttons to <see cref="CardBackStyle"/>.
+    /// Also fills empty Mini preview images with the matching card-back sprites.
+    /// </summary>
+    void WireCardDeckItems()
+    {
+        Transform classic = FindDeep(transform, "Item_Classic");
+        Transform modern = FindDeep(transform, "Item_Modern");
+        if (classic == null && modern == null) return;
+
+        GameObject classicCheck = classic != null ? FindDeep(classic, "Check")?.gameObject : null;
+        GameObject modernCheck = modern != null ? FindDeep(modern, "Check")?.gameObject : null;
+
+        Button classicBtn = classic != null ? classic.GetComponent<Button>() : null;
+        Button modernBtn = modern != null ? modern.GetComponent<Button>() : null;
+
+        if (classicBtn != null)
+        {
+            classicBtn.onClick.RemoveAllListeners();
+            classicBtn.onClick.AddListener(() =>
+            {
+                CardBackStyle.Select(CardBackStyle.ClassicId);
+                RefreshCardDeckChecks(classicCheck, modernCheck);
+            });
+        }
+
+        if (modernBtn != null)
+        {
+            modernBtn.onClick.RemoveAllListeners();
+            modernBtn.onClick.AddListener(() =>
+            {
+                CardBackStyle.Select(CardBackStyle.ModernId);
+                RefreshCardDeckChecks(classicCheck, modernCheck);
+            });
+        }
+
+        RefreshCardDeckChecks(classicCheck, modernCheck);
+        ApplyCardFanPreviewSprites(classic, false);
+        ApplyCardFanPreviewSprites(modern, true);
+    }
+
+    static void RefreshCardDeckChecks(GameObject classicCheck, GameObject modernCheck)
+    {
+        bool modern = CardBackStyle.IsModernSelected;
+        if (classicCheck != null) classicCheck.SetActive(!modern);
+        if (modernCheck != null) modernCheck.SetActive(modern);
+    }
+
+    void ApplyCardFanPreviewSprites(Transform itemRoot, bool modern)
+    {
+        if (itemRoot == null) return;
+
+        Sprite back = null;
+        if (PlayWithFriendsManager.Instance != null)
+        {
+            back = modern
+                ? PlayWithFriendsManager.Instance.modernCardBackSprite
+                : PlayWithFriendsManager.Instance.classicCardBackSprite;
+        }
+
+        if (back == null) return;
+
+        Image[] images = itemRoot.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < images.Length; i++)
+        {
+            Image img = images[i];
+            if (img == null) continue;
+            if (!img.gameObject.name.StartsWith("Mini", System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            img.sprite = back;
+            img.color = Color.white;
+            img.preserveAspect = true;
+        }
     }
 
     /// <summary>

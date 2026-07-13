@@ -3,6 +3,7 @@
     <type fullname="AddressableUIImageLoader" preserve="all" />
     <type fullname="CardDisplay" preserve="all" />
     <type fullname="CardInteract" preserve="all" />
+    <type fullname="FlyingComplexCardStyle" preserve="all" />
     <type fullname="uVegas.UI.UICard" preserve="all" />
     <type fullname="CardData" preserve="nothing" serialized="true" />
     <type fullname="uVegas.Core.Cards.Card" preserve="nothing" serialized="true" />

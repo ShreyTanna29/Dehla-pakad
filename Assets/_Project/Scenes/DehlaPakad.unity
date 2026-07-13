@@ -588,7 +588,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/SHOP_BUTTON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/SHOP_BUTTON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &4680218
@@ -1124,7 +1124,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &14347271
@@ -1215,7 +1215,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Leaderboard_Image.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Leaderboard_Image.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &14581272
@@ -1593,7 +1593,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/PLAYONLINE_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/PLAYONLINE_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &21035335
@@ -2219,7 +2219,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &29890299
@@ -2601,6 +2601,7 @@ GameObject:
   - component: {fileID: 34012195}
   - component: {fileID: 34012197}
   - component: {fileID: 34012198}
+  - component: {fileID: 34012199}
   m_Layer: 0
   m_Name: Chair_0
   m_TagString: Untagged
@@ -2624,10 +2625,10 @@ RectTransform:
   - {fileID: 1025519538}
   m_Father: {fileID: 560953393}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 175, y: -100}
-  m_SizeDelta: {x: 350, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &34012195
 MonoBehaviour:
@@ -2699,9 +2700,65 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
+--- !u!114 &34012199
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 34012193}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 34012195}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 795238783}
+        m_TargetAssemblyTypeName: PlayWithFriendsManager, Assembly-CSharp
+        m_MethodName: OnClick_ChangeSeat
+        m_Mode: 3
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &35393306
 GameObject:
   m_ObjectHideFlags: 0
@@ -2882,7 +2939,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &39280360
@@ -4031,7 +4088,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WWW_ICON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WWW_ICON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &54192924
@@ -4244,7 +4301,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &57425744
@@ -4438,7 +4495,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/FriendList_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/FriendList_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &59439838
@@ -4904,14 +4961,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.7764706, g: 0.6431373, b: 0.4862745, a: 1}
+  m_Color: {r: 0.74509805, g: 0.6156863, b: 0.50980395, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 636331687736871086, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -4941,7 +4998,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &64609504
@@ -5169,7 +5226,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_WithoutCard.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_WithoutCard.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &66461820
@@ -5772,7 +5829,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &76060799
@@ -5976,7 +6033,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Speaker_On.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Speaker_On.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &78176189
@@ -6397,7 +6454,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &86864033
@@ -6581,7 +6638,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/GAME_LOGO-WithoutBG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/GAME_LOGO-WithoutBG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &87216718
@@ -7456,7 +7513,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &93163450
@@ -8250,7 +8307,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &100224917
@@ -8785,7 +8842,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &103676214
@@ -10014,7 +10071,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/MSGCHAT_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/MSGCHAT_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &118074011
@@ -10572,6 +10629,82 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 122800476}
   m_CullTransparentMesh: 1
+--- !u!1 &123689988
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 123689989}
+  - component: {fileID: 123689991}
+  - component: {fileID: 123689990}
+  m_Layer: 0
+  m_Name: AvatarBg
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &123689989
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 123689988}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 2027635218}
+  m_Father: {fileID: 283417410}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 1}
+  m_AnchorMax: {x: 0.5, y: 1}
+  m_AnchoredPosition: {x: 0, y: -26}
+  m_SizeDelta: {x: 80, y: 80}
+  m_Pivot: {x: 0.5, y: 1}
+--- !u!114 &123689990
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 123689988}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.07450981, g: 0.15686275, b: 0.23137255, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &123689991
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 123689988}
+  m_CullTransparentMesh: 1
 --- !u!1 &125679969
 GameObject:
   m_ObjectHideFlags: 0
@@ -10798,7 +10931,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &126616105
@@ -11314,7 +11447,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 636331687736871086, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -11344,7 +11477,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &131678204
@@ -12222,7 +12355,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &138314160
@@ -12350,7 +12483,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/RateUs_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/RateUs_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &139781043
@@ -12537,7 +12670,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &139967224
@@ -13175,7 +13308,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &149096444
@@ -13877,6 +14010,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SafeAreaFitter
   preserveManualAnchors: 0
+  applyLeftInset: 1
+  applyRightInset: 1
+  applyTopInset: 1
+  applyBottomInset: 1
 --- !u!1 &158662822
 GameObject:
   m_ObjectHideFlags: 0
@@ -14178,7 +14315,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &162946300
@@ -14381,7 +14518,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &164566413
@@ -15003,7 +15140,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Icons_BG_IMAGE 1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Icons_BG_IMAGE 1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &169458270
@@ -15955,7 +16092,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &186687349
@@ -16046,7 +16183,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &186758044
@@ -16350,7 +16487,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &191954026
@@ -16925,7 +17062,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &198766283
@@ -17991,7 +18128,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BGImage.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &218610906
@@ -18140,7 +18277,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &220023926
@@ -18527,7 +18664,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &229869364
@@ -19197,7 +19334,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &238572208
@@ -19549,7 +19686,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &240145917
@@ -19798,7 +19935,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &244432361
@@ -19892,7 +20029,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &248711502
@@ -20262,7 +20399,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ROBOT_IMAGE.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ROBOT_IMAGE.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &252418089
@@ -20685,6 +20822,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SafeAreaFitter
   preserveManualAnchors: 0
+  applyLeftInset: 0
+  applyRightInset: 1
+  applyTopInset: 1
+  applyBottomInset: 1
 --- !u!1 &261500004
 GameObject:
   m_ObjectHideFlags: 0
@@ -22096,7 +22237,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &277794889
@@ -22190,7 +22331,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &278250707
@@ -22437,6 +22578,136 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 279934202}
+  m_CullTransparentMesh: 1
+--- !u!1 &283417409
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 283417410}
+  - component: {fileID: 283417415}
+  - component: {fileID: 283417414}
+  - component: {fileID: 283417413}
+  - component: {fileID: 283417412}
+  - component: {fileID: 283417411}
+  m_Layer: 0
+  m_Name: SpectatePanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &283417410
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283417409}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 123689989}
+  - {fileID: 1763386624}
+  - {fileID: 983026153}
+  m_Father: {fileID: 795238780}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 1, y: 0.5}
+  m_AnchorMax: {x: 1, y: 0.5}
+  m_AnchoredPosition: {x: -200, y: -50}
+  m_SizeDelta: {x: 270, y: 150}
+  m_Pivot: {x: 1, y: 0.5}
+--- !u!114 &283417411
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283417409}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3245ec927659c4140ac4f8d17403cc18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.ContentSizeFitter
+  m_HorizontalFit: 0
+  m_VerticalFit: 0
+--- !u!114 &283417412
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283417409}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
+  fadeIn: 1
+  fadeDuration: 0.25
+--- !u!114 &283417413
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283417409}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
+  m_IgnoreLayout: 0
+  m_MinWidth: -1
+  m_MinHeight: -1
+  m_PreferredWidth: 350
+  m_PreferredHeight: 200
+  m_FlexibleWidth: 0
+  m_FlexibleHeight: 0
+  m_LayoutPriority: 1
+--- !u!114 &283417414
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283417409}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.84705883, g: 0.84705883, b: 0.84705883, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &283417415
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283417409}
   m_CullTransparentMesh: 1
 --- !u!1 &284496504
 GameObject:
@@ -22742,7 +23013,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ToggleKnob.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ToggleKnob.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &290882646
@@ -22880,7 +23151,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &291448863
@@ -22974,7 +23245,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &293525307
@@ -23818,7 +24089,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/BG_BUTTON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_BUTTON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &305584611
@@ -24080,7 +24351,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &307954970
@@ -24863,7 +25134,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/FRIEND_INVITE_BUTTON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/FRIEND_INVITE_BUTTON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &317738892
@@ -24995,7 +25266,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &318437672
@@ -25505,7 +25776,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &322945799
@@ -26231,7 +26502,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &332546685
@@ -26412,6 +26683,143 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 332796188}
+  m_CullTransparentMesh: 1
+--- !u!1 &333435365
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 333435366}
+  - component: {fileID: 333435368}
+  - component: {fileID: 333435367}
+  m_Layer: 0
+  m_Name: Player3
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &333435366
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 333435365}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1010602123}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 0}
+  m_AnchoredPosition: {x: 0, y: 50}
+  m_SizeDelta: {x: -20, y: 52}
+  m_Pivot: {x: 0.5, y: 0}
+--- !u!114 &333435367
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 333435365}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_text: VS
+  m_isRightToLeft: 0
+  m_fontAsset: {fileID: 11400000, guid: 59725d5ecbc9b8641a1f49e3961a56ac, type: 2}
+  m_sharedMaterial: {fileID: -30249328242093846, guid: 59725d5ecbc9b8641a1f49e3961a56ac, type: 2}
+  m_fontSharedMaterials: []
+  m_fontMaterial: {fileID: 0}
+  m_fontMaterials: []
+  m_fontColor32:
+    serializedVersion: 2
+    rgba: 4278190080
+  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
+  m_enableVertexGradient: 0
+  m_colorMode: 3
+  m_fontColorGradient:
+    topLeft: {r: 1, g: 1, b: 1, a: 1}
+    topRight: {r: 1, g: 1, b: 1, a: 1}
+    bottomLeft: {r: 1, g: 1, b: 1, a: 1}
+    bottomRight: {r: 1, g: 1, b: 1, a: 1}
+  m_fontColorGradientPreset: {fileID: 0}
+  m_spriteAsset: {fileID: 0}
+  m_tintAllSprites: 0
+  m_StyleSheet: {fileID: 0}
+  m_TextStyleHashCode: -1183493901
+  m_overrideHtmlColors: 0
+  m_faceColor:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontSize: 40
+  m_fontSizeBase: 40
+  m_fontWeight: 400
+  m_enableAutoSizing: 0
+  m_fontSizeMin: 18
+  m_fontSizeMax: 72
+  m_fontStyle: 0
+  m_HorizontalAlignment: 2
+  m_VerticalAlignment: 512
+  m_textAlignment: 65535
+  m_characterSpacing: 0
+  m_characterHorizontalScale: 1
+  m_wordSpacing: 0
+  m_lineSpacing: 0
+  m_lineSpacingMax: 0
+  m_paragraphSpacing: 0
+  m_charWidthMaxAdj: 0
+  m_TextWrappingMode: 0
+  m_wordWrappingRatios: 0.4
+  m_overflowMode: 3
+  m_linkedTextComponent: {fileID: 0}
+  parentLinkedComponent: {fileID: 0}
+  m_enableKerning: 0
+  m_ActiveFontFeatures: 6e72656b
+  m_enableExtraPadding: 0
+  checkPaddingRequired: 0
+  m_isRichText: 1
+  m_EmojiFallbackSupport: 1
+  m_parseCtrlCharacters: 1
+  m_isOrthographic: 1
+  m_isCullingEnabled: 0
+  m_horizontalMapping: 0
+  m_verticalMapping: 0
+  m_uvLineOffset: 0
+  m_geometrySortingOrder: 0
+  m_IsTextObjectScaleStatic: 0
+  m_VertexBufferAutoSizeReduction: 0
+  m_useMaxVisibleDescender: 1
+  m_pageToDisplay: 1
+  m_margin: {x: 0, y: 0, z: 0, w: 0}
+  m_isUsingLegacyAnimationComponent: 0
+  m_isVolumetricText: 0
+  m_hasFontAssetChanged: 0
+  m_baseMaterial: {fileID: 0}
+  m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!222 &333435368
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 333435365}
   m_CullTransparentMesh: 1
 --- !u!1 &333492653
 GameObject:
@@ -26965,7 +27373,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &335679015
@@ -27400,7 +27808,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &344085408
@@ -28312,7 +28720,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: 59fb1a36f73c0cf47a8c41a45e5cf7fc, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -28342,7 +28750,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &351536768
@@ -28436,7 +28844,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &352923872
@@ -28724,7 +29132,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &355146623
@@ -29518,7 +29926,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &369300118
@@ -29951,7 +30359,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &382315507
@@ -30936,7 +31344,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &389739788
@@ -31593,14 +32001,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.7764706, g: 0.6431373, b: 0.4862745, a: 1}
+  m_Color: {r: 0.74509805, g: 0.6156863, b: 0.50980395, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 636331687736871086, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -31630,7 +32038,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &402058510
@@ -31911,6 +32319,164 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 403141497}
+  m_CullTransparentMesh: 1
+--- !u!1 &403994268
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 403994269}
+  - component: {fileID: 403994272}
+  - component: {fileID: 403994271}
+  - component: {fileID: 403994270}
+  m_Layer: 0
+  m_Name: ErrorMSG
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &403994269
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 403994268}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1440565386}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0}
+  m_AnchorMax: {x: 0.5, y: 0}
+  m_AnchoredPosition: {x: 0, y: 150}
+  m_SizeDelta: {x: 920, y: 70}
+  m_Pivot: {x: 0.5, y: 0}
+--- !u!114 &403994270
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 403994268}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
+  m_IgnoreLayout: 1
+  m_MinWidth: -1
+  m_MinHeight: -1
+  m_PreferredWidth: -1
+  m_PreferredHeight: 70
+  m_FlexibleWidth: -1
+  m_FlexibleHeight: -1
+  m_LayoutPriority: 1
+--- !u!114 &403994271
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 403994268}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_text: CHOOSE AVATAR & ENTER NAME
+  m_isRightToLeft: 0
+  m_fontAsset: {fileID: 11400000, guid: 2233fe0a4915fb5409286bd2bec0bddb, type: 2}
+  m_sharedMaterial: {fileID: 1823985814222544476, guid: 2233fe0a4915fb5409286bd2bec0bddb, type: 2}
+  m_fontSharedMaterials: []
+  m_fontMaterial: {fileID: 0}
+  m_fontMaterials: []
+  m_fontColor32:
+    serializedVersion: 2
+    rgba: 4278190335
+  m_fontColor: {r: 1, g: 0, b: 0, a: 1}
+  m_enableVertexGradient: 0
+  m_colorMode: 3
+  m_fontColorGradient:
+    topLeft: {r: 1, g: 1, b: 1, a: 1}
+    topRight: {r: 1, g: 1, b: 1, a: 1}
+    bottomLeft: {r: 1, g: 1, b: 1, a: 1}
+    bottomRight: {r: 1, g: 1, b: 1, a: 1}
+  m_fontColorGradientPreset: {fileID: 0}
+  m_spriteAsset: {fileID: 0}
+  m_tintAllSprites: 0
+  m_StyleSheet: {fileID: 0}
+  m_TextStyleHashCode: -1183493901
+  m_overrideHtmlColors: 0
+  m_faceColor:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontSize: 20
+  m_fontSizeBase: 20
+  m_fontWeight: 400
+  m_enableAutoSizing: 0
+  m_fontSizeMin: 18
+  m_fontSizeMax: 72
+  m_fontStyle: 0
+  m_HorizontalAlignment: 2
+  m_VerticalAlignment: 512
+  m_textAlignment: 65535
+  m_characterSpacing: 0
+  m_characterHorizontalScale: 1
+  m_wordSpacing: 0
+  m_lineSpacing: 0
+  m_lineSpacingMax: 0
+  m_paragraphSpacing: 0
+  m_charWidthMaxAdj: 0
+  m_TextWrappingMode: 1
+  m_wordWrappingRatios: 0.4
+  m_overflowMode: 0
+  m_linkedTextComponent: {fileID: 0}
+  parentLinkedComponent: {fileID: 0}
+  m_enableKerning: 0
+  m_ActiveFontFeatures: 6e72656b
+  m_enableExtraPadding: 0
+  checkPaddingRequired: 0
+  m_isRichText: 1
+  m_EmojiFallbackSupport: 1
+  m_parseCtrlCharacters: 1
+  m_isOrthographic: 1
+  m_isCullingEnabled: 0
+  m_horizontalMapping: 0
+  m_verticalMapping: 0
+  m_uvLineOffset: 0
+  m_geometrySortingOrder: 0
+  m_IsTextObjectScaleStatic: 0
+  m_VertexBufferAutoSizeReduction: 0
+  m_useMaxVisibleDescender: 1
+  m_pageToDisplay: 1
+  m_margin: {x: 0, y: 0, z: 0, w: 0}
+  m_isUsingLegacyAnimationComponent: 0
+  m_isVolumetricText: 0
+  m_hasFontAssetChanged: 0
+  m_baseMaterial: {fileID: 0}
+  m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!222 &403994272
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 403994268}
   m_CullTransparentMesh: 1
 --- !u!1 &405280943
 GameObject:
@@ -32831,7 +33397,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &418491944
@@ -33248,7 +33814,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &421510786
@@ -35011,7 +35577,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &450080340
@@ -35245,7 +35811,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &454632612
@@ -35818,7 +36384,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &458383542
@@ -36417,7 +36983,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &476427102
@@ -37262,7 +37828,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &497038056
@@ -37398,7 +37964,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/settings_button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/settings_button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &498895366
@@ -40417,7 +40983,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &530435011
@@ -40704,7 +41270,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &533085124
@@ -41167,7 +41733,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/FriendList_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/FriendList_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &534295521
@@ -41260,7 +41826,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &534581613
@@ -41530,7 +42096,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &538228679
@@ -42435,7 +43001,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &554851227
@@ -43017,7 +43583,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &557636194
@@ -43676,6 +44242,7 @@ RectTransform:
   m_Children:
   - {fileID: 34012194}
   - {fileID: 1990269597}
+  - {fileID: 1010602123}
   - {fileID: 821599115}
   - {fileID: 1268870941}
   m_Father: {fileID: 795238780}
@@ -43683,7 +44250,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.77}
   m_AnchorMax: {x: 0.5, y: 0.77}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 1559, y: 200}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &560953394
 MonoBehaviour:
@@ -45137,7 +45704,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &582447835
@@ -45537,7 +46104,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &586304939
@@ -45766,17 +46333,17 @@ MonoBehaviour:
   m_VerticalScrollbarEventHandler: {fileID: 0}
   m_LayoutGroup: {fileID: 0}
   m_ScrollSensitivity: 1
-  m_ContentType: 0
+  m_ContentType: 2
   m_InputType: 0
   m_AsteriskChar: 42
-  m_KeyboardType: 0
+  m_KeyboardType: 2
   m_LineType: 0
-  m_HideMobileInput: 0
+  m_HideMobileInput: 1
   m_HideSoftKeyboard: 0
-  m_CharacterValidation: 0
+  m_CharacterValidation: 2
   m_RegexValue: 
-  m_GlobalPointSize: 14
-  m_CharacterLimit: 8
+  m_GlobalPointSize: 30
+  m_CharacterLimit: 5
   m_OnEndEdit:
     m_PersistentCalls:
       m_Calls: []
@@ -45801,14 +46368,14 @@ MonoBehaviour:
   m_OnTouchScreenKeyboardStatusChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_CaretColor: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
-  m_CustomCaretColor: 0
-  m_SelectionColor: {r: 0.65882355, g: 0.80784315, b: 1, a: 0.7529412}
+  m_CaretColor: {r: 0.12, g: 0.06, b: 0.02, a: 1}
+  m_CustomCaretColor: 1
+  m_SelectionColor: {r: 0.45, g: 0.7, b: 1, a: 0.45}
   m_Text: 
   m_CaretBlinkRate: 0.85
-  m_CaretWidth: 1
+  m_CaretWidth: 2
   m_ReadOnly: 0
-  m_RichText: 1
+  m_RichText: 0
   m_GlobalFontAsset: {fileID: 0}
   m_OnFocusSelectAll: 1
   m_ResetOnDeActivation: 1
@@ -45889,7 +46456,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &588951558
@@ -46637,7 +47204,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/BGIMAGE1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BGIMAGE1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &595279549
@@ -47381,14 +47948,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0.74509805, g: 0.6156863, b: 0.50980395, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -47418,7 +47985,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &612863992
@@ -47826,7 +48393,7 @@ MonoBehaviour:
   - {fileID: 3046902606887945827, guid: 48217fbfa17fdaa47a633def5e3a8ce8, type: 3}
   inputPlayerName: {fileID: 582447837}
   btnEnterGame: {fileID: 1929890684}
-  profileSetupErrorText: {fileID: 0}
+  profileSetupErrorText: {fileID: 403994271}
   imgHomeProfileAvatar: {fileID: 0}
   textHomeProfileName: {fileID: 0}
   panelPlayerProfile: {fileID: 1493963740}
@@ -47958,7 +48525,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &615564108
@@ -49412,7 +49979,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &636938621
@@ -49824,7 +50391,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/BUTTON_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BUTTON_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &645493389
@@ -51566,7 +52133,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &665761693
@@ -51627,7 +52194,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: 59fb1a36f73c0cf47a8c41a45e5cf7fc, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -51657,7 +52224,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &666074406
@@ -51793,7 +52360,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: b51e3ff63e1877c4789d2c6bfc1e09b9, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -51823,7 +52390,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &670209660
@@ -52276,7 +52843,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &676961417
@@ -52632,7 +53199,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &677761535
@@ -53355,7 +53922,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &686329217
@@ -53449,7 +54016,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &686739400
@@ -53819,7 +54386,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &692976974
@@ -55856,7 +56423,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Appearance_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Appearance_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &709781683
@@ -56173,7 +56740,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/FriendList_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/FriendList_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &712233596
@@ -56447,7 +57014,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &713431396
@@ -57408,7 +57975,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/AddFriend_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/AddFriend_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &721777761
@@ -58036,7 +58603,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &731344023
@@ -59214,7 +59781,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &753799501
@@ -60091,7 +60658,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Speaker_On.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Speaker_On.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &764461356
@@ -60257,7 +60824,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WWW_ICON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WWW_ICON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &766895403
@@ -60516,7 +61083,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &769116204
@@ -60653,7 +61220,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &769397378
@@ -61199,7 +61766,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ROBOT_IMAGE.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ROBOT_IMAGE.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &773020640
@@ -61760,7 +62327,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &778729651
@@ -62235,7 +62802,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &786848024
@@ -62500,7 +63067,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &793406046
@@ -62698,7 +63265,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &795238780
 RectTransform:
   m_ObjectHideFlags: 0
@@ -62720,6 +63287,7 @@ RectTransform:
   - {fileID: 2081252104}
   - {fileID: 1690568939}
   - {fileID: 1240635830}
+  - {fileID: 283417410}
   - {fileID: 560953393}
   m_Father: {fileID: 1126071370}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -62794,17 +63362,21 @@ MonoBehaviour:
   - {fileID: 1025518323}
   - {fileID: 116224242}
   - {fileID: 1611703099}
+  - {fileID: 1763386625}
   playerSlotsAvatar:
   - {fileID: 49412875}
   - {fileID: 1885461256}
   - {fileID: 1720177307}
   - {fileID: 1904773990}
+  - {fileID: 2027635220}
   createRoomButton: {fileID: 1874271852}
   roomIdPlaque: {fileID: 2081252103}
   includeBotsButton: {fileID: 1497421078}
   includeBotsBtnText: {fileID: 400113259}
   homeMenuPanel: {fileID: 0}
   gameTablePanel: {fileID: 904262432}
+  classicCardBackSprite: {fileID: 21300000, guid: 59fb1a36f73c0cf47a8c41a45e5cf7fc, type: 3}
+  modernCardBackSprite: {fileID: 21300000, guid: b51e3ff63e1877c4789d2c6bfc1e09b9, type: 3}
   myUserIdText: {fileID: 0}
   addFriendInput: {fileID: 0}
   friendsListContainer: {fileID: 629499999}
@@ -62846,7 +63418,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BGImage.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &797741443
@@ -64112,7 +64684,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: 59fb1a36f73c0cf47a8c41a45e5cf7fc, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -64142,7 +64714,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &819321981
@@ -64475,6 +65047,7 @@ GameObject:
   - component: {fileID: 821599116}
   - component: {fileID: 821599118}
   - component: {fileID: 821599119}
+  - component: {fileID: 821599120}
   m_Layer: 0
   m_Name: Chair_2
   m_TagString: Untagged
@@ -64498,10 +65071,10 @@ RectTransform:
   - {fileID: 116224244}
   m_Father: {fileID: 560953393}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 981, y: -100}
-  m_SizeDelta: {x: 350, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &821599116
 MonoBehaviour:
@@ -64573,9 +65146,65 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
+--- !u!114 &821599120
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 821599114}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 821599116}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 795238783}
+        m_TargetAssemblyTypeName: PlayWithFriendsManager, Assembly-CSharp
+        m_MethodName: OnClick_ChangeSeat
+        m_Mode: 3
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 1
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &822499429
 GameObject:
   m_ObjectHideFlags: 0
@@ -64837,7 +65466,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Leaderboard_Image.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Leaderboard_Image.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &825632989
@@ -65644,7 +66273,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &848199019
@@ -66380,7 +67009,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &861632273
@@ -66892,7 +67521,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &867796443
@@ -67463,7 +68092,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &875353412
@@ -67749,7 +68378,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &879300815
@@ -67970,7 +68599,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &879786240
@@ -69949,7 +70578,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &903833120
@@ -70109,7 +70738,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &904262433
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -70393,7 +71022,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: 59fb1a36f73c0cf47a8c41a45e5cf7fc, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -70423,7 +71052,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &908695837
@@ -70572,7 +71201,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &909667407
@@ -71074,7 +71703,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &914900711
@@ -71387,7 +72016,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &918281851
@@ -71478,7 +72107,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &919491302
@@ -71573,7 +72202,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &922507444
@@ -72408,7 +73037,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &927592468
@@ -72611,7 +73240,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &929659022
@@ -72886,7 +73515,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ROBOT_IMAGE.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ROBOT_IMAGE.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &930335968
@@ -72977,7 +73606,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/SHOP_BUTTON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/SHOP_BUTTON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &933318889
@@ -73068,7 +73697,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &933388061
@@ -73123,7 +73752,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &933388064
@@ -73743,7 +74372,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BGImage.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &942458707
@@ -74245,7 +74874,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &948492956
@@ -74382,7 +75011,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/BG_BUTTON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_BUTTON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &950333852
@@ -76674,6 +77303,138 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 982573752}
   m_CullTransparentMesh: 1
+--- !u!1 &983026152
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 983026153}
+  - component: {fileID: 983026156}
+  - component: {fileID: 983026155}
+  - component: {fileID: 983026154}
+  m_Layer: 0
+  m_Name: Button
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &983026153
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983026152}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 283417410}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 270, y: 150}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &983026154
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983026152}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 983026155}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 795238783}
+        m_TargetAssemblyTypeName: PlayWithFriendsManager, Assembly-CSharp
+        m_MethodName: OnClick_ChangeSeat
+        m_Mode: 3
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 4
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+--- !u!114 &983026155
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983026152}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &983026156
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983026152}
+  m_CullTransparentMesh: 1
 --- !u!1 &983395232
 GameObject:
   m_ObjectHideFlags: 0
@@ -77134,7 +77895,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/NOADS_BUTTON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/NOADS_BUTTON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &989949470
@@ -77225,7 +77986,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Leave_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Leave_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &990695989
@@ -77373,7 +78134,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &991352976
@@ -79265,7 +80026,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0.9924528, g: 0.86699176, b: 0.86699176, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -79302,9 +80063,122 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
+--- !u!1 &1010602122
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1010602123}
+  - component: {fileID: 1010602128}
+  - component: {fileID: 1010602127}
+  - component: {fileID: 1010602126}
+  - component: {fileID: 1010602125}
+  m_Layer: 0
+  m_Name: VS
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1010602123
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1010602122}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 333435366}
+  m_Father: {fileID: 560953393}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1010602125
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1010602122}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
+  fadeIn: 1
+  fadeDuration: 0.25
+--- !u!114 &1010602126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1010602122}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
+  m_IgnoreLayout: 0
+  m_MinWidth: -1
+  m_MinHeight: -1
+  m_PreferredWidth: 150
+  m_PreferredHeight: 150
+  m_FlexibleWidth: 0
+  m_FlexibleHeight: 0
+  m_LayoutPriority: 1
+--- !u!114 &1010602127
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1010602122}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.8509804, g: 0.6313726, b: 0.46666667, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1010602128
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1010602122}
+  m_CullTransparentMesh: 1
 --- !u!1 &1014500924
 GameObject:
   m_ObjectHideFlags: 0
@@ -80866,7 +81740,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1028278107
@@ -80919,7 +81793,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1028278110
@@ -81738,7 +82612,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1043401251
@@ -82330,7 +83204,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1050721478
@@ -82775,7 +83649,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1054770329
@@ -82828,7 +83702,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1054770332
@@ -82991,7 +83865,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1057379546
@@ -84480,7 +85354,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Speaker_Off.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Speaker_Off.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1070141313
@@ -84754,7 +85628,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/BG_BUTTON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_BUTTON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1071768299
@@ -85030,7 +85904,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1073598783
@@ -85626,7 +86500,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1081020584
@@ -85929,7 +86803,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1082928468
@@ -86207,7 +87081,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Speaker_Off.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Speaker_Off.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1086596157
@@ -86262,7 +87136,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1086596160
@@ -86775,7 +87649,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/GAME_LOGO-WithoutBG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/GAME_LOGO-WithoutBG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1104061592
@@ -87236,7 +88110,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1110141306
@@ -87291,7 +88165,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1110141309
@@ -87424,7 +88298,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1111439500
@@ -87595,7 +88469,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1113455622
@@ -88136,7 +89010,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ROBOT_IMAGE.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ROBOT_IMAGE.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1122272973
@@ -88261,7 +89135,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1125145845
@@ -88582,7 +89456,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1126071366
@@ -89167,7 +90041,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1135249846
@@ -89532,7 +90406,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BGImage.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1140298432
@@ -90246,7 +91120,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Icon_X.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Icon_X.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1146328347
@@ -90338,7 +91212,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1146657954
@@ -90882,7 +91756,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Icon_X.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Icon_X.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1152921921
@@ -91407,7 +92281,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1156246770
@@ -92054,7 +92928,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1165554404
@@ -92708,7 +93582,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1172723156
@@ -92892,7 +93766,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1174737479
@@ -92983,7 +93857,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/MSGCHAT_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/MSGCHAT_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1175839235
@@ -93485,7 +94359,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/settings_button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/settings_button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1182843798
@@ -94136,7 +95010,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: b51e3ff63e1877c4789d2c6bfc1e09b9, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -94166,7 +95040,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1191654135
@@ -94221,7 +95095,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1191654138
@@ -95109,7 +95983,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1214202567
@@ -97490,7 +98364,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1240681484
@@ -98742,14 +99616,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.7764706, g: 0.6431373, b: 0.4862745, a: 1}
+  m_Color: {r: 0.74509805, g: 0.6156863, b: 0.50980395, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 636331687736871086, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -98779,7 +99653,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1256450091
@@ -98966,7 +99840,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1258875128
@@ -99440,6 +100314,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::JoinTablePanelController
   pinInput: {fileID: 588917030}
   joinButton: {fileID: 103316905}
+  keyboardLiftFallback: 320
+  keyboardLiftPadding: 48
 --- !u!114 &1265267163
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -99510,7 +100386,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/FriendList_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/FriendList_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1266831159
@@ -99571,7 +100447,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: b51e3ff63e1877c4789d2c6bfc1e09b9, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -99601,7 +100477,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1267281547
@@ -99692,6 +100568,7 @@ GameObject:
   - component: {fileID: 1268870942}
   - component: {fileID: 1268870944}
   - component: {fileID: 1268870945}
+  - component: {fileID: 1268870946}
   m_Layer: 0
   m_Name: Chair_3
   m_TagString: Untagged
@@ -99715,10 +100592,10 @@ RectTransform:
   - {fileID: 1611703101}
   m_Father: {fileID: 560953393}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 1384, y: -100}
-  m_SizeDelta: {x: 350, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1268870942
 MonoBehaviour:
@@ -99790,9 +100667,65 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
+--- !u!114 &1268870946
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1268870940}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 1268870942}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 795238783}
+        m_TargetAssemblyTypeName: PlayWithFriendsManager, Assembly-CSharp
+        m_MethodName: OnClick_ChangeSeat
+        m_Mode: 3
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 3
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &1269430297
 GameObject:
   m_ObjectHideFlags: 0
@@ -99984,7 +100917,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/SHARE_BUTTON 1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/SHARE_BUTTON 1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1270349975
@@ -100517,7 +101450,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Icon_Search.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Icon_Search.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1285066503
@@ -100611,7 +101544,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1285225425
@@ -100748,7 +101681,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1285411742
@@ -101173,7 +102106,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/GAME_LOGO-WithoutBG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/GAME_LOGO-WithoutBG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1297491683
@@ -101539,7 +102472,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1299743960
@@ -101688,7 +102621,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1302750917
@@ -102104,7 +103037,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 636331687736871086, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -102134,7 +103067,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1305945060
@@ -102333,7 +103266,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1305992571
@@ -103591,7 +104524,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1321134316
@@ -105312,7 +106245,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1343266827
@@ -106063,7 +106996,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1352139351
@@ -106438,7 +107371,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1357084292
@@ -106553,7 +107486,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WatchAds_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WatchAds_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1357084297
@@ -107229,7 +108162,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1368459365
@@ -108372,7 +109305,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1387682554
@@ -108429,7 +109362,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1387682557
@@ -109223,7 +110156,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1397810704
@@ -109593,7 +110526,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1402902238
@@ -110629,7 +111562,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1427627537
@@ -110855,7 +111788,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1432053452
@@ -111129,7 +112062,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1436861817
@@ -111535,7 +112468,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1440550393
@@ -111708,6 +112641,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 997734201}
+  - {fileID: 403994269}
   - {fileID: 1242688954}
   - {fileID: 582447836}
   - {fileID: 1929890682}
@@ -111794,7 +112728,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ToggleKnob.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ToggleKnob.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1444312081
@@ -111813,7 +112747,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1444312082
 RectTransform:
   m_ObjectHideFlags: 0
@@ -112414,7 +113348,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1448140795
@@ -112620,7 +113554,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1455062198
@@ -112971,7 +113905,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1469176056
@@ -113594,7 +114528,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 1, g: 0.5673141, b: 0.36037737, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -113631,7 +114565,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1473843464
@@ -115019,7 +115953,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1490333589
@@ -115598,7 +116532,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.9098039, g: 0.9019608, b: 0.8980392, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -115635,7 +116569,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1497621210
@@ -116269,7 +117203,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 636331687736871086, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -116299,7 +117233,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_Image_1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Image_1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1504967714
@@ -116468,7 +117402,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1505255498
@@ -117115,7 +118049,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Sound | Music
+  m_text: Sound
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 59725d5ecbc9b8641a1f49e3961a56ac, type: 2}
   m_sharedMaterial: {fileID: -30249328242093846, guid: 59725d5ecbc9b8641a1f49e3961a56ac, type: 2}
@@ -117390,7 +118324,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1521592094
@@ -117541,7 +118475,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1522505934
@@ -117985,7 +118919,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/BG_Leaderboard.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_Leaderboard.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1525048859
@@ -118077,7 +119011,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1531635158
@@ -119153,10 +120087,10 @@ RectTransform:
   - {fileID: 1874271853}
   m_Father: {fileID: 1275976286}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 920, y: -440}
-  m_SizeDelta: {x: 1840, y: 880}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1540751147
 MonoBehaviour:
@@ -119763,7 +120697,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1556153938
@@ -120202,7 +121136,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Knob_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Knob_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1567996430
@@ -120504,7 +121438,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1575272350
@@ -121180,7 +122114,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1582806445
@@ -122342,7 +123276,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1606374475
@@ -123170,7 +124104,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/PLAYFRIENDS_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/PLAYFRIENDS_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1615136229
@@ -123531,7 +124465,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1617994561
@@ -123816,7 +124750,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1623945180
@@ -124306,7 +125240,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/FriendList_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/FriendList_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1630040711
@@ -125766,7 +126700,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1653815907
@@ -125914,7 +126848,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1653884264
@@ -126506,7 +127440,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1660053108
@@ -126597,7 +127531,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Leaderboard_Image.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Leaderboard_Image.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1660827757
@@ -126746,7 +127680,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1661561072
@@ -127020,7 +127954,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1663242794
@@ -127218,7 +128152,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Icon_X.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Icon_X.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1663521542
@@ -127477,7 +128411,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1665201880
@@ -127706,7 +128640,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1666440566
@@ -128182,7 +129116,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1669942842
@@ -130078,7 +131012,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!225 &1690568944
@@ -130265,7 +131199,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1690810191
@@ -131701,7 +132635,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1709239496
@@ -131954,7 +132888,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Leaderboard_Image.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Leaderboard_Image.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1711666336
@@ -132114,7 +133048,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1712247829
@@ -133139,7 +134073,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1721593215
@@ -133231,7 +134165,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1721912531
@@ -133379,7 +134313,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1722372314
@@ -133909,7 +134843,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1732664042
@@ -134183,7 +135117,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1737138095
@@ -136251,7 +137185,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/settings_button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/settings_button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1762308530
@@ -136388,9 +137322,146 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
+--- !u!1 &1763386623
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1763386624}
+  - component: {fileID: 1763386626}
+  - component: {fileID: 1763386625}
+  m_Layer: 0
+  m_Name: Player4
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1763386624
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1763386623}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 283417410}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 0}
+  m_AnchoredPosition: {x: 7.5, y: 0}
+  m_SizeDelta: {x: -35, y: 52}
+  m_Pivot: {x: 0.5, y: 0}
+--- !u!114 &1763386625
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1763386623}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_text: Waiting for Friend...
+  m_isRightToLeft: 0
+  m_fontAsset: {fileID: 11400000, guid: 5302535af1044152a457ed104f1f4b91, type: 2}
+  m_sharedMaterial: {fileID: 2164040, guid: 5302535af1044152a457ed104f1f4b91, type: 2}
+  m_fontSharedMaterials: []
+  m_fontMaterial: {fileID: 0}
+  m_fontMaterials: []
+  m_fontColor32:
+    serializedVersion: 2
+    rgba: 4278190080
+  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
+  m_enableVertexGradient: 0
+  m_colorMode: 3
+  m_fontColorGradient:
+    topLeft: {r: 1, g: 1, b: 1, a: 1}
+    topRight: {r: 1, g: 1, b: 1, a: 1}
+    bottomLeft: {r: 1, g: 1, b: 1, a: 1}
+    bottomRight: {r: 1, g: 1, b: 1, a: 1}
+  m_fontColorGradientPreset: {fileID: 0}
+  m_spriteAsset: {fileID: 0}
+  m_tintAllSprites: 0
+  m_StyleSheet: {fileID: 0}
+  m_TextStyleHashCode: -1183493901
+  m_overrideHtmlColors: 0
+  m_faceColor:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontSize: 10
+  m_fontSizeBase: 10
+  m_fontWeight: 400
+  m_enableAutoSizing: 0
+  m_fontSizeMin: 18
+  m_fontSizeMax: 72
+  m_fontStyle: 0
+  m_HorizontalAlignment: 2
+  m_VerticalAlignment: 512
+  m_textAlignment: 65535
+  m_characterSpacing: 0
+  m_characterHorizontalScale: 1
+  m_wordSpacing: 0
+  m_lineSpacing: 0
+  m_lineSpacingMax: 0
+  m_paragraphSpacing: 0
+  m_charWidthMaxAdj: 0
+  m_TextWrappingMode: 0
+  m_wordWrappingRatios: 0.4
+  m_overflowMode: 3
+  m_linkedTextComponent: {fileID: 0}
+  parentLinkedComponent: {fileID: 0}
+  m_enableKerning: 0
+  m_ActiveFontFeatures: 6e72656b
+  m_enableExtraPadding: 0
+  checkPaddingRequired: 0
+  m_isRichText: 1
+  m_EmojiFallbackSupport: 1
+  m_parseCtrlCharacters: 1
+  m_isOrthographic: 1
+  m_isCullingEnabled: 0
+  m_horizontalMapping: 0
+  m_verticalMapping: 0
+  m_uvLineOffset: 0
+  m_geometrySortingOrder: 0
+  m_IsTextObjectScaleStatic: 0
+  m_VertexBufferAutoSizeReduction: 0
+  m_useMaxVisibleDescender: 1
+  m_pageToDisplay: 1
+  m_margin: {x: 0, y: 0, z: 0, w: 0}
+  m_isUsingLegacyAnimationComponent: 0
+  m_isVolumetricText: 0
+  m_hasFontAssetChanged: 0
+  m_baseMaterial: {fileID: 0}
+  m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!222 &1763386626
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1763386623}
+  m_CullTransparentMesh: 1
 --- !u!1 &1765660032
 GameObject:
   m_ObjectHideFlags: 0
@@ -136479,7 +137550,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BGImage.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1767181995
@@ -136645,7 +137716,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ROBOT_IMAGE.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ROBOT_IMAGE.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1767576750
@@ -137030,7 +138101,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1774082397
@@ -137346,7 +138417,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1779208792
@@ -137863,7 +138934,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1781222381
@@ -138715,7 +139786,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1791516832
@@ -139364,7 +140435,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1798064439
 RectTransform:
   m_ObjectHideFlags: 0
@@ -140313,7 +141384,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1809906831
@@ -140652,7 +141723,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1819937167
@@ -140803,7 +141874,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1821000192
@@ -141535,7 +142606,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1828985435
@@ -142708,7 +143779,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1850744352
@@ -142881,7 +143952,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BGImage.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1851005397
@@ -144559,7 +145630,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Buttons/Home/d1c5464331126d13c44344cacb4b3392-Photoroom.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/d1c5464331126d13c44344cacb4b3392-Photoroom.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1871450251
@@ -145351,7 +146422,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1877710798
@@ -145719,7 +146790,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1885456356
@@ -147288,7 +148359,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1907612521
@@ -148063,7 +149134,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1921896223
@@ -148103,7 +149174,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.2, y: 1}
-  m_AnchoredPosition: {x: -48, y: 0.35998535}
+  m_AnchoredPosition: {x: -48.000244, y: 0.35998535}
   m_SizeDelta: {x: 4, y: -20}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1921896225
@@ -149123,7 +150194,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1930335458
@@ -149215,7 +150286,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1930818158
@@ -149382,7 +150453,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/MSGCHAT_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/MSGCHAT_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1936528245
@@ -149751,7 +150822,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1944081225
@@ -150329,7 +151400,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1953440829
@@ -150744,7 +151815,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BG_WithoutCard.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BG_WithoutCard.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1956759261
@@ -150893,7 +151964,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1959097265
@@ -151241,7 +152312,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: b51e3ff63e1877c4789d2c6bfc1e09b9, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -151271,7 +152342,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1966745808
@@ -151636,7 +152707,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Emojies.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Emojies.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1972266254
@@ -151749,7 +152820,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1977292081
@@ -151802,7 +152873,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1977292084
@@ -152007,7 +153078,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1982997113
@@ -152660,7 +153731,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &1989774685
@@ -152780,6 +153851,7 @@ GameObject:
   - component: {fileID: 1990269598}
   - component: {fileID: 1990269600}
   - component: {fileID: 1990269601}
+  - component: {fileID: 1990269602}
   m_Layer: 0
   m_Name: Chair_1
   m_TagString: Untagged
@@ -152803,10 +153875,10 @@ RectTransform:
   - {fileID: 1025518325}
   m_Father: {fileID: 560953393}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 578, y: -100}
-  m_SizeDelta: {x: 350, y: 200}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1990269598
 MonoBehaviour:
@@ -152878,9 +153950,65 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
+--- !u!114 &1990269602
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1990269596}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 1990269598}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 795238783}
+        m_TargetAssemblyTypeName: PlayWithFriendsManager, Assembly-CSharp
+        m_MethodName: OnClick_ChangeSeat
+        m_Mode: 3
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 2
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &1990325582
 GameObject:
   m_ObjectHideFlags: 0
@@ -153022,7 +154150,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &1993588075
@@ -153936,7 +155064,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2009910482
@@ -154134,7 +155262,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: 59fb1a36f73c0cf47a8c41a45e5cf7fc, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -154164,7 +155292,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2013244659
@@ -154552,7 +155680,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2019871231
@@ -155566,6 +156694,97 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2027009322}
   m_CullTransparentMesh: 1
+--- !u!1 &2027635217
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2027635218}
+  - component: {fileID: 2027635221}
+  - component: {fileID: 2027635220}
+  - component: {fileID: 2027635219}
+  m_Layer: 0
+  m_Name: Avatar
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2027635218
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2027635217}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 123689989}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 80, y: 80}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &2027635219
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2027635217}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
+  addressableKey: Assets/_Project/Art/Sprites/Profile_Images/Profile4.png
+  fadeIn: 1
+  fadeDuration: 0.25
+--- !u!114 &2027635220
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2027635217}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0.78431374}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &2027635221
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2027635217}
+  m_CullTransparentMesh: 1
 --- !u!1 &2029454688
 GameObject:
   m_ObjectHideFlags: 0
@@ -156171,7 +157390,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/settings_button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/settings_button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2034821090
@@ -156356,7 +157575,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Voice_Icon.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Voice_Icon.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2035684826
@@ -156779,7 +157998,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2045342889
@@ -157020,7 +158239,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Circle_Solid.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Circle_Solid.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2055507146
@@ -157111,7 +158330,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Speaker_On.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Speaker_On.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2055596457
@@ -157830,7 +159049,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Light_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Light_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2069871603
@@ -157921,7 +159140,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/BGImage.jpeg
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/BGImage.jpeg
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2069909237
@@ -158126,7 +159345,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!114 &2073117324
@@ -158610,7 +159829,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2081198817
@@ -158777,7 +159996,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/ICONS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/ICONS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2081396129
@@ -159263,7 +160482,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/FRIEND_INVITE_BUTTON.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/FRIEND_INVITE_BUTTON.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2091261973
@@ -159399,7 +160618,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/SHARE_BUTTON 1.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/SHARE_BUTTON 1.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2092345786
@@ -159824,7 +161043,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Icons_BG_Image.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Icons_BG_Image.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2094361156
@@ -161660,14 +162879,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.7764706, g: 0.6431373, b: 0.4862745, a: 1}
+  m_Color: {r: 0.74509805, g: 0.6156863, b: 0.50980395, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 636331687736871086, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1380c74ae8cb079419efe3d1b6854c13, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -161697,7 +162916,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/Dark_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/Dark_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2123997974
@@ -161758,7 +162977,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: b51e3ff63e1877c4789d2c6bfc1e09b9, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -161788,7 +163007,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/STATS_BG.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/STATS_BG.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2126322575
@@ -162017,7 +163236,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10a8ec7031834454bae678634968ed2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AddressableUIImageLoader
-  addressableKey: Assets/_Project/Art/Sprites/Images/NEW/WoodTab_Button.png
+  addressableKey: Assets/_Project/Art/Sprites/Images/AllImages/WoodTab_Button.png
   fadeIn: 1
   fadeDuration: 0.25
 --- !u!1 &2131846995

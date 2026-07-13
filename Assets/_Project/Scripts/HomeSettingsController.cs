@@ -23,8 +23,8 @@ public class HomeSettingsController : MonoBehaviour
     public string whatsappUrl = "https://chat.whatsapp.com/";
     public string legalUrl = "https://chaupalstudious.in";
 
-    static readonly Color ActiveTint = Color.white;
     static readonly Color InactiveTint = new Color(1f, 1f, 1f, 0.35f);
+    static readonly Color SoundSelectedTint = new Color(0.90f, 0.45f, 0.18f, 1f); // orange like Push On
     static readonly Color OptActive = Color.white;
     static readonly Color OptInactive = new Color(1f, 0.93f, 0.82f, 0.55f);
     static readonly Color PushOnTrack = new Color(0.69f, 0.27f, 0.11f, 1f);
@@ -32,6 +32,8 @@ public class HomeSettingsController : MonoBehaviour
 
     CanvasGroup _cg;
     Graphic _soundIcon, _musicIcon;
+    RectTransform _soundIconRt, _musicIconRt;
+    TMP_Text _soundRowLabel;
     Image _pushTrack;
     RectTransform _pushKnob, _board;
     TMP_Text _appModernL, _appClassicL, _versionText;
@@ -57,6 +59,9 @@ public class HomeSettingsController : MonoBehaviour
         _board = Find("Board") as RectTransform;
         _soundIcon = Img("Sound_Icon");
         _musicIcon = Img("Music_Icon");
+        _soundIconRt = Find("Sound_Icon") as RectTransform;
+        _musicIconRt = Find("Music_Icon") as RectTransform;
+        _soundRowLabel = FindSoundRowLabel();
         _pushTrack = Img("Push_Track");
         _pushKnob = Find("Push_Knob") as RectTransform;
         _appModernL = Label("Btn_AppModern");
@@ -81,9 +86,20 @@ public class HomeSettingsController : MonoBehaviour
         WireBtn("Btn_AppModern", () => { SettingsService.AppearanceIndex = 0; RefreshAll(); });
         WireBtn("Btn_AppClassic", () => { SettingsService.AppearanceIndex = 1; RefreshAll(); });
 
-        // Sound / Music
-        WireBtn("Btn_Sound", () => { SettingsService.SoundOn = !SettingsService.SoundOn; RefreshAll(); });
-        WireBtn("Btn_Music", () => { SettingsService.MusicOn = !SettingsService.MusicOn; RefreshAll(); });
+        // Sound row = music on/off (speaker = ON, muted = OFF)
+        WireBtn("Btn_Sound", () =>
+        {
+            // Ensure master listener isn't muted from an old SFX toggle, or On would look selected but stay silent.
+            // Write pref directly so we don't ApplyAudio twice (SoundOn setter would pause while MusicOn is still false).
+            if (!SettingsService.SoundOn)
+            {
+                PlayerPrefs.SetInt(SettingsService.PREF_SOUND_MUTED, 0);
+                PlayerPrefs.Save();
+            }
+            SettingsService.MusicOn = true;
+            RefreshAll();
+        });
+        WireBtn("Btn_Music", () => { SettingsService.MusicOn = false; RefreshAll(); });
 
         // Push notifications
         WireBtn("Btn_Push", () => { SettingsService.PushNotifications = !SettingsService.PushNotifications; RefreshAll(); });
@@ -159,12 +175,10 @@ public class HomeSettingsController : MonoBehaviour
 
     void RefreshAll()
     {
+        ApplySoundToggleVisuals();
+
         if (!preserveManualAppearance)
         {
-            // Sound / Music icon highlight
-            if (_soundIcon != null) _soundIcon.color = SettingsService.SoundOn ? ActiveTint : InactiveTint;
-            if (_musicIcon != null) _musicIcon.color = SettingsService.MusicOn ? ActiveTint : InactiveTint;
-
             // Appearance underline/active
             if (_appModernL != null) _appModernL.color = SettingsService.AppearanceIndex == 0 ? OptActive : OptInactive;
             if (_appClassicL != null) _appClassicL.color = SettingsService.AppearanceIndex == 1 ? OptActive : OptInactive;
@@ -179,10 +193,61 @@ public class HomeSettingsController : MonoBehaviour
                 _pushKnob.anchoredPosition = new Vector2(x, _pushKnob.anchoredPosition.y);
             }
         }
+        else
+        {
+            // Still refresh push knob when preserving manual look.
+            bool push = SettingsService.PushNotifications;
+            if (_pushTrack != null) _pushTrack.color = push ? PushOnTrack : PushOffTrack;
+            if (_pushKnob != null)
+            {
+                float x = push ? 34f : -34f;
+                _pushKnob.anchoredPosition = new Vector2(x, _pushKnob.anchoredPosition.y);
+            }
+        }
+
+        if (_soundRowLabel != null)
+            _soundRowLabel.text = "Sound";
 
         if (_versionText != null) _versionText.text = "Dehla Pakad v" + Application.version;
         if (_langDropdown != null && _langDropdown.label != null)
             _langDropdown.label.text = SettingsService.LanguageName;
+    }
+
+    void ApplySoundToggleVisuals()
+    {
+        bool musicOn = SettingsService.MusicOn;
+
+        if (_soundIcon != null)
+            _soundIcon.color = musicOn ? SoundSelectedTint : InactiveTint;
+        if (_musicIcon != null)
+            _musicIcon.color = musicOn ? InactiveTint : SoundSelectedTint;
+
+        // Selected icon slightly larger so the active choice is obvious.
+        if (_soundIconRt != null)
+        {
+            _soundIconRt.DOKill();
+            _soundIconRt.localScale = Vector3.one * (musicOn ? 1.18f : 1f);
+        }
+        if (_musicIconRt != null)
+        {
+            _musicIconRt.DOKill();
+            _musicIconRt.localScale = Vector3.one * (musicOn ? 1f : 1.18f);
+        }
+    }
+
+    TMP_Text FindSoundRowLabel()
+    {
+        // Prefer the authored label that used to say "Sound | Music".
+        TMP_Text[] labels = GetComponentsInChildren<TMP_Text>(true);
+        for (int i = 0; i < labels.Length; i++)
+        {
+            TMP_Text t = labels[i];
+            if (t == null) continue;
+            string txt = t.text != null ? t.text.Trim() : string.Empty;
+            if (txt == "Sound | Music" || txt == "Sound|Music" || txt == "Sound")
+                return t;
+        }
+        return null;
     }
 
     void Animate()

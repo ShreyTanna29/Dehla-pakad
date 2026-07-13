@@ -11,6 +11,13 @@ public class SafeAreaFitter : MonoBehaviour
     [Tooltip("When enabled, keeps the RectTransform anchors/offsets exactly as set in the Editor.")]
     [SerializeField] private bool preserveManualAnchors;
 
+    [Header("Insets")]
+    [Tooltip("When false, left edge stays at the screen edge (useful for left sidebars that should match Editor layout).")]
+    [SerializeField] private bool applyLeftInset = true;
+    [SerializeField] private bool applyRightInset = true;
+    [SerializeField] private bool applyTopInset = true;
+    [SerializeField] private bool applyBottomInset = true;
+
     RectTransform _rt;
     Rect _lastSafe;
     Vector2Int _lastScreen;
@@ -35,12 +42,13 @@ public class SafeAreaFitter : MonoBehaviour
         _lastSafe = safe;
         _lastScreen = new Vector2Int(Screen.width, Screen.height);
 
-        Vector2 anchorMin = safe.position;
-        Vector2 anchorMax = safe.position + safe.size;
-        anchorMin.x /= Screen.width;
-        anchorMin.y /= Screen.height;
-        anchorMax.x /= Screen.width;
-        anchorMax.y /= Screen.height;
+        float left = applyLeftInset ? safe.xMin : 0f;
+        float right = applyRightInset ? safe.xMax : Screen.width;
+        float bottom = applyBottomInset ? safe.yMin : 0f;
+        float top = applyTopInset ? safe.yMax : Screen.height;
+
+        Vector2 anchorMin = new Vector2(left / Screen.width, bottom / Screen.height);
+        Vector2 anchorMax = new Vector2(right / Screen.width, top / Screen.height);
 
         if (float.IsNaN(anchorMin.x) || float.IsNaN(anchorMax.x)) return;
 

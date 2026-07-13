@@ -5206,6 +5206,12 @@ public class ResultManager : MonoBehaviourPunCallbacks
     const float BannerAdHeightPx = 110f;
     const float BannerAdSafeMarginPx = 24f;
 
+    public float GetLeaderboardDisplaySeconds(bool matchOver) =>
+        matchOver ? MatchEndLeaderboardSeconds : InterRoundLeaderboardSeconds;
+
+    TMP_Text _leaderboardCountdownText;
+    Coroutine _leaderboardCountdownCoroutine;
+
     private PlayerResult[] playerResults = new PlayerResult[4];
     private Image _dimOverlay;
     private readonly List<GameObject> _dynamicRows = new List<GameObject>();
@@ -5218,6 +5224,14 @@ public class ResultManager : MonoBehaviourPunCallbacks
     private bool _roundTransitionRunning;
     private ScrollRect _roundScrollRect;
     private static bool _resultPanelResolveWarned;
+
+    // Friends 2v2: pin header + TOTAL outside the round ScrollRect so only round rows scroll.
+    Transform _friendsPinnedHeader;
+    Transform _friendsPinnedTotals;
+    bool _friendsScrollChromeActive;
+    Vector2 _friendsViewportOffsetMin;
+    Vector2 _friendsViewportOffsetMax;
+    bool _friendsViewportOffsetsCached;
 
     void Awake()
     {
@@ -5243,6 +5257,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
     void HideResultPanelImmediate()
     {
         _isShowingResult = false;
+        StopLeaderboardCountdown();
         HideLeaderboardBanner();
         if (!ResolveResultPanel()) return;
         resultPanel.DOKill(); resultPanel.alpha = 0; resultPanel.interactable = false; resultPanel.blocksRaycasts = false; resultPanel.gameObject.SetActive(false);
@@ -5368,11 +5383,30 @@ public class ResultManager : MonoBehaviourPunCallbacks
         else StartCoroutine(RoundTransitionRoutine(matchOver, authoritative));
     }
 
+    void TriggerNextRoundDealIfAuthoritative()
+    {
+        if (!PhotonNetwork.IsMasterClient && !PhotonNetwork.OfflineMode) return;
+        if (DeckManager.Instance == null || DeckManager.Instance.photonView == null) return;
+
+        int nextRound = currentRound + 1;
+        if (PhotonNetwork.IsMasterClient || PhotonNetwork.OfflineMode)
+            DeckManager.Instance.ResetRoundStateForNextRound();
+
+        DeckManager.Instance.photonView.RPC(
+            nameof(DeckManager.RPC_BeginNextRound),
+            RpcTarget.AllBuffered,
+            nextRound);
+    }
+
     public void NotifyRoundEndSequenceComplete() { HideResultPanelImmediate(); _roundTransitionRunning = false; }
 
     IEnumerator RoundTransitionRoutine(bool matchOver, bool authoritative)
     {
-        float wait = matchOver ? MatchEndLeaderboardSeconds : InterRoundLeaderboardSeconds;
+        float wait = GetLeaderboardDisplaySeconds(matchOver);
+
+        if (!matchOver && authoritative)
+            TriggerNextRoundDealIfAuthoritative();
+
         yield return new WaitForSecondsRealtime(wait);
         HideResultPanelImmediate(); _roundTransitionRunning = false;
         if (!authoritative) yield break;
@@ -5383,13 +5417,6 @@ public class ResultManager : MonoBehaviourPunCallbacks
             if (DeckManager.Instance != null) DeckManager.Instance.ResetMatchState();
             if (PhotonNetwork.InRoom) PhotonNetwork.LeaveRoom(); else if (NetworkManager.Instance != null) NetworkManager.Instance.ReturnToHomeScreen();
             yield break;
-        }
-
-        int nextRound = currentRound + 1;
-        if (DeckManager.Instance != null)
-        {
-            if (PhotonNetwork.IsMasterClient || PhotonNetwork.OfflineMode) DeckManager.Instance.ResetRoundStateForNextRound();
-            if (DeckManager.Instance.photonView != null) DeckManager.Instance.photonView.RPC(nameof(DeckManager.RPC_BeginNextRound), RpcTarget.AllBuffered, nextRound);
         }
     }
 
@@ -5418,6 +5445,14 @@ public class ResultManager : MonoBehaviourPunCallbacks
         BuildResultPanelUI(); SetActionButtonsVisible(!autoTransition); StartCoroutine(ScrollLeaderboardToBottom());
         resultPanel.gameObject.SetActive(true); ShowLeaderboardBanner(); ResetPanelOpenStateInstant();
         CreateBannerAd(); HideMatchFinishedLabel();
+
+        if (autoTransition)
+        {
+            Transform mainFrame = resultPanel.transform.Find("MainFrame") ?? FindDeepChild(resultPanel.transform, "MainFrame");
+            StartLeaderboardCountdown(mainFrame, matchOver);
+        }
+        else
+            StopLeaderboardCountdown();
     }
 
     void ResetPanelOpenStateInstant()
@@ -5465,8 +5500,45 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     string GetSeatDisplayName(int seatIndex)
     {
-        if (seatIndex == 0) return PlayerProfileSync.GetLocalProfileDisplayName();
-        if (PlayerProfileSync.Instance != null) { switch (seatIndex) { case 1 when PlayerProfileSync.Instance.txtLeftName != null: return CleanName(PlayerProfileSync.Instance.txtLeftName.text); case 2 when PlayerProfileSync.Instance.txtTopName != null: return CleanName(PlayerProfileSync.Instance.txtTopName.text); case 3 when PlayerProfileSync.Instance.txtRightName != null: return CleanName(PlayerProfileSync.Instance.txtRightName.text); } }
+        int actor = GetActorNumberBySeat(seatIndex);
+        if (actor > 0)
+        {
+            if (DeckManager.Instance != null && DeckManager.Instance.IsActorBotControlled(actor))
+            {
+                int botIdx = DeckManager.botActorNumbers != null ? DeckManager.botActorNumbers.IndexOf(actor) : -1;
+                return botIdx >= 0 ? ("Dehla_AI_" + (botIdx + 1)) : ("Bot " + actor);
+            }
+
+            if (PhotonNetwork.LocalPlayer != null
+                && actor == PhotonNetwork.LocalPlayer.ActorNumber
+                && !DeckManager.IsLocalSpectator())
+                return PlayerProfileSync.GetLocalProfileDisplayName();
+
+            if (PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null)
+            {
+                Player p = PhotonNetwork.CurrentRoom.GetPlayer(actor);
+                if (p != null && !string.IsNullOrEmpty(p.NickName))
+                    return CleanName(p.NickName);
+            }
+        }
+
+        if (seatIndex == 0 && !DeckManager.IsLocalSpectator())
+            return PlayerProfileSync.GetLocalProfileDisplayName();
+
+        if (PlayerProfileSync.Instance != null)
+        {
+            switch (seatIndex)
+            {
+                case 0 when PlayerProfileSync.Instance.txtMyName != null:
+                    return CleanName(PlayerProfileSync.Instance.txtMyName.text);
+                case 1 when PlayerProfileSync.Instance.txtLeftName != null:
+                    return CleanName(PlayerProfileSync.Instance.txtLeftName.text);
+                case 2 when PlayerProfileSync.Instance.txtTopName != null:
+                    return CleanName(PlayerProfileSync.Instance.txtTopName.text);
+                case 3 when PlayerProfileSync.Instance.txtRightName != null:
+                    return CleanName(PlayerProfileSync.Instance.txtRightName.text);
+            }
+        }
         return "Player " + (seatIndex + 1);
     }
 
@@ -5565,7 +5637,176 @@ public class ResultManager : MonoBehaviourPunCallbacks
     static readonly Color LeaderLabelColor = Color.black;
     static readonly Color NameBoxColor = new Color(0.36f, 0.20f, 0.10f, 1f);
     static readonly Color TextWhiteColor = Color.white;
-    static readonly Color ScoreDarkColor = new Color(0.16f, 0.09f, 0.04f, 1f);
+    static readonly Color ScoreDarkColor = Color.black;
+    static readonly Color RoundLabelColor = Color.black;
+
+    static void ApplyLeaderboardTextContrast(TextMeshProUGUI tmp)
+    {
+        if (tmp == null) return;
+        tmp.fontStyle |= FontStyles.Bold;
+        tmp.outlineWidth = 0f;
+    }
+
+    void ApplyRoundLabelStyle(TMP_Text cell)
+    {
+        if (cell == null) return;
+        cell.enableAutoSizing = false;
+        cell.fontSize = 38f;
+        cell.fontStyle = FontStyles.Bold;
+        cell.color = RoundLabelColor;
+        cell.outlineWidth = 0f;
+        cell.alignment = TextAlignmentOptions.MidlineLeft;
+        cell.margin = new Vector4(18f, 0f, 0f, 0f);
+        cell.overflowMode = TextOverflowModes.Overflow;
+        if (customFont != null) cell.font = customFont;
+    }
+
+    void ApplyScoreCellStyle(TMP_Text cell, bool isRowLabel)
+    {
+        if (cell == null) return;
+        if (isRowLabel)
+        {
+            ApplyRoundLabelStyle(cell);
+            return;
+        }
+
+        cell.enableAutoSizing = false;
+        cell.fontSize = 36f;
+        cell.fontStyle = FontStyles.Bold;
+        cell.color = ScoreDarkColor;
+        cell.outlineWidth = 0f;
+        cell.alignment = TextAlignmentOptions.Center;
+        cell.margin = Vector4.zero;
+        cell.overflowMode = TextOverflowModes.Overflow;
+    }
+
+    void StyleAuthoredRoundRowLabels(Transform container)
+    {
+        if (container == null) return;
+        for (int r = 1; r <= StaticLeaderboardRows; r++)
+        {
+            Transform row = container.Find("RoundRow_" + r);
+            if (row == null) continue;
+            foreach (Transform child in row)
+            {
+                TMP_Text label = child.GetComponent<TMP_Text>();
+                if (label == null) continue;
+                ApplyRoundLabelStyle(label);
+                break;
+            }
+        }
+    }
+
+    void EnsureLeaderboardCountdownText(Transform mainFrame)
+    {
+        if (descriptionText != null)
+        {
+            _leaderboardCountdownText = descriptionText;
+            return;
+        }
+
+        if (_leaderboardCountdownText != null)
+        {
+            if (mainFrame != null && _leaderboardCountdownText.transform.IsChildOf(mainFrame))
+                return;
+            _leaderboardCountdownText = null;
+        }
+
+        if (mainFrame == null) return;
+
+        Transform existing = mainFrame.Find("LeaderboardCountdownBar/Txt_LeaderboardCountdown");
+        if (existing == null) existing = mainFrame.Find("Txt_LeaderboardCountdown");
+        if (existing != null)
+        {
+            _leaderboardCountdownText = existing.GetComponent<TMP_Text>();
+            return;
+        }
+
+        GameObject bar = new GameObject("LeaderboardCountdownBar", typeof(RectTransform), typeof(Image));
+        bar.transform.SetParent(mainFrame, false);
+        RectTransform barRt = bar.GetComponent<RectTransform>();
+        barRt.anchorMin = new Vector2(0.5f, 0f);
+        barRt.anchorMax = new Vector2(0.5f, 0f);
+        barRt.pivot = new Vector2(0.5f, 0f);
+        barRt.anchoredPosition = new Vector2(0f, 24f);
+        barRt.sizeDelta = new Vector2(540f, 58f);
+        Image barImg = bar.GetComponent<Image>();
+        barImg.color = new Color(0.22f, 0.12f, 0.06f, 0.94f);
+        barImg.raycastTarget = false;
+
+        GameObject go = new GameObject("Txt_LeaderboardCountdown", typeof(RectTransform), typeof(TextMeshProUGUI));
+        go.transform.SetParent(bar.transform, false);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        _leaderboardCountdownText = go.GetComponent<TextMeshProUGUI>();
+        _leaderboardCountdownText.fontSize = 34f;
+        _leaderboardCountdownText.fontStyle = FontStyles.Bold;
+        _leaderboardCountdownText.color = Color.white;
+        _leaderboardCountdownText.alignment = TextAlignmentOptions.Center;
+        _leaderboardCountdownText.raycastTarget = false;
+        if (customFont != null) _leaderboardCountdownText.font = customFont;
+
+        bar.transform.SetAsLastSibling();
+    }
+
+    void StartLeaderboardCountdown(Transform mainFrame, bool matchOver)
+    {
+        StopLeaderboardCountdown();
+        EnsureLeaderboardCountdownText(mainFrame);
+        if (_leaderboardCountdownText == null) return;
+
+        Transform bar = _leaderboardCountdownText.transform.parent;
+        if (bar != null && bar.name == "LeaderboardCountdownBar")
+            bar.gameObject.SetActive(true);
+
+        _leaderboardCountdownText.gameObject.SetActive(true);
+        _leaderboardCountdownCoroutine = StartCoroutine(LeaderboardCountdownRoutine(GetLeaderboardDisplaySeconds(matchOver), matchOver));
+    }
+
+    void StopLeaderboardCountdown()
+    {
+        if (_leaderboardCountdownCoroutine != null)
+        {
+            StopCoroutine(_leaderboardCountdownCoroutine);
+            _leaderboardCountdownCoroutine = null;
+        }
+
+        if (_leaderboardCountdownText != null)
+        {
+            _leaderboardCountdownText.text = string.Empty;
+            Transform bar = _leaderboardCountdownText.transform.parent;
+            if (bar != null && bar.name == "LeaderboardCountdownBar")
+                bar.gameObject.SetActive(false);
+            else if (_leaderboardCountdownText.gameObject.name == "Txt_LeaderboardCountdown")
+                _leaderboardCountdownText.gameObject.SetActive(false);
+        }
+    }
+
+    IEnumerator LeaderboardCountdownRoutine(float seconds, bool matchOver)
+    {
+        if (_leaderboardCountdownText == null) yield break;
+
+        Transform bar = _leaderboardCountdownText.transform.parent;
+        if (bar != null && bar.name == "LeaderboardCountdownBar")
+            bar.gameObject.SetActive(true);
+
+        int remaining = Mathf.CeilToInt(seconds);
+        string prefix = matchOver ? "Match ends in" : "Leaderboard closes in";
+
+        while (remaining > 0)
+        {
+            _leaderboardCountdownText.text = $"{prefix} {remaining}s";
+            yield return new WaitForSecondsRealtime(1f);
+            remaining--;
+        }
+
+        _leaderboardCountdownText.text = string.Empty;
+        _leaderboardCountdownCoroutine = null;
+    }
 
     const int StaticLeaderboardRows = 5;
 
@@ -5579,7 +5820,7 @@ public class ResultManager : MonoBehaviourPunCallbacks
     void BuildEditableTotalsRow(Transform container, float innerW, float rowH)
     {
         if (container == null || container.Find("TotalsRow") != null) return;
-        string[] totalCells = new string[6]; totalCells[0] = "TOTAL"; for (int s = 1; s < 6; s++) totalCells[s] = "0";
+        string[] totalCells = new string[5]; totalCells[0] = "TOTAL"; for (int s = 1; s < 5; s++) totalCells[s] = "0";
         GameObject rowGo = CreateScoreRow("TotalsRow", container, totalCells, innerW, rowH, ScoreDarkColor, true);
         rowGo.transform.SetAsLastSibling();
     }
@@ -5589,7 +5830,13 @@ public class ResultManager : MonoBehaviourPunCallbacks
         if (container == null) return;
         ResolveThemeSprites(); float innerW = ComputeInnerWidth(container); const float headerH = 120f; const float rowH = 64f;
         CreateHeaderRow("HeaderRow", container, innerW, headerH);
-        for (int r = 1; r <= rowCount; r++) { string[] cells = new string[6]; cells[0] = "R" + r; for (int s = 1; s < 6; s++) cells[s] = ""; CreateScoreRow("RoundRow_" + r, container, cells, innerW, rowH, TextWhiteColor, false); }
+        for (int r = 1; r <= rowCount; r++)
+        {
+            string[] cells = new string[5];
+            cells[0] = "R" + r;
+            for (int s = 1; s < 5; s++) cells[s] = "";
+            CreateScoreRow("RoundRow_" + r, container, cells, innerW, rowH, TextWhiteColor, false);
+        }
         BuildEditableTotalsRow(container, innerW, rowH);
         BuildVerticalDividers(container, innerW);
     }
@@ -5607,10 +5854,83 @@ public class ResultManager : MonoBehaviourPunCallbacks
     void FillLeaderboardData(Transform container)
     {
         _dynamicRows.Clear();
-        if (IsFriendsTeamMode()) { SetAuthoredLeaderboardRowsActive(container, false); BuildFriendsTeamLeaderboard(container); }
-        else { SetAuthoredLeaderboardRowsActive(container, true); FillIndividualLeaderboardRows(container); }
+        if (IsFriendsTeamMode())
+        {
+            SetAuthoredLeaderboardRowsActive(container, false);
+            BuildFriendsTeamLeaderboard(container);
+        }
+        else
+        {
+            RestoreFriendsScrollChrome();
+            SetAuthoredLeaderboardRowsActive(container, true);
+            FillIndividualLeaderboardRows(container);
+            StyleAuthoredRoundRowLabels(container);
+            HideRightTotalColumn(container);
+        }
         ApplyAllLeaderboardPositions(container);
         if (container is RectTransform containerRect) StartCoroutine(RebuildLeaderboardLayout(containerRect));
+    }
+
+    /// <summary>
+    /// Hides the right-side per-round TOTAL column so ROUNDS + 4 players use the full board width.
+    /// Bottom TotalsRow still shows each player's cumulative score.
+    /// </summary>
+    void HideRightTotalColumn(Transform container)
+    {
+        if (container == null) return;
+
+        HideRightmostScoreCell(container.Find("HeaderRow"));
+        for (int r = 1; r <= StaticLeaderboardRows; r++)
+            HideRightmostScoreCell(container.Find("RoundRow_" + r));
+        HideRightmostScoreCell(container.Find("TotalsRow"));
+
+        foreach (Transform child in container)
+        {
+            if (child.name.StartsWith("RoundRow_") || child.name == "FriendsHeaderRow"
+                || child.name.StartsWith("FriendsRoundRow_") || child.name == "FriendsTotalsRow")
+                HideRightmostScoreCell(child);
+
+            // Hide the old right-side TOTAL divider if scene authored two VDividers.
+            if (child.name == "VDivider")
+            {
+                var rt = child as RectTransform;
+                if (rt != null && rt.anchoredPosition.x > 0f)
+                    child.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    static void HideRightmostScoreCell(Transform row)
+    {
+        if (row == null) return;
+
+        List<Transform> scoreCells = new List<Transform>();
+        for (int i = 0; i < row.childCount; i++)
+        {
+            Transform child = row.GetChild(i);
+            if (child.name == "PlayerHeaderCell" || child.name == "FriendsTeamHeaderCell") continue;
+            if (child.name == "DashedLine_Row" || child.name.Contains("Divider")) continue;
+            if (child.GetComponent<TextMeshProUGUI>() == null) continue;
+            scoreCells.Add(child);
+        }
+
+        if (scoreCells.Count == 0) return;
+
+        // Header TOTAL label (not the bottom-row TOTAL label at index 0).
+        for (int i = scoreCells.Count - 1; i >= 1; i--)
+        {
+            var tmp = scoreCells[i].GetComponent<TextMeshProUGUI>();
+            if (tmp == null) continue;
+            if (string.Equals(StripRichTextTags(tmp.text), "TOTAL", System.StringComparison.OrdinalIgnoreCase))
+            {
+                scoreCells[i].gameObject.SetActive(false);
+                return;
+            }
+        }
+
+        // Round / totals rows: hide the last numeric TOTAL column when 6 cells exist.
+        if (scoreCells.Count >= 6)
+            scoreCells[scoreCells.Count - 1].gameObject.SetActive(false);
     }
 
     void FillIndividualLeaderboardRows(Transform container)
@@ -5622,7 +5942,14 @@ public class ResultManager : MonoBehaviourPunCallbacks
         {
             Transform rowT = container.Find("RoundRow_" + r); GameObject rowGo;
             if (rowT != null) rowGo = rowT.gameObject;
-            else { string[] blank = new string[6]; blank[0] = "R" + r; for (int s = 1; s < 6; s++) blank[s] = ""; rowGo = CreateScoreRow("RoundRow_" + r, container, blank, ComputeInnerWidth(container), 64f, TextWhiteColor, false); _overflowRows.Add(rowGo); }
+            else
+            {
+                string[] blank = new string[5];
+                blank[0] = "R" + r;
+                for (int s = 1; s < 5; s++) blank[s] = "";
+                rowGo = CreateScoreRow("RoundRow_" + r, container, blank, ComputeInnerWidth(container), 64f, TextWhiteColor, false);
+                _overflowRows.Add(rowGo);
+            }
             rowGo.SetActive(true); rowGo.transform.localScale = Vector3.one; var rowCg = rowGo.GetComponent<CanvasGroup>(); if (rowCg != null) rowCg.alpha = 1f;
             FillRowCells(rowGo, r); _dynamicRows.Add(rowGo);
         }
@@ -5641,44 +5968,257 @@ public class ResultManager : MonoBehaviourPunCallbacks
 
     IEnumerator RebuildLeaderboardLayout(RectTransform containerTransform)
     {
-        yield return null; if (containerTransform == null) yield break;
-        Canvas.ForceUpdateCanvases(); UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(containerTransform);
+        yield return null;
+        if (containerTransform == null) yield break;
+
+        // Disable row HLGs before parent rebuild so Unity doesn't fight our column X positions.
+        foreach (Transform row in containerTransform)
+        {
+            var hlg = row.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null) hlg.enabled = false;
+        }
+
+        if (_friendsPinnedHeader != null)
+        {
+            foreach (Transform row in _friendsPinnedHeader)
+            {
+                var hlg = row.GetComponent<HorizontalLayoutGroup>();
+                if (hlg != null) hlg.enabled = false;
+            }
+        }
+        if (_friendsPinnedTotals != null)
+        {
+            foreach (Transform row in _friendsPinnedTotals)
+            {
+                var hlg = row.GetComponent<HorizontalLayoutGroup>();
+                if (hlg != null) hlg.enabled = false;
+            }
+        }
+
+        Canvas.ForceUpdateCanvases();
+        UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(containerTransform);
         ApplyAllLeaderboardPositions(containerTransform);
+
+        // One more frame — VerticalLayoutGroup sometimes shifts row frames after rebuild.
+        yield return null;
+        if (containerTransform != null)
+            ApplyAllLeaderboardPositions(containerTransform);
     }
 
     void BuildOrUpdateTotalsRow(Transform container)
     {
         if (container == null) return;
         int[] totals = new int[4]; foreach (RoundResult rr in roundHistory) for (int s = 0; s < 4 && s < rr.dehlasPerSeat.Length; s++) totals[s] += rr.dehlasPerSeat[s];
-        int grand = totals[0] + totals[1] + totals[2] + totals[3];
-        string[] cellTexts = new string[6]; cellTexts[0] = "TOTAL"; for (int s = 0; s < 4; s++) cellTexts[s + 1] = totals[s].ToString(); cellTexts[5] = grand.ToString();
+        // No right grand-total column — only ROUNDS label + 4 player totals.
+        string[] cellTexts = new string[5]; cellTexts[0] = "TOTAL"; for (int s = 0; s < 4; s++) cellTexts[s + 1] = totals[s].ToString();
         Transform existing = container.Find("TotalsRow"); bool authored = existing != null;
         GameObject rowGo = authored ? existing.gameObject : CreateScoreRow("TotalsRow", container, cellTexts, ComputeInnerWidth(container), 64f, ScoreDarkColor, true);
         if (!authored) _overflowRows.Add(rowGo);
         rowGo.transform.SetAsLastSibling(); rowGo.SetActive(true); _dynamicRows.Add(rowGo);
-        var tmps = new List<TextMeshProUGUI>(); foreach (Transform child in rowGo.transform) { var t = child.GetComponent<TextMeshProUGUI>(); if (t != null) tmps.Add(t); }
-        if (tmps.Count < 6) return;
-        for (int s = 0; s < 6; s++) { TextMeshProUGUI totalRowText = tmps[s]; totalRowText.text = StripRichTextTags(cellTexts[s]); if (!authored) { totalRowText.fontSize = 34; totalRowText.color = Color.black; totalRowText.enableAutoSizing = false; totalRowText.alignment = s == 0 ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.Center; } }
+        HideRightmostScoreCell(rowGo.transform);
+        var tmps = new List<TextMeshProUGUI>(); foreach (Transform child in rowGo.transform) { if (!child.gameObject.activeSelf) continue; var t = child.GetComponent<TextMeshProUGUI>(); if (t != null) tmps.Add(t); }
+        int limit = Mathf.Min(tmps.Count, cellTexts.Length);
+        for (int s = 0; s < limit; s++)
+        {
+            TextMeshProUGUI totalRowText = tmps[s];
+            totalRowText.text = StripRichTextTags(cellTexts[s]);
+            totalRowText.fontSize = 36;
+            totalRowText.color = Color.black;
+            totalRowText.fontStyle = FontStyles.Bold;
+            totalRowText.enableAutoSizing = false;
+            totalRowText.alignment = s == 0 ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.Center;
+        }
     }
 
     void BuildFriendsTeamLeaderboard(Transform container)
     {
         if (container == null) return;
-        ResolveThemeSprites(); float innerW = ComputeInnerWidth(container); const float headerH = 120f; const float rowH = 64f;
-        GameObject headerGo = NewRow("FriendsHeaderRow", container, innerW, headerH);
+        ResolveThemeSprites();
+
+        const float headerH = 120f;
+        const float rowH = 64f;
+        const float totalsH = 68f;
+
+        Transform scrollRoot = _roundScrollRect != null ? _roundScrollRect.transform : container.parent;
+        RectTransform viewportRt = _roundScrollRect != null ? _roundScrollRect.viewport as RectTransform : container.parent as RectTransform;
+        ApplyFriendsScrollChrome(scrollRoot as RectTransform, viewportRt, headerH, totalsH);
+
+        Transform headerHost = EnsureFriendsPinHost(scrollRoot, "FriendsPinnedHeader", pinTop: true, height: headerH);
+        Transform totalsHost = EnsureFriendsPinHost(scrollRoot, "FriendsPinnedTotals", pinTop: false, height: totalsH);
+        _friendsPinnedHeader = headerHost;
+        _friendsPinnedTotals = totalsHost;
+
+        float innerW = ComputeInnerWidth(container);
+        if (innerW < 900f) innerW = 1310f;
+
+        GameObject headerGo = NewRow("FriendsHeaderRow", headerHost, innerW, headerH);
         AddSideHeaderLabel(headerGo.transform, "ROUNDS", true, LeaderLabelColor, 30, FontStyles.Bold);
-        CreateFriendsTeamHeaderCell(headerGo.transform, 0, 2); CreateFriendsTeamHeaderCell(headerGo.transform, 1, 3);
-        AddCellLabel(headerGo.transform, "TOTAL", LeaderLabelColor, 30, FontStyles.Bold);
-        AddRowDashedLine(headerGo, innerW, headerH); RegisterFriendsRow(headerGo);
-        int slots = maxRounds > 0 ? maxRounds : Mathf.Max(roundHistory.Count, 1); int totalRows = Mathf.Max(slots, StaticLeaderboardRows);
+        CreateFriendsTeamHeaderCell(headerGo.transform, 0, 2);
+        CreateFriendsTeamHeaderCell(headerGo.transform, 1, 3);
+        AddRowDashedLine(headerGo, innerW, headerH);
+        CenterPinnedRow(headerGo);
+        RegisterFriendsRow(headerGo);
+
+        // Only played rounds scroll — no empty R rows, TOTAL stays pinned below.
+        int totalRows = Mathf.Max(1, roundHistory.Count);
         int grandA = 0, grandB = 0;
-        for (int r = 1; r <= totalRows; r++) { RoundResult round = roundHistory.Find(rr => rr.roundNumber == r); string aVal = "", bVal = "", rowTotal = ""; if (round != null && round.dehlasPerSeat != null && round.dehlasPerSeat.Length >= 4) { int a = round.dehlasPerSeat[0] + round.dehlasPerSeat[2]; int b = round.dehlasPerSeat[1] + round.dehlasPerSeat[3]; aVal = a.ToString(); bVal = b.ToString(); rowTotal = (a + b).ToString(); grandA += a; grandB += b; } string[] cells = { "R" + r, aVal, bVal, rowTotal }; GameObject rowGo = CreateScoreRow("FriendsRoundRow_" + r, container, cells, innerW, rowH, Color.black, true); StyleFriendsRowCells(rowGo, Color.black); RegisterFriendsRow(rowGo); }
-        string[] totalCells = { "TOTAL", grandA.ToString(), grandB.ToString(), (grandA + grandB).ToString() };
-        GameObject totalsGo = CreateScoreRow("FriendsTotalsRow", container, totalCells, innerW, rowH, ScoreDarkColor, true); StyleFriendsRowCells(totalsGo, ScoreDarkColor); RegisterFriendsRow(totalsGo);
+        for (int r = 1; r <= totalRows; r++)
+        {
+            RoundResult round = roundHistory.Find(rr => rr.roundNumber == r);
+            string aVal = "0", bVal = "0";
+            if (round != null && round.dehlasPerSeat != null && round.dehlasPerSeat.Length >= 4)
+            {
+                int a = round.dehlasPerSeat[0] + round.dehlasPerSeat[2];
+                int b = round.dehlasPerSeat[1] + round.dehlasPerSeat[3];
+                aVal = a.ToString();
+                bVal = b.ToString();
+                grandA += a;
+                grandB += b;
+            }
+            string[] cells = { "R" + r, aVal, bVal };
+            GameObject rowGo = CreateScoreRow("FriendsRoundRow_" + r, container, cells, innerW, rowH, ScoreDarkColor, true);
+            StyleFriendsRowCells(rowGo, ScoreDarkColor);
+            RegisterFriendsRow(rowGo);
+        }
+
+        string[] totalCells = { "TOTAL", grandA.ToString(), grandB.ToString() };
+        GameObject totalsGo = CreateScoreRow("FriendsTotalsRow", totalsHost, totalCells, innerW, totalsH, ScoreDarkColor, true);
+        StyleFriendsRowCells(totalsGo, ScoreDarkColor);
+        CenterPinnedRow(totalsGo);
+        RegisterFriendsRow(totalsGo);
+
+        RefreshFriendsScrollContentSize(container, totalRows, rowH);
         BuildFriendsDividers(container, innerW);
+
+        if (_roundScrollRect != null)
+            StartCoroutine(ScrollLeaderboardToBottom());
     }
 
-    void CreateFriendsTeamHeaderCell(Transform rowParent, int topSeat, int bottomSeat) { var cell = new GameObject("FriendsTeamHeaderCell", typeof(RectTransform)); cell.transform.SetParent(rowParent, false); MakeEqualColumn(cell); CreateStackedNamePlate(cell.transform, topSeat, 28f); CreateStackedNamePlate(cell.transform, bottomSeat, -28f); }
+    static void CenterPinnedRow(GameObject rowGo)
+    {
+        if (rowGo == null) return;
+        var rt = rowGo.GetComponent<RectTransform>();
+        if (rt == null) return;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+    }
+
+    Transform EnsureFriendsPinHost(Transform scrollRoot, string name, bool pinTop, float height)
+    {
+        if (scrollRoot == null) return null;
+
+        Transform existing = scrollRoot.Find(name);
+        if (existing != null)
+        {
+            for (int i = existing.childCount - 1; i >= 0; i--)
+                Destroy(existing.GetChild(i).gameObject);
+            return existing;
+        }
+
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(scrollRoot, false);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        if (pinTop)
+        {
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(0f, height);
+            go.transform.SetAsFirstSibling();
+        }
+        else
+        {
+            rt.anchorMin = new Vector2(0f, 0f);
+            rt.anchorMax = new Vector2(1f, 0f);
+            rt.pivot = new Vector2(0.5f, 0f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(0f, height);
+            go.transform.SetAsLastSibling();
+        }
+        return go.transform;
+    }
+
+    void ApplyFriendsScrollChrome(RectTransform scrollRt, RectTransform viewportRt, float headerH, float totalsH)
+    {
+        if (viewportRt == null) return;
+
+        if (!_friendsViewportOffsetsCached)
+        {
+            _friendsViewportOffsetMin = viewportRt.offsetMin;
+            _friendsViewportOffsetMax = viewportRt.offsetMax;
+            _friendsViewportOffsetsCached = true;
+        }
+
+        viewportRt.anchorMin = Vector2.zero;
+        viewportRt.anchorMax = Vector2.one;
+        viewportRt.pivot = new Vector2(0.5f, 0.5f);
+        viewportRt.offsetMin = new Vector2(0f, totalsH + 6f);
+        viewportRt.offsetMax = new Vector2(0f, -(headerH + 6f));
+        _friendsScrollChromeActive = true;
+
+        // Keep scroll root tall enough for header + rounds + totals.
+        if (scrollRt != null && scrollRt.sizeDelta.y < 500f)
+            scrollRt.sizeDelta = new Vector2(scrollRt.sizeDelta.x, 634f);
+    }
+
+    void RestoreFriendsScrollChrome()
+    {
+        if (!_friendsScrollChromeActive) return;
+
+        if (_roundScrollRect != null && _roundScrollRect.viewport is RectTransform viewportRt && _friendsViewportOffsetsCached)
+        {
+            viewportRt.offsetMin = _friendsViewportOffsetMin;
+            viewportRt.offsetMax = _friendsViewportOffsetMax;
+        }
+
+        if (_friendsPinnedHeader != null)
+        {
+            Destroy(_friendsPinnedHeader.gameObject);
+            _friendsPinnedHeader = null;
+        }
+        if (_friendsPinnedTotals != null)
+        {
+            Destroy(_friendsPinnedTotals.gameObject);
+            _friendsPinnedTotals = null;
+        }
+
+        _friendsScrollChromeActive = false;
+    }
+
+    void RefreshFriendsScrollContentSize(Transform container, int rowCount, float rowH)
+    {
+        if (container is not RectTransform contentRt) return;
+
+        var vlg = container.GetComponent<VerticalLayoutGroup>();
+        float pad = vlg != null ? vlg.padding.top + vlg.padding.bottom : 40f;
+        float spacing = vlg != null ? vlg.spacing : 15f;
+        float h = pad + rowCount * rowH + Mathf.Max(0, rowCount - 1) * spacing + 8f;
+
+        contentRt.anchorMin = new Vector2(0f, 1f);
+        contentRt.anchorMax = new Vector2(1f, 1f);
+        contentRt.pivot = new Vector2(0.5f, 1f);
+        contentRt.sizeDelta = new Vector2(contentRt.sizeDelta.x, h);
+
+        var fitter = container.GetComponent<ContentSizeFitter>();
+        if (fitter == null) fitter = container.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        if (_roundScrollRect != null)
+            _roundScrollRect.content = contentRt;
+    }
+
+    void CreateFriendsTeamHeaderCell(Transform rowParent, int topSeat, int bottomSeat)
+    {
+        var cell = new GameObject("FriendsTeamHeaderCell", typeof(RectTransform));
+        cell.transform.SetParent(rowParent, false);
+        MakeEqualColumn(cell);
+        CreateStackedNamePlate(cell.transform, topSeat, 28f);
+        CreateStackedNamePlate(cell.transform, bottomSeat, -28f);
+    }
 
     void CreateStackedNamePlate(Transform cellParent, int seatIndex, float y)
     {
@@ -5691,44 +6231,399 @@ public class ResultManager : MonoBehaviourPunCallbacks
         var nameTxt = AddTmp(nameBox.transform, GetSeatDisplayName(seatIndex), Color.white, 16, TextAlignmentOptions.Center, FontStyles.Bold); nameTxt.rectTransform.anchorMin = Vector2.zero; nameTxt.rectTransform.anchorMax = Vector2.one; nameTxt.rectTransform.offsetMin = new Vector2(6, 2); nameTxt.rectTransform.offsetMax = new Vector2(-6, -2); nameTxt.overflowMode = TextOverflowModes.Ellipsis; nameTxt.enableAutoSizing = true; nameTxt.fontSizeMin = 9; nameTxt.fontSizeMax = 16;
     }
 
-    void StyleFriendsRowCells(GameObject rowGo, Color color) { if (rowGo == null) return; int i = 0; foreach (Transform child in rowGo.transform) { var tmp = child.GetComponent<TextMeshProUGUI>(); if (tmp == null) continue; ApplyCellStyle(tmp, i == 0); tmp.color = color; i++; } }
-    void RegisterFriendsRow(GameObject rowGo) { if (rowGo == null) return; _overflowRows.Add(rowGo); rowGo.transform.SetAsLastSibling(); rowGo.SetActive(true); rowGo.transform.localScale = Vector3.one; var cg = rowGo.GetComponent<CanvasGroup>(); if (cg != null) cg.alpha = 1f; _dynamicRows.Add(rowGo); }
-    void BuildFriendsDividers(Transform container, float innerW) { var crt = container as RectTransform; float h = (crt != null && crt.rect.height > 1f) ? crt.rect.height - 40f : 540f; float col = innerW / 4f; AddFriendsVerticalDivider(container, -innerW / 2f + col, h); AddFriendsVerticalDivider(container, -innerW / 2f + col * 3f, h); }
+    void StyleFriendsRowCells(GameObject rowGo, Color color) { if (rowGo == null) return; int i = 0; foreach (Transform child in rowGo.transform) { var tmp = child.GetComponent<TextMeshProUGUI>(); if (tmp == null) continue; ApplyScoreCellStyle(tmp, i == 0); if (i > 0) tmp.color = color; i++; } }
+    void RegisterFriendsRow(GameObject rowGo)
+    {
+        if (rowGo == null) return;
+        _overflowRows.Add(rowGo);
+        // Keep pinned header/totals hosts ordered; only scroll-content rows go last in the content.
+        if (rowGo.transform.parent != null
+            && rowGo.transform.parent.name != "FriendsPinnedHeader"
+            && rowGo.transform.parent.name != "FriendsPinnedTotals")
+            rowGo.transform.SetAsLastSibling();
+        rowGo.SetActive(true);
+        rowGo.transform.localScale = Vector3.one;
+        var cg = rowGo.GetComponent<CanvasGroup>();
+        if (cg != null) cg.alpha = 1f;
+        _dynamicRows.Add(rowGo);
+    }
+    void BuildFriendsDividers(Transform container, float innerW)
+    {
+        var crt = container as RectTransform;
+        float h = (crt != null && crt.rect.height > 1f) ? crt.rect.height - 40f : 540f;
+        // Only divider after ROUNDS — no right TOTAL column.
+        AddFriendsVerticalDivider(container, -innerW / 2f + innerW / 3f, h);
+    }
     void AddFriendsVerticalDivider(Transform container, float x, float height) { var go = CreateRect("FriendsVDivider", container, new Vector2(x, 0f), new Vector2(3f, height)); var le = go.AddComponent<LayoutElement>(); le.ignoreLayout = true; var img = AddImage(go, new Color(0.12f, 0.06f, 0.02f, 0.45f)); img.raycastTarget = false; go.transform.SetAsFirstSibling(); _overflowRows.Add(go); }
     static string StripRichTextTags(string value) { if (string.IsNullOrEmpty(value)) return value; return System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", string.Empty); }
 
     void FillRowCells(GameObject rowGo, int roundNumber)
     {
-        var cells = new List<TextMeshProUGUI>(); foreach (Transform child in rowGo.transform) { var tmp = child.GetComponent<TextMeshProUGUI>(); if (tmp != null) cells.Add(tmp); }
-        if (cells.Count < 6) return;
-        RoundResult round = roundHistory.Find(rr => rr.roundNumber == roundNumber); cells[0].text = "R" + roundNumber;
-        if (round != null) { for (int s = 0; s < 4; s++) cells[s + 1].text = FormatDehlaScore(round.dehlasPerSeat[s]); cells[5].text = SumRound(round.dehlasPerSeat).ToString(); } else { for (int s = 1; s < 6; s++) cells[s].text = ""; }
-        for (int s = 0; s < 6; s++) { ApplyCellStyle(cells[s], s == 0); cells[s].color = Color.black; }
+        var cells = new List<TextMeshProUGUI>();
+        foreach (Transform child in rowGo.transform)
+        {
+            var tmp = child.GetComponent<TextMeshProUGUI>();
+            if (tmp == null) continue;
+            if (!child.gameObject.activeSelf
+                && string.Equals(StripRichTextTags(tmp.text), "TOTAL", System.StringComparison.OrdinalIgnoreCase))
+                continue;
+            cells.Add(tmp);
+        }
+
+        // Skip hidden right TOTAL cell if still present in list.
+        if (cells.Count >= 6)
+            cells[5].gameObject.SetActive(false);
+
+        if (cells.Count < 5) return;
+
+        RoundResult round = roundHistory.Find(rr => rr.roundNumber == roundNumber);
+        cells[0].text = "R" + roundNumber;
+        if (round != null)
+        {
+            for (int s = 0; s < 4 && s + 1 < cells.Count; s++)
+                cells[s + 1].text = FormatDehlaScore(round.dehlasPerSeat[s]);
+        }
+        else
+        {
+            for (int s = 1; s < 5 && s < cells.Count; s++)
+                cells[s].text = "";
+        }
+
+        for (int s = 0; s < Mathf.Min(5, cells.Count); s++)
+            ApplyScoreCellStyle(cells[s], s == 0);
     }
 
-    void ApplyCellStyle(TextMeshProUGUI cell, bool isRowLabel) { if (cell == null) return; cell.enableAutoSizing = false; cell.fontSize = 34; cell.overflowMode = TextOverflowModes.Overflow; if (isRowLabel) { cell.alignment = TextAlignmentOptions.MidlineLeft; cell.margin = new Vector4(18f, 0f, 0f, 0f); } else { cell.alignment = TextAlignmentOptions.Center; cell.margin = Vector4.zero; } }
+    void ApplyCellStyle(TextMeshProUGUI cell, bool isRowLabel) { ApplyScoreCellStyle(cell, isRowLabel); }
 
-    void ApplyAllLeaderboardPositions(Transform container) { if (container == null) return; foreach (Transform row in container) { string nm = row.name; if (nm == "HeaderRow" || nm == "FriendsHeaderRow") ApplyLeaderboardRowLayout(row, isHeader: true); else if (nm.StartsWith("RoundRow_") || nm == "TotalsRow" || nm.StartsWith("FriendsRoundRow_") || nm == "FriendsTotalsRow") ApplyLeaderboardRowLayout(row, isHeader: false); } }
+    void ApplyAllLeaderboardPositions(Transform container)
+    {
+        if (container == null) return;
+
+        Transform header = container.Find("HeaderRow") ?? container.Find("FriendsHeaderRow");
+        if (header == null && _friendsPinnedHeader != null)
+            header = _friendsPinnedHeader.Find("FriendsHeaderRow");
+
+        if (header != null)
+            ApplyLeaderboardRowLayout(header, isHeader: true);
+
+        // Source of truth: player/team column centers from the header row.
+        float[] playerCenters = CapturePlayerColumnCenters(header);
+        float roundsX = CaptureRoundsColumnX(header);
+        float rowW = CaptureRowWidth(header);
+
+        foreach (Transform row in container)
+        {
+            string nm = row.name;
+            if (nm == "HeaderRow" || nm == "FriendsHeaderRow") continue;
+            if (nm.StartsWith("RoundRow_") || nm == "TotalsRow"
+                || nm.StartsWith("FriendsRoundRow_") || nm == "FriendsTotalsRow")
+            {
+                SyncDataRowFrameToHeader(row, header, rowW);
+                AlignScoreRowToPlayerCenters(row, playerCenters, roundsX);
+            }
+        }
+
+        // Friends TOTAL is pinned outside the scroll content — align it to the same columns.
+        if (_friendsPinnedTotals != null)
+        {
+            Transform totals = _friendsPinnedTotals.Find("FriendsTotalsRow");
+            if (totals != null)
+            {
+                SyncDataRowFrameToHeader(totals, header, rowW);
+                AlignScoreRowToPlayerCenters(totals, playerCenters, roundsX);
+            }
+        }
+    }
+
+    static float CaptureRowWidth(Transform header)
+    {
+        if (header is RectTransform hrt && hrt.rect.width > 1f) return hrt.rect.width;
+        return 1310f;
+    }
+
+    static float[] CapturePlayerColumnCenters(Transform header)
+    {
+        if (header == null) return null;
+        List<float> xs = new List<float>();
+        for (int i = 0; i < header.childCount; i++)
+        {
+            Transform c = header.GetChild(i);
+            if (!c.gameObject.activeSelf) continue;
+            if (c.name != "PlayerHeaderCell" && c.name != "FriendsTeamHeaderCell") continue;
+            if (c is RectTransform rt) xs.Add(rt.anchoredPosition.x);
+        }
+        return xs.Count > 0 ? xs.ToArray() : null;
+    }
+
+    static float CaptureRoundsColumnX(Transform header)
+    {
+        if (header == null) return LbLeftPad;
+        for (int i = 0; i < header.childCount; i++)
+        {
+            Transform c = header.GetChild(i);
+            if (!c.gameObject.activeSelf) continue;
+            if (c.name != "Cell") continue;
+            var tmp = c.GetComponent<TextMeshProUGUI>();
+            if (tmp == null) continue;
+            string t = StripRichTextTags(tmp.text);
+            if (t.StartsWith("R", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "ROUNDS", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "TOTAL", System.StringComparison.OrdinalIgnoreCase))
+            {
+                // First label cell = ROUNDS (or TOTAL on totals — not used for header).
+                if (string.Equals(t, "ROUNDS", System.StringComparison.OrdinalIgnoreCase)
+                    || t.StartsWith("R"))
+                    return ((RectTransform)c).anchoredPosition.x;
+            }
+        }
+        // Fallback: first active Cell
+        for (int i = 0; i < header.childCount; i++)
+        {
+            Transform c = header.GetChild(i);
+            if (c.gameObject.activeSelf && c.name == "Cell" && c is RectTransform rt)
+                return rt.anchoredPosition.x;
+        }
+        return LbLeftPad;
+    }
+
+    static void SyncDataRowFrameToHeader(Transform row, Transform header, float rowW)
+    {
+        if (row == null) return;
+        var rowRt = row as RectTransform;
+        if (rowRt == null) return;
+
+        if (header is RectTransform headerRt)
+        {
+            rowRt.anchorMin = headerRt.anchorMin;
+            rowRt.anchorMax = headerRt.anchorMax;
+            rowRt.pivot = headerRt.pivot;
+            // Keep each row's own Y; match header X + width so columns share the same frame.
+            rowRt.anchoredPosition = new Vector2(headerRt.anchoredPosition.x, rowRt.anchoredPosition.y);
+            rowRt.sizeDelta = new Vector2(rowW > 1f ? rowW : headerRt.sizeDelta.x, rowRt.sizeDelta.y);
+        }
+        else if (rowW > 1f)
+        {
+            rowRt.sizeDelta = new Vector2(rowW, rowRt.sizeDelta.y);
+        }
+
+        var le = row.GetComponent<LayoutElement>();
+        if (le != null)
+        {
+            le.preferredWidth = rowRt.sizeDelta.x;
+            le.minWidth = rowRt.sizeDelta.x;
+        }
+    }
+
+    void AlignScoreRowToPlayerCenters(Transform row, float[] playerCenters, float roundsX)
+    {
+        if (row == null) return;
+
+        var hlg = row.GetComponent<HorizontalLayoutGroup>();
+        if (hlg != null) hlg.enabled = false;
+
+        var rowRt = row as RectTransform;
+        float rowH = (rowRt != null && rowRt.rect.height > 1f) ? rowRt.rect.height : 64f;
+
+        List<RectTransform> labelCells = new List<RectTransform>();
+        List<RectTransform> scoreCells = new List<RectTransform>();
+        for (int i = 0; i < row.childCount; i++)
+        {
+            Transform c = row.GetChild(i);
+            if (!c.gameObject.activeSelf) continue;
+            if (c.name != "Cell") continue;
+            var rt = c as RectTransform;
+            if (rt == null) continue;
+
+            var tmp = c.GetComponent<TextMeshProUGUI>();
+            string text = tmp != null ? StripRichTextTags(tmp.text) : "";
+            bool isLabel = string.Equals(text, "TOTAL", System.StringComparison.OrdinalIgnoreCase)
+                           || (text.Length > 0 && text[0] == 'R');
+            if (isLabel && labelCells.Count == 0)
+                labelCells.Add(rt);
+            else
+                scoreCells.Add(rt);
+        }
+
+        // Fallback if label detection failed: first cell = label, rest = scores.
+        if (labelCells.Count == 0 && scoreCells.Count > 0)
+        {
+            labelCells.Add(scoreCells[0]);
+            scoreCells.RemoveAt(0);
+        }
+
+        if (labelCells.Count > 0)
+        {
+            RectTransform label = labelCells[0];
+            var le = label.GetComponent<LayoutElement>();
+            if (le == null) le = label.gameObject.AddComponent<LayoutElement>();
+            le.ignoreLayout = true;
+            label.anchorMin = new Vector2(0f, 1f);
+            label.anchorMax = new Vector2(0f, 1f);
+            label.pivot = new Vector2(0f, 0.5f);
+            label.sizeDelta = new Vector2(LbRoundsWidth, rowH);
+            label.anchoredPosition = new Vector2(roundsX, -rowH / 2f);
+
+            var tmp = label.GetComponent<TextMeshProUGUI>();
+            if (tmp != null)
+            {
+                tmp.alignment = TextAlignmentOptions.MidlineLeft;
+                tmp.margin = Vector4.zero;
+                tmp.enableWordWrapping = false;
+            }
+        }
+
+        if (playerCenters == null || playerCenters.Length == 0) return;
+
+        int count = Mathf.Min(scoreCells.Count, playerCenters.Length);
+        for (int i = 0; i < count; i++)
+        {
+            RectTransform cell = scoreCells[i];
+            var le = cell.GetComponent<LayoutElement>();
+            if (le == null) le = cell.gameObject.AddComponent<LayoutElement>();
+            le.ignoreLayout = true;
+
+            float slotW = 180f;
+            if (i + 1 < playerCenters.Length)
+                slotW = Mathf.Abs(playerCenters[i + 1] - playerCenters[i]);
+            else if (i > 0)
+                slotW = Mathf.Abs(playerCenters[i] - playerCenters[i - 1]);
+            slotW = Mathf.Clamp(slotW - 8f, 100f, 240f);
+
+            cell.anchorMin = new Vector2(0f, 1f);
+            cell.anchorMax = new Vector2(0f, 1f);
+            cell.pivot = new Vector2(0.5f, 0.5f);
+            cell.sizeDelta = new Vector2(slotW, rowH);
+            // Exact X of the matching player avatar column.
+            cell.anchoredPosition = new Vector2(playerCenters[i], -rowH / 2f);
+
+            var tmp = cell.GetComponent<TextMeshProUGUI>();
+            if (tmp != null)
+            {
+                tmp.alignment = TextAlignmentOptions.Center;
+                tmp.margin = Vector4.zero;
+                tmp.enableWordWrapping = false;
+                tmp.overflowMode = TextOverflowModes.Overflow;
+                tmp.fontStyle = FontStyles.Bold;
+                tmp.color = Color.black;
+                tmp.enableAutoSizing = false;
+                tmp.fontSize = 36f;
+            }
+        }
+
+        // Hide any leftover score cells beyond player count (old right TOTAL).
+        for (int i = count; i < scoreCells.Count; i++)
+            scoreCells[i].gameObject.SetActive(false);
+    }
+
+    // Shared column geometry so score cells stay centered under player avatars.
+    const float LbLeftPad = 24f;
+    const float LbRightPad = 24f;
+    const float LbRoundsWidth = 160f;
+
+    void GetLeaderboardColumnLayout(float rowW, int playerCols, out float roundsX, out float roundsW, out float playerAreaStart, out float playerSlot)
+    {
+        roundsW = LbRoundsWidth;
+        roundsX = LbLeftPad;
+        playerAreaStart = LbLeftPad + LbRoundsWidth;
+        float playerArea = Mathf.Max(200f, rowW - playerAreaStart - LbRightPad);
+        playerSlot = playerArea / Mathf.Max(1, playerCols);
+    }
     
     void ApplyLeaderboardRowLayout(Transform row, bool isHeader)
     {
-        if (row == null) return; var hlg = row.GetComponent<HorizontalLayoutGroup>(); if (hlg != null) hlg.enabled = false;
-        List<RectTransform> cells = new List<RectTransform>(); for (int i = 0; i < row.childCount; i++) { Transform c = row.GetChild(i); if (c.name == "Cell" || c.name == "PlayerHeaderCell" || c.name == "FriendsTeamHeaderCell") cells.Add(c as RectTransform); }
-        int n = cells.Count; if (n < 2) return;
-        var rowRt = row as RectTransform; float rowH = (rowRt != null && rowRt.rect.height > 1f) ? rowRt.rect.height : (isHeader ? 120f : 64f);
-        bool friends = n <= 4;
-        float[] LbPlayerColumnX = { 340f, 550f, 760f, 970f }; float[] LbFriendsColumnX = { 40f, 445f, 865f, 1180f };
+        if (row == null) return;
+        var hlg = row.GetComponent<HorizontalLayoutGroup>();
+        if (hlg != null) hlg.enabled = false;
+
+        List<RectTransform> cells = new List<RectTransform>();
+        for (int i = 0; i < row.childCount; i++)
+        {
+            Transform c = row.GetChild(i);
+            if (!c.gameObject.activeSelf) continue;
+            if (c.name == "Cell" || c.name == "PlayerHeaderCell" || c.name == "FriendsTeamHeaderCell")
+                cells.Add(c as RectTransform);
+        }
+
+        int n = cells.Count;
+        if (n < 2) return;
+
+        var rowRt = row as RectTransform;
+        float rowW = (rowRt != null && rowRt.rect.width > 1f) ? rowRt.rect.width : 1310f;
+        // Force header to the canonical board width so data rows can match it.
+        if (isHeader && rowRt != null && rowW < 1300f)
+        {
+            rowRt.sizeDelta = new Vector2(1310f, rowRt.sizeDelta.y);
+            rowW = 1310f;
+        }
+        float rowH = (rowRt != null && rowRt.rect.height > 1f) ? rowRt.rect.height : (isHeader ? 120f : 64f);
+
+        int playerCols = Mathf.Max(1, n - 1);
+        GetLeaderboardColumnLayout(rowW, playerCols, out float roundsX, out float roundsW, out float playerAreaStart, out float playerSlot);
 
         for (int i = 0; i < n; i++)
         {
-            RectTransform cell = cells[i]; bool isRoundsCol = (i == 0); bool isTotalCol = (i == n - 1);
-            float x; if (friends) x = LbFriendsColumnX[Mathf.Clamp(i, 0, LbFriendsColumnX.Length - 1)]; else if (isRoundsCol) x = 40f; else if (isTotalCol) x = 1180f; else x = LbPlayerColumnX[Mathf.Clamp(i - 1, 0, LbPlayerColumnX.Length - 1)];
-            float y; Vector2 pivot; Vector2 size;
-            if (isHeader) { if (isRoundsCol) { y = -60f; pivot = new Vector2(0f, 0.5f); size = new Vector2(260f, 80f); } else if (isTotalCol) { y = -60f; pivot = new Vector2(0.5f, 0.5f); size = new Vector2(240f, 80f); } else { y = -50f; pivot = new Vector2(0.5f, 0.5f); size = new Vector2(180f, 120f); } }
-            else { y = -rowH / 2f; if (isRoundsCol) { pivot = new Vector2(0f, 0.5f); size = new Vector2(220f, rowH); } else { pivot = new Vector2(0.5f, 0.5f); size = new Vector2(180f, rowH); } }
-            var le = cell.GetComponent<LayoutElement>(); if (le == null) le = cell.gameObject.AddComponent<LayoutElement>(); le.ignoreLayout = true;
-            cell.anchorMin = new Vector2(0f, 1f); cell.anchorMax = new Vector2(0f, 1f); cell.pivot = pivot; cell.sizeDelta = size; cell.anchoredPosition = new Vector2(x, y);
-            var tmp = cell.GetComponent<TextMeshProUGUI>(); if (tmp != null) { tmp.enableWordWrapping = false; tmp.overflowMode = TextOverflowModes.Overflow; tmp.margin = Vector4.zero; tmp.alignment = isRoundsCol ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.Center; }
+            RectTransform cell = cells[i];
+            bool isRoundsCol = (i == 0);
+            float x;
+            Vector2 pivot;
+            Vector2 size;
+            float y;
+
+            if (isRoundsCol)
+            {
+                x = roundsX;
+                pivot = new Vector2(0f, 0.5f);
+                size = isHeader ? new Vector2(roundsW, 80f) : new Vector2(roundsW, rowH);
+                y = isHeader ? -60f : -rowH / 2f;
+            }
+            else
+            {
+                int playerIndex = i - 1;
+                x = playerAreaStart + playerSlot * (playerIndex + 0.5f);
+                pivot = new Vector2(0.5f, 0.5f);
+                float colW = Mathf.Max(80f, playerSlot - 8f);
+                size = isHeader ? new Vector2(Mathf.Min(colW, 220f), 120f) : new Vector2(colW, rowH);
+                y = isHeader ? -50f : -rowH / 2f;
+            }
+
+            var le = cell.GetComponent<LayoutElement>();
+            if (le == null) le = cell.gameObject.AddComponent<LayoutElement>();
+            le.ignoreLayout = true;
+            cell.anchorMin = new Vector2(0f, 1f);
+            cell.anchorMax = new Vector2(0f, 1f);
+            cell.pivot = pivot;
+            cell.sizeDelta = size;
+            cell.anchoredPosition = new Vector2(x, y);
+
+            var tmp = cell.GetComponent<TextMeshProUGUI>();
+            if (tmp != null)
+            {
+                tmp.enableWordWrapping = false;
+                tmp.overflowMode = TextOverflowModes.Overflow;
+                tmp.margin = Vector4.zero;
+                tmp.alignment = isRoundsCol ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.Center;
+                if (!isRoundsCol)
+                {
+                    tmp.fontStyle = FontStyles.Bold;
+                    tmp.color = Color.black;
+                }
+            }
+
+            if (isHeader && !isRoundsCol)
+            {
+                Transform nameBox = cell.Find("NameBox");
+                if (nameBox is RectTransform nameRt)
+                {
+                    nameRt.sizeDelta = new Vector2(Mathf.Min(size.x - 8f, 200f), 36f);
+                    nameRt.anchoredPosition = new Vector2(0f, -40f);
+                }
+                Transform avatarT = cell.Find("AvatarImage");
+                if (avatarT is RectTransform avatarRt)
+                {
+                    avatarRt.sizeDelta = new Vector2(88f, 88f);
+                    avatarRt.anchoredPosition = new Vector2(0f, 28f);
+                }
+            }
         }
     }
 
@@ -5741,26 +6636,39 @@ public class ResultManager : MonoBehaviourPunCallbacks
     }
     static Transform FindDeepByName(Transform parent, string name) { if (parent.name == name) return parent; for (int i = 0; i < parent.childCount; i++) { Transform r = FindDeepByName(parent.GetChild(i), name); if (r != null) return r; } return null; }
 
-    GameObject CreateHeaderRow(string name, Transform parent, float width, float height) { var rowGo = NewRow(name, parent, width, height); AddSideHeaderLabel(rowGo.transform, "ROUNDS", true, LeaderLabelColor, 30, FontStyles.Bold); for (int s = 0; s < 4; s++) CreateAvatarHeaderCell(rowGo.transform, s); AddCellLabel(rowGo.transform, "TOTAL", LeaderLabelColor, 30, FontStyles.Bold); AddRowDashedLine(rowGo, width, height); return rowGo; }
+    GameObject CreateHeaderRow(string name, Transform parent, float width, float height)
+    {
+        var rowGo = NewRow(name, parent, width, height);
+        AddSideHeaderLabel(rowGo.transform, "ROUNDS", true, LeaderLabelColor, 30, FontStyles.Bold);
+        for (int s = 0; s < 4; s++) CreateAvatarHeaderCell(rowGo.transform, s);
+        AddRowDashedLine(rowGo, width, height);
+        return rowGo;
+    }
 
-    void AddSideHeaderLabel(Transform rowParent, string text, bool alignLeft, Color color, int maxSize, FontStyles style) { var cellGo = new GameObject("Cell", typeof(RectTransform)); cellGo.transform.SetParent(rowParent, false); MakeEqualColumn(cellGo); var tmp = cellGo.AddComponent<TextMeshProUGUI>(); tmp.text = text; tmp.color = color; tmp.alignment = alignLeft ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineRight; tmp.fontStyle = style; tmp.enableAutoSizing = true; tmp.fontSizeMin = 12; tmp.fontSizeMax = maxSize; tmp.overflowMode = TextOverflowModes.Ellipsis; tmp.raycastTarget = false; if (customFont != null) tmp.font = customFont; var rt = tmp.rectTransform; rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; if (alignLeft) rt.offsetMin = new Vector2(18f, 0); else rt.offsetMax = new Vector2(-18f, 0); }
+    void AddSideHeaderLabel(Transform rowParent, string text, bool alignLeft, Color color, int maxSize, FontStyles style) { var cellGo = new GameObject("Cell", typeof(RectTransform)); cellGo.transform.SetParent(rowParent, false); MakeEqualColumn(cellGo); var tmp = cellGo.AddComponent<TextMeshProUGUI>(); tmp.text = text; tmp.color = color; tmp.alignment = alignLeft ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineRight; tmp.fontStyle = style; tmp.enableAutoSizing = true; tmp.fontSizeMin = 12; tmp.fontSizeMax = maxSize; tmp.overflowMode = TextOverflowModes.Ellipsis; tmp.raycastTarget = false; if (customFont != null) tmp.font = customFont; ApplyLeaderboardTextContrast(tmp); var rt = tmp.rectTransform; rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; if (alignLeft) rt.offsetMin = new Vector2(18f, 0); else rt.offsetMax = new Vector2(-18f, 0); }
 
     void CreateAvatarHeaderCell(Transform rowParent, int seatIndex)
     {
         var cell = new GameObject("PlayerHeaderCell", typeof(RectTransform)); cell.transform.SetParent(rowParent, false);
-        var avatarGo = CreateRect("AvatarImage", cell.transform, new Vector2(0, 26f), new Vector2(82, 82)); var avatarImg = AddImage(avatarGo, Color.white); avatarImg.preserveAspect = true; avatarImg.raycastTarget = false; Sprite avatar = GetAvatarSprite(GetActorNumberBySeat(seatIndex)); if (avatar != null) avatarImg.sprite = avatar; else if (playerAvatarSprite != null) avatarImg.sprite = playerAvatarSprite;
-        var nameBox = CreateRect("NameBox", cell.transform, new Vector2(0, -36f), new Vector2(150, 34)); var nameImg = AddImage(nameBox, NameBoxColor); if (_roundedSprite != null) { nameImg.sprite = _roundedSprite; nameImg.type = UnityEngine.UI.Image.Type.Sliced; } nameImg.raycastTarget = false;
-        var nameTxt = AddTmp(nameBox.transform, GetSeatDisplayName(seatIndex), Color.white, 18, TextAlignmentOptions.Center, FontStyles.Bold); nameTxt.rectTransform.anchorMin = Vector2.zero; nameTxt.rectTransform.anchorMax = Vector2.one; nameTxt.rectTransform.offsetMin = new Vector2(8, 2); nameTxt.rectTransform.offsetMax = new Vector2(-8, -2); nameTxt.overflowMode = TextOverflowModes.Ellipsis; nameTxt.enableAutoSizing = true; nameTxt.fontSizeMin = 10; nameTxt.fontSizeMax = 18;
+        var avatarGo = CreateRect("AvatarImage", cell.transform, new Vector2(0, 28f), new Vector2(88, 88)); var avatarImg = AddImage(avatarGo, Color.white); avatarImg.preserveAspect = true; avatarImg.raycastTarget = false; Sprite avatar = GetAvatarSprite(GetActorNumberBySeat(seatIndex)); if (avatar != null) avatarImg.sprite = avatar; else if (playerAvatarSprite != null) avatarImg.sprite = playerAvatarSprite;
+        var nameBox = CreateRect("NameBox", cell.transform, new Vector2(0, -40f), new Vector2(180, 36)); var nameImg = AddImage(nameBox, NameBoxColor); if (_roundedSprite != null) { nameImg.sprite = _roundedSprite; nameImg.type = UnityEngine.UI.Image.Type.Sliced; } nameImg.raycastTarget = false;
+        var nameTxt = AddTmp(nameBox.transform, GetSeatDisplayName(seatIndex), Color.white, 18, TextAlignmentOptions.Center, FontStyles.Bold); nameTxt.rectTransform.anchorMin = Vector2.zero; nameTxt.rectTransform.anchorMax = Vector2.one; nameTxt.rectTransform.offsetMin = new Vector2(8, 2); nameTxt.rectTransform.offsetMax = new Vector2(-8, -2); nameTxt.overflowMode = TextOverflowModes.Ellipsis; nameTxt.enableAutoSizing = true; nameTxt.fontSizeMin = 11; nameTxt.fontSizeMax = 18;
     }
 
     GameObject CreateScoreRow(string name, Transform parent, string[] cells, float width, float height, Color color, bool bold) { var rowGo = NewRow(name, parent, width, height); for (int i = 0; i < cells.Length; i++) AddCellLabel(rowGo.transform, cells[i], color, bold ? 30 : 28, bold ? FontStyles.Bold : FontStyles.Normal); AddRowDashedLine(rowGo, width, height); return rowGo; }
     GameObject NewRow(string name, Transform parent, float width, float height) { var rowGo = new GameObject(name, typeof(RectTransform), typeof(CanvasGroup)); rowGo.transform.SetParent(parent, false); var rrt = rowGo.GetComponent<RectTransform>(); rrt.sizeDelta = new Vector2(width, height); var hlg = rowGo.AddComponent<HorizontalLayoutGroup>(); hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.childForceExpandWidth = true; hlg.childForceExpandHeight = true; hlg.childAlignment = TextAnchor.MiddleCenter; var le = rowGo.AddComponent<LayoutElement>(); le.preferredHeight = height; le.minHeight = height; le.preferredWidth = width; return rowGo; }
     static void MakeEqualColumn(GameObject cell) { var le = cell.GetComponent<LayoutElement>(); if (le == null) le = cell.AddComponent<LayoutElement>(); le.minWidth = 0f; le.preferredWidth = 0f; le.flexibleWidth = 1f; }
-    void AddCellLabel(Transform rowParent, string text, Color color, int maxSize, FontStyles style) { var cellGo = new GameObject("Cell", typeof(RectTransform)); cellGo.transform.SetParent(rowParent, false); MakeEqualColumn(cellGo); var tmp = cellGo.AddComponent<TextMeshProUGUI>(); tmp.text = text; tmp.color = color; tmp.alignment = TextAlignmentOptions.Center; tmp.fontStyle = style; tmp.enableAutoSizing = true; tmp.fontSizeMin = 12; tmp.fontSizeMax = maxSize; tmp.overflowMode = TextOverflowModes.Ellipsis; tmp.raycastTarget = false; if (customFont != null) tmp.font = customFont; }
+    void AddCellLabel(Transform rowParent, string text, Color color, int maxSize, FontStyles style) { var cellGo = new GameObject("Cell", typeof(RectTransform)); cellGo.transform.SetParent(rowParent, false); MakeEqualColumn(cellGo); var tmp = cellGo.AddComponent<TextMeshProUGUI>(); tmp.text = text; tmp.color = color; tmp.alignment = TextAlignmentOptions.Center; tmp.fontStyle = style; tmp.enableAutoSizing = true; tmp.fontSizeMin = 12; tmp.fontSizeMax = maxSize; tmp.overflowMode = TextOverflowModes.Ellipsis; tmp.raycastTarget = false; if (customFont != null) tmp.font = customFont; ApplyLeaderboardTextContrast(tmp); }
 
     void AddRowDashedLine(GameObject rowGo, float width, float height) { var line = CreateRect("DashedLine_Row", rowGo.transform, new Vector2(0f, -height / 2f + 2f), new Vector2(width - 8f, 4f)); var le = line.AddComponent<LayoutElement>(); le.ignoreLayout = true; const float dashW = 20f; const float gap = 14f; const float step = dashW + gap; int count = Mathf.Max(1, Mathf.FloorToInt((width - 8f) / step)); float used = (count * step) - gap; float startX = (-used / 2f) + (dashW / 2f); for (int i = 0; i < count; i++) { var dash = CreateRect("Dash", line.transform, new Vector2(startX + (i * step), 0f), new Vector2(dashW, 4f)); var img = AddImage(dash, new Color(0.12f, 0.06f, 0.02f, 0.6f)); img.raycastTarget = false; } }
 
-    void BuildVerticalDividers(Transform container, float innerW) { var crt = container as RectTransform; float h = (crt != null && crt.rect.height > 1f) ? crt.rect.height - 40f : 540f; float col = innerW / 6f; AddVerticalDivider(container, -innerW / 2f + col, h); AddVerticalDivider(container, -innerW / 2f + col * 5f, h); }
+    void BuildVerticalDividers(Transform container, float innerW)
+    {
+        var crt = container as RectTransform;
+        float h = (crt != null && crt.rect.height > 1f) ? crt.rect.height - 40f : 540f;
+        // Single divider after ROUNDS — right TOTAL column removed.
+        AddVerticalDivider(container, -innerW / 2f + innerW * 0.18f, h);
+    }
     void AddVerticalDivider(Transform container, float x, float height) { var go = CreateRect("VDivider", container, new Vector2(x, 0f), new Vector2(3f, height)); var le = go.AddComponent<LayoutElement>(); le.ignoreLayout = true; var img = AddImage(go, new Color(0.12f, 0.06f, 0.02f, 0.45f)); img.raycastTarget = false; go.transform.SetAsFirstSibling(); _dynamicDecor.Add(go); }
 
     void EnsureSceneButtons(Transform mainFrame)
@@ -5800,7 +6708,13 @@ public class ResultManager : MonoBehaviourPunCallbacks
     static Image AddImage(GameObject go, Color c) { var img = go.GetComponent<Image>(); if (img == null) img = go.AddComponent<Image>(); img.color = c; return img; }
     TextMeshProUGUI AddTmp(Transform parent, string text, Color color, int size, TextAlignmentOptions align, FontStyles style = FontStyles.Normal) { var go = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI)); go.transform.SetParent(parent, false); var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(200, 50); var tmp = go.GetComponent<TextMeshProUGUI>(); tmp.text = text; tmp.color = color; tmp.fontSize = size; tmp.alignment = align; tmp.fontStyle = style; tmp.raycastTarget = false; if (customFont != null) tmp.font = customFont; return tmp; }
 
-    void ClearDynamicUI() { foreach (var go in _overflowRows) if (go != null) Destroy(go); _overflowRows.Clear(); }
+    void ClearDynamicUI()
+    {
+        foreach (var go in _overflowRows)
+            if (go != null) Destroy(go);
+        _overflowRows.Clear();
+        RestoreFriendsScrollChrome();
+    }
 
     void OnHomeClicked()
     {

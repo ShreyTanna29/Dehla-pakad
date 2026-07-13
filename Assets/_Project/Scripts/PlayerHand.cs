@@ -491,7 +491,9 @@ public class PlayerHand : MonoBehaviourPunCallbacks
         Transform center = GetTableCenterTransform();
         
         GameObject cardObj = Object.Instantiate(cardUIPrefab, center);
-        cardObj.GetComponent<CardDisplay>()?.SetCardData(new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex });
+        CardDisplay display = cardObj.GetComponent<CardDisplay>();
+        display?.SetCardData(new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex });
+        display?.ApplyTableCenterVisual();
         cardObj.transform.position = GetPlayerPositionForSeat(seat);
         cardObj.transform.localScale = cardUIPrefab != null
             ? cardUIPrefab.transform.localScale * centerCardScale
@@ -587,6 +589,32 @@ private static bool _resultPanelShown = false;
         isTrumpRevealed = false;
         currentTrumpSuit = CardSuit.Spades;
         Debug.Log($"[Hidden Trump] Card hidden for actor {ownerActor} ({hiddenTrumpCard.cardRank} of {hiddenTrumpCard.cardSuit}).");
+
+        // Hand UI may have already been built before this RPC arrived — force a rebuild so the
+        // owner's 13th card flips face-down in every match type (Bots / Online / Friends).
+        if (LocalInstance != null
+            && PhotonNetwork.LocalPlayer != null
+            && PhotonNetwork.LocalPlayer.ActorNumber == ownerActor
+            && LocalInstance.myCards != null
+            && LocalInstance.myCards.Count > 0)
+        {
+            LocalInstance.RefreshHandUI(animate: false, force: true);
+        }
+    }
+
+    public static bool IsLocalHiddenTrumpOwner()
+    {
+        if (!isHiddenCardActive) return false;
+        if (PhotonNetwork.LocalPlayer == null) return false;
+        return PhotonNetwork.LocalPlayer.ActorNumber == hiddenCardOwnerActor;
+    }
+
+    public static bool ShouldHideLocalTrumpCard()
+    {
+        if (GameSettings.Instance == null || GameSettings.Instance.currentMode != GameModeType.HiddenTrump)
+            return false;
+        if (!isHiddenCardActive || isTrumpRevealed) return false;
+        return IsLocalHiddenTrumpOwner();
     }
 
     [PunRPC]
@@ -916,22 +944,8 @@ private static bool _resultPanelShown = false;
 
     private void ShowOpponentFansWithAnimation()
     {
-        if (playerPositions == null) return;
-        for (int i = 1; i < playerPositions.Length; i++)
-        {
-            if (playerPositions[i] == null) continue;
-            Transform fan = playerPositions[i].Find("CardFan");
-            if (fan != null)
-            {
-                fan.gameObject.SetActive(true);
-                UnityEngine.CanvasGroup cg = fan.GetComponent<UnityEngine.CanvasGroup>();
-                if (cg == null) cg = fan.gameObject.AddComponent<UnityEngine.CanvasGroup>();
-                fan.DOKill();
-                cg.DOKill();
-                cg.DOFade(1, 0.3f).SetEase(Ease.OutSine);
-                fan.DOScale(1.0f, 0.3f).SetEase(Ease.OutBack);
-            }
-        }
+        // Card fan icons disabled — keep opponent fans hidden in all modes.
+        HideOpponentFansImmediate();
     }
 
     /// <summary>
@@ -957,7 +971,13 @@ private static bool _resultPanelShown = false;
         }
 
         int myIndex = seats.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
-        if (myIndex < 0) myIndex = 0;
+        if (myIndex < 0)
+        {
+            // Spectator (or not seated): keep absolute lobby/table order — bottom = seats[0].
+            for (int i = 0; i < DeckManager.MaxTableSeats; i++)
+                tableTurnOrder.Add(seats[i]);
+            return;
+        }
 
         for (int i = 0; i < DeckManager.MaxTableSeats; i++)
             tableTurnOrder.Add(seats[(myIndex + i) % DeckManager.MaxTableSeats]);
@@ -1060,11 +1080,18 @@ private static bool _resultPanelShown = false;
 
     public override void OnPlayerLeftRoom(Player otherPlayer)
     {
-        if (!isDealingComplete || currentTurnActor != otherPlayer.ActorNumber || !otherPlayer.IsInactive)
-            return;
+        // Leave recovery lives in DeckManager.RPC_MarkPlayerAsBot.
+        // Do NOT stop the turn timer here — that used to freeze online matches when a
+        // disconnected (IsInactive) player left on their turn.
+    }
 
-        if (PhotonNetwork.IsMasterClient && TurnManager.Instance != null)
-            TurnManager.Instance.StopTimer();
+    static bool IsActorAbsentFromRoom(int actorNumber)
+    {
+        if (actorNumber < 1) return true;
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null) return true;
+
+        Player p = PhotonNetwork.CurrentRoom.GetPlayer(actorNumber);
+        return p == null || p.IsInactive;
     }
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
@@ -1093,6 +1120,7 @@ private static bool _resultPanelShown = false;
         RefreshHandUI(false, true);
 
         bool isMyTurn = PhotonNetwork.LocalPlayer.ActorNumber == currentTurnActor;
+        CardInteract.isPlayingCard = false;
         CardInteract.canPlayCards = isMyTurn;
         ApplyRules(isMyTurn);
 
@@ -1157,12 +1185,18 @@ private static bool _resultPanelShown = false;
         {
             if (PhotonNetwork.IsMasterClient && IsBotActor(actorNumber) && !ActorInCurrentTrick(actorNumber))
                 TriggerBotTurnIfApplicable(actorNumber);
+            // Same turn already stamped — still recover local input if a prior attempt left play locked.
+            TryEnableLocalTurnInput(actorNumber);
             return;
         }
         _lastProcessTurnActor = actorNumber;
         _lastProcessTurnTrickCount = trickCount;
 
-        if (actorNumber == _lastHandledTurnActor && !PhotonNetwork.IsMasterClient) return;
+        if (actorNumber == _lastHandledTurnActor && !PhotonNetwork.IsMasterClient)
+        {
+            TryEnableLocalTurnInput(actorNumber);
+            return;
+        }
         _lastHandledTurnActor = actorNumber;
 
         currentTurnActor = actorNumber;
@@ -1175,21 +1209,42 @@ private static bool _resultPanelShown = false;
             TurnManager.Instance.StartTurn(actorNumber);
         }
 
-        bool isMyTurn = (PhotonNetwork.LocalPlayer.ActorNumber == actorNumber);
+        bool isMyTurn = (PhotonNetwork.LocalPlayer != null
+            && PhotonNetwork.LocalPlayer.ActorNumber == actorNumber);
 
-        if (isMyTurn && !IsGameplayInputBlocked && !ActorInCurrentTrick(actorNumber) && !actorsPlayedThisTrick.Contains(actorNumber))
-        {
-            CardInteract.canPlayCards = true;
-            CardInteract.isPlayingCard = false;
-        }
-
-        ApplyRules(isMyTurn);
+        // Clear stale play-lock BEFORE enable checks. Previously isPlayingCard was only cleared
+        // inside `!IsGameplayInputBlocked`, which itself requires !isPlayingCard — so a stuck
+        // lock permanently blocked card input while the timer still ran.
+        if (isMyTurn)
+            TryEnableLocalTurnInput(actorNumber);
+        else
+            ApplyRules(false);
 
         if (isMyTurn)
             AutoPlayLastCardIfApplicable(actorNumber);
 
         if (PhotonNetwork.IsMasterClient && IsBotActor(actorNumber) && !ActorInCurrentTrick(actorNumber))
             TriggerBotTurnIfApplicable(actorNumber);
+    }
+
+    /// <summary>
+    /// Unlocks local card input for the given actor when it is our turn and we have not yet
+    /// played in this trick. Safe to call repeatedly (deduped ProcessTurn paths use this).
+    /// </summary>
+    void TryEnableLocalTurnInput(int actorNumber)
+    {
+        if (PhotonNetwork.LocalPlayer == null || PhotonNetwork.LocalPlayer.ActorNumber != actorNumber)
+            return;
+        if (IsTrickLocked || IsDealAnimationRunning)
+            return;
+        if (GameFlowState.Current == GameFlowPhase.GameFinished)
+            return;
+        if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber))
+            return;
+
+        CardInteract.isPlayingCard = false;
+        CardInteract.canPlayCards = true;
+        ApplyRules(true);
     }
 
     // Task 21: when the local player has exactly one card left and it becomes their turn,
@@ -1272,6 +1327,9 @@ private static bool _resultPanelShown = false;
         }
         return null;
     }
+
+    /// <summary>Public hand-card lookup for timeout auto-play (avoids picking opponent UI cards).</summary>
+    public GameObject FindCardObjectInLocalHand(CardData card) => FindLocalCardObject(card);
 
     public void TriggerBotTurnIfApplicable(int actorNumber)
     {
@@ -1374,6 +1432,66 @@ private static bool _resultPanelShown = false;
         Debug.LogError($"[Bot] Force play failed for actor {actorNumber} — hand={hand.Count} legal={legal.Count}");
     }
 
+    /// <summary>
+    /// Master-only recovery when turn timer elapses but the timed-out client never auto-plays.
+    /// Plays one legal card for that actor so Online/Friends cannot soft-lock.
+    /// </summary>
+    public void MasterForceTimeoutPlay(int actorNumber)
+    {
+        if (!PhotonNetwork.IsMasterClient) return;
+        if (IsTrickLocked || _determineTrickRoutineRunning) return;
+        if (ActorInCurrentTrick(actorNumber) || actorsPlayedThisTrick.Contains(actorNumber)) return;
+        if (actorNumber != GetAuthoritativeTurnActor()) return;
+        if (DeckManager.Instance == null) return;
+
+        if (IsBotActor(actorNumber))
+        {
+            ForceBotPlayImmediate(actorNumber);
+            return;
+        }
+
+        // Local human on this master client — play through the normal local path.
+        if (PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.ActorNumber == actorNumber)
+        {
+            if (myCards == null || myCards.Count == 0) return;
+            CardInteract.isPlayingCard = false;
+            CardInteract.canPlayCards = true;
+            List<CardData> legalLocal = GetValidCards(myCards, currentTrick, actorNumber);
+            if (legalLocal == null || legalLocal.Count == 0) return;
+            CardData pick = legalLocal[0];
+            GameObject cardUIObj = FindLocalCardObject(pick);
+            OnLocalPlayerPlayedCard(pick, cardUIObj);
+            return;
+        }
+
+        // Remote human: use master's cached hand and push RPC_PlayCard (same path as bots).
+        List<CardData> hand = null;
+        if (!DeckManager.Instance.TryGetHumanHandOnMaster(actorNumber, out hand) || hand == null || hand.Count == 0)
+        {
+            DeckManager.Instance.EnsureHandCachedForBot(actorNumber);
+            if (DeckManager.Instance.botHands.TryGetValue(actorNumber, out List<CardData> cached)
+                && cached != null && cached.Count > 0)
+                hand = cached;
+            else if (!DeckManager.Instance.TryGetHumanHandOnMaster(actorNumber, out hand)
+                     || hand == null || hand.Count == 0)
+                return;
+        }
+
+        List<CardData> legal = GetValidCards(hand, currentTrick, actorNumber);
+        if (legal.Count == 0) legal = new List<CardData>(hand);
+
+        foreach (CardData fallback in legal)
+        {
+            if (PlayBotCard(actorNumber, fallback))
+            {
+                Debug.LogWarning($"[Timeout] Master forced play for actor {actorNumber}: {fallback.cardSuit}/{fallback.cardRank}");
+                return;
+            }
+        }
+
+        Debug.LogError($"[Timeout] Master force play failed for actor {actorNumber}");
+    }
+
     public void EnsureBotWatchdogRunning()
     {
         if (!PhotonNetwork.IsMasterClient || _botWatchdogCoroutine != null) return;
@@ -1398,6 +1516,25 @@ private static bool _resultPanelShown = false;
             if (GameFlowState.Current != GameFlowPhase.InGame) continue;
 
             int actor = GetAuthoritativeTurnActor();
+            if (actor < 1) continue;
+
+            // Absent human holding the turn:
+            // - Fully left (null) → convert to bot.
+            // - Only IsInactive (still in PlayerTTL) → do NOT convert; they can reconnect.
+            //   TurnManager timeout force-plays a card without permanently taking the seat.
+            if (!IsBotActor(actor) && IsActorAbsentFromRoom(actor) && DeckManager.Instance != null)
+            {
+                Player turnPlayer = PhotonNetwork.CurrentRoom != null
+                    ? PhotonNetwork.CurrentRoom.GetPlayer(actor)
+                    : null;
+                if (turnPlayer == null)
+                {
+                    Debug.LogWarning($"[BotWatchdog] Current turn actor {actor} left room — converting to bot.");
+                    DeckManager.Instance.MasterConvertAbsentPlayerToBot(actor);
+                }
+                continue;
+            }
+
             if (!IsBotActor(actor)) continue;
             if (ActorInCurrentTrick(actor) || actorsPlayedThisTrick.Contains(actor)) continue;
             if (botActorsThinking.Contains(actor)) continue;
@@ -1569,11 +1706,16 @@ private static bool _resultPanelShown = false;
 
         if (isMyTurn)
         {
-            int localActor = PhotonNetwork.LocalPlayer.ActorNumber;
-            if (!IsGameplayInputBlocked && !ActorInCurrentTrick(localActor) && !actorsPlayedThisTrick.Contains(localActor))
+            int localActor = PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : -1;
+            if (localActor >= 0
+                && !IsDealAnimationRunning
+                && GameFlowState.Current != GameFlowPhase.GameFinished
+                && !ActorInCurrentTrick(localActor)
+                && !actorsPlayedThisTrick.Contains(localActor))
             {
-                CardInteract.canPlayCards = true;
+                // Clear lock first — do not gate on IsGameplayInputBlocked (it includes isPlayingCard).
                 CardInteract.isPlayingCard = false;
+                CardInteract.canPlayCards = true;
             }
 
             CardInteract.ClearGlobalSelection();
@@ -1802,6 +1944,14 @@ private static bool _resultPanelShown = false;
 
         CardData playedCard = new CardData { cardSuit = (CardSuit)suitIndex, cardRank = (CardRank)rankIndex };
 
+        // Timeout/master force-play can arrive before local UI removed the card.
+        // Idempotent: if already removed by OnLocalPlayerPlayedCard, this is a no-op.
+        if (isLocalSender)
+        {
+            RemoveOneCardFromHand(myCards, playedCard.cardSuit, playedCard.cardRank);
+            RefreshHandUI(false, true);
+        }
+
         LockTrickPlayInput();
 
         if (PhotonNetwork.IsMasterClient && DeckManager.Instance != null)
@@ -1811,7 +1961,9 @@ private static bool _resultPanelShown = false;
         Transform center = GetTableCenterTransform();
         
         GameObject cardObj = Object.Instantiate(cardUIPrefab, center);
-        cardObj.GetComponent<CardDisplay>()?.SetCardData(playedCard);
+        CardDisplay display = cardObj.GetComponent<CardDisplay>();
+        display?.SetCardData(playedCard);
+        display?.ApplyTableCenterVisual();
 
         Vector3 startPos = GetPlayerPositionForSeat(seat);
         if (isLocalSender && _hasPendingLocalPlayStart)
@@ -2172,14 +2324,19 @@ private static bool _resultPanelShown = false;
             for (int i = 0; i < cardsInBatch; i++)
             {
                 GameObject flyingCard = Object.Instantiate(dummyCardPrefab, dealParent);
+                FlyingComplexCardStyle complexStyle = flyingCard.GetComponent<FlyingComplexCardStyle>();
+                if (complexStyle != null)
+                    complexStyle.ApplySelectedStyle();
+
                 CardDisplay flyingCardDisplay = flyingCard.GetComponent<CardDisplay>();
                 if (flyingCardDisplay != null)
                     flyingCardDisplay.SetHiddenState(true);
-                else
+                else if (complexStyle == null)
                 {
                     Image flyingImage = flyingCard.GetComponent<Image>();
-                    if (flyingImage != null && GameManager.Instance != null && GameManager.Instance.cardBackSprite != null)
-                        flyingImage.sprite = GameManager.Instance.cardBackSprite;
+                    Sprite back = CardBackStyle.GetBackSprite();
+                    if (flyingImage != null && back != null)
+                        flyingImage.sprite = back;
                 }
                 PlaceDealCardBehindOverlays(flyingCard.transform);
                 RectTransform cardRt = flyingCard.GetComponent<RectTransform>();
@@ -2290,12 +2447,10 @@ private static bool _resultPanelShown = false;
         }
 
         // Hidden trump owner: keep hidden card at the end until unlocked; then sort normally.
-        bool isLocalHiddenOwner = isHiddenCardActive
-            && PhotonNetwork.LocalPlayer != null
-            && PhotonNetwork.LocalPlayer.ActorNumber == hiddenCardOwnerActor;
+        bool isLocalHiddenOwner = ShouldHideLocalTrumpCard();
 
         List<CardData> sortedCards;
-        if (isLocalHiddenOwner && !isTrumpRevealed)
+        if (isLocalHiddenOwner)
         {
             sortedCards = new List<CardData>();
             CardData? pinnedHidden = null;
@@ -2317,6 +2472,16 @@ private static bool _resultPanelShown = false;
             SortPlayerHand(sortedCards, !TaashRules.IsTwoTaashMode);
             if (pinnedHidden.HasValue)
                 sortedCards.Add(pinnedHidden.Value);
+            else if (sortedCards.Count > 0)
+            {
+                // Recovery: hidden suit/rank missing from hand — pin the last dealt card face-down.
+                pinnedHidden = sortedCards[sortedCards.Count - 1];
+                sortedCards.RemoveAt(sortedCards.Count - 1);
+                SortPlayerHand(sortedCards, !TaashRules.IsTwoTaashMode);
+                sortedCards.Add(pinnedHidden.Value);
+                hiddenTrumpCard = pinnedHidden.Value;
+                Debug.LogWarning("[Hidden Trump] Hidden card identity missing from hand — pinned last card as face-down.");
+            }
         }
         else
         {
@@ -2357,12 +2522,12 @@ private static bool _resultPanelShown = false;
             CardDisplay display = newCardUI.GetComponent<CardDisplay>();
             if (display != null) display.SetCardData(myCards[i]);
 
-            // Sirf EK patte ko UI mein grey aur hidden karna hai
+            // Sirf EK patte ko UI mein face-down (card back) dikhana hai — identity match, not index.
+            // (Previously required i == Count-1 which failed when dealRevealLimit / sort raced.)
             bool isThisCardHidden = false;
-            if (isLocalHiddenOwner && !isTrumpRevealed && !hiddenCardUIProcessed
+            if (isLocalHiddenOwner && !hiddenCardUIProcessed
                 && myCards[i].cardSuit == hiddenTrumpCard.cardSuit
-                && myCards[i].cardRank == hiddenTrumpCard.cardRank
-                && i == myCards.Count - 1)
+                && myCards[i].cardRank == hiddenTrumpCard.cardRank)
             {
                 isThisCardHidden = true;
                 hiddenCardUIProcessed = true;
@@ -2370,7 +2535,7 @@ private static bool _resultPanelShown = false;
 
             bool isRevealedHiddenCard = false;
             if (isHiddenCardActive && isTrumpRevealed && !revealedHiddenProcessed
-                && PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.ActorNumber == hiddenCardOwnerActor
+                && IsLocalHiddenTrumpOwner()
                 && myCards[i].cardSuit == hiddenTrumpCard.cardSuit
                 && myCards[i].cardRank == hiddenTrumpCard.cardRank)
             {
@@ -2405,6 +2570,7 @@ private static bool _resultPanelShown = false;
 
             RectTransform rt = newCardUI.GetComponent<RectTransform>();
             rt.localScale = Vector3.one;
+            rt.localRotation = Quaternion.identity;
 
             int row = i / cardsPerRow;
             int col = i % cardsPerRow;
@@ -2555,6 +2721,10 @@ private static bool _resultPanelShown = false;
         dealRevealLimit = -1;
         dealAnimateFromIndex = 0;
         RefreshHandUI(animate: false, force: true);
+
+        // Hidden Trump: deal animation / RPC order can leave the 13th card face-up — re-assert.
+        if (ShouldHideLocalTrumpCard())
+            RefreshHandUI(animate: false, force: true);
 
         ShowOpponentFansWithAnimation();
         yield return new WaitForSeconds(turnDelay);

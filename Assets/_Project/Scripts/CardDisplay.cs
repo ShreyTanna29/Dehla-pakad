@@ -94,10 +94,15 @@ public class CardDisplay : MonoBehaviour
 
     static Sprite ResolveHiddenBackSprite()
     {
+        Sprite styled = CardBackStyle.GetBackSprite();
+        if (styled != null) return styled;
+
         if (TrumpManager.Instance != null && TrumpManager.Instance.hiddenTrumpSprite != null)
             return TrumpManager.Instance.hiddenTrumpSprite;
         if (GameManager.Instance != null && GameManager.Instance.cardBackSprite != null)
             return GameManager.Instance.cardBackSprite;
+
+        // Last resort: keep a solid back so the face never stays visible.
         return null;
     }
 
@@ -107,38 +112,46 @@ public class CardDisplay : MonoBehaviour
         myCardData = newData;
         gameObject.name = myCardData.cardRank + " of " + myCardData.cardSuit;
 
-        // 🚨 Failsafe: Agar Inspector mein images drag karna bhool gaye toh warning dega
         if (centerSuitImage == null || cornerRankImage == null)
         {
             Debug.LogError($"[CardDisplay] {gameObject.name} par Images assign nahi hain! Kripya Card_UI Prefab mein Visuals ke andar se images drag karein.");
-            return; // Aage ka code mat chalao jisse game crash na ho
+            return;
         }
 
-        // 1. Suit set karna
         int suitIndex = (int)myCardData.cardSuit;
         if (suitSprites != null && suitSprites.Length > suitIndex && suitSprites[suitIndex] != null)
-        {
             centerSuitImage.sprite = suitSprites[suitIndex];
-        }
 
-        // 2. Rank set karna
         int rankIndex = (int)myCardData.cardRank;
         if (rankSprites != null && rankSprites.Length > rankIndex && rankSprites[rankIndex] != null)
         {
             cornerRankImage.sprite = rankSprites[rankIndex];
-            
-            // Color logic
+
             if (myCardData.cardSuit == CardSuit.Hearts || myCardData.cardSuit == CardSuit.Diamonds)
             {
-                cornerRankImage.color = Color.red; 
+                cornerRankImage.color = Color.red;
                 centerSuitImage.color = Color.red;
             }
-            else 
+            else
             {
-                cornerRankImage.color = Color.black; 
+                cornerRankImage.color = Color.black;
                 centerSuitImage.color = Color.black;
             }
         }
+
+        if (cardBackgroundImage != null)
+            cardBackgroundImage.color = Color.white;
+    }
+
+    public void ApplyTableCenterVisual()
+    {
+        if (cardBackgroundImage != null)
+            cardBackgroundImage.color = Color.white;
+
+        CanvasGroup cg = GetComponent<CanvasGroup>();
+        if (cg == null) cg = GetComponentInParent<CanvasGroup>();
+        if (cg != null)
+            cg.alpha = 1f;
     }
 
     public void SetHiddenState(bool isHidden)
@@ -148,9 +161,10 @@ public class CardDisplay : MonoBehaviour
         if (isHidden)
         {
             Sprite backSprite = ResolveHiddenBackSprite();
-            if (backSprite != null && cardBackgroundImage != null)
+            if (cardBackgroundImage != null)
             {
-                cardBackgroundImage.sprite = backSprite;
+                if (backSprite != null)
+                    cardBackgroundImage.sprite = backSprite;
                 cardBackgroundImage.color = Color.white;
             }
 

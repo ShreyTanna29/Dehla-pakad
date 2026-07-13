@@ -56,6 +56,8 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
 
         if (EmojiManager.Instance != null)
             EmojiManager.Instance.InitializeGameScene();
+        if (VoiceManager.Instance != null)
+            VoiceManager.Instance.InitializeGameScene();
 
         Debug.Log("[GameInit] Player profiles initialized");
     }
@@ -207,7 +209,11 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
                 return;
         }
 
-        if (txtMyName && PhotonNetwork.LocalPlayer != null)
+        bool localIsSpectator = DeckManager.IsLocalSpectator();
+
+        // Bottom seat (You) is local ONLY when the local player is actually playing.
+        // Spectators must show whoever sits in chair 0 (bot / other player).
+        if (!localIsSpectator && txtMyName && PhotonNetwork.LocalPlayer != null)
         {
             string myName = GetLocalProfileDisplayName();
             txtMyName.text = myName;
@@ -216,18 +222,14 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
 
         foreach (Player p in PhotonRoomPlayers.GetSorted())
         {
-            if (p == null || p.IsLocal) continue;
+            if (p == null) continue;
+            if (p.IsLocal && !localIsSpectator) continue;
 
-            // Task 24: a seat handed to a bot (the host replaced this player, or this real actor was
-            // marked a bot) must be painted exclusively by the bot loop below — never as a present
-            // human. This covers the case where the replaced player still LINGERS in the room as an
-            // ACTIVE member because PhotonNetwork.CloseConnection is not permitted on every server
-            // tier, which previously left their seat showing the real name AND avatar ("phantom
-            // present player"). Skip bot-controlled actors here regardless of active/inactive state.
             if (DeckManager.Instance != null && DeckManager.Instance.IsActorBotControlled(p.ActorNumber))
                 continue;
 
             int seatIndex = GetSeatIndex(p.ActorNumber);
+            if (seatIndex < 0 || seatIndex > 3) continue;
 
             string displayName = p.NickName;
             if (p.IsInactive)
@@ -243,15 +245,22 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
             {
                 int botActor = DeckManager.botActorNumbers[i];
                 int seatIndex = GetSeatIndex(botActor);
+                if (seatIndex < 0 || seatIndex > 3) continue;
                 SetSeatText(seatIndex, "Dehla_AI_" + (i + 1));
                 AssignAvatarBySeat(seatIndex, botActor);
             }
         }
+
+        if (EmojiManager.Instance != null)
+            EmojiManager.Instance.RefreshSpectatorUi();
+        if (VoiceManager.Instance != null)
+            VoiceManager.Instance.RefreshSpectatorUi();
     }
 
     void AssignAvatarBySeat(int seatIndex, int actorNumber)
     {
-        if (seatIndex == 1) AssignAvatarSprite(imgLeftAvatar, actorNumber);
+        if (seatIndex == 0) AssignAvatarSprite(imgMyAvatar, actorNumber);
+        else if (seatIndex == 1) AssignAvatarSprite(imgLeftAvatar, actorNumber);
         else if (seatIndex == 2) AssignAvatarSprite(imgTopAvatar, actorNumber);
         else if (seatIndex == 3) AssignAvatarSprite(imgRightAvatar, actorNumber);
     }
@@ -394,7 +403,8 @@ public class PlayerProfileSync : MonoBehaviourPunCallbacks
     private void SetSeatText(int seatIndex, string name)
     {
         if (name.Length > 10) name = name.Substring(0, 10);
-        if (seatIndex == 1 && txtLeftName) txtLeftName.text = name;
+        if (seatIndex == 0 && txtMyName) txtMyName.text = name;
+        else if (seatIndex == 1 && txtLeftName) txtLeftName.text = name;
         else if (seatIndex == 2 && txtTopName) txtTopName.text = name;
         else if (seatIndex == 3 && txtRightName) txtRightName.text = name;
     }
